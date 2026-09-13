@@ -1,4 +1,5 @@
 import type { Hex, LaunchObserved } from '../domain.js';
+import { resolveAuthorizedExecutableInfra } from '../authority/executableInfraAuthority.js';
 import type { OutcomeReceipt } from '../evidence/receipts.js';
 import { OUTCOME_HORIZONS } from '../outcome/horizons.js';
 import type { ForwardOutcomeSource, OutcomeBlockPoint } from '../outcome/ports.js';
@@ -107,8 +108,10 @@ export async function buildForwardOutcome(
   horizonMs: number,
   confirmedHeadPoint: OutcomeBlockPoint
 ): Promise<ForwardOutcomeReceipt | null> {
-  if (batch.status !== 'COMPLETE' || !batch.market) return null;
   if (batch.launchId !== launch.launchId) throw new Error(`OUTCOME_BASELINE_LAUNCH_MISMATCH:${launch.launchId}`);
+  resolveAuthorizedExecutableInfra(launch.blockNumber);
+  resolveAuthorizedExecutableInfra(batch.decisionBlock);
+  if (batch.status !== 'COMPLETE' || !batch.market) return null;
   if (!Number.isInteger(horizonMs) || horizonMs <= 0) throw new Error(`INVALID_OUTCOME_HORIZON:${horizonMs}`);
 
   const primaryLeg = batch.legs.find((leg) => leg.notionalUsdMicros === PRIMARY_OUTCOME_NOTIONAL_USD_MICROS);
