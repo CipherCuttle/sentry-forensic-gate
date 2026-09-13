@@ -1,5 +1,6 @@
 import type { Hex, LaunchObserved } from '../domain.js';
 import type { Store } from '../db/store.js';
+import { buildProvenanceFact, projectProvenanceEdges } from '../graph/provenance.js';
 import type { LaunchSource } from '../sentry/ports.js';
 
 export interface SentryTruthOptions {
@@ -21,19 +22,12 @@ export interface SyncReport {
   reorgRewindFrom: bigint | null;
 }
 
-export async function syncSentryTruth(
-  source: LaunchSource,
-  store: Store,
-  options: SentryTruthOptions
-): Promise<SyncReport> {
+export async function syncSentryTruth(source: LaunchSource, store: Store, options: SentryTruthOptions): Promise<SyncReport> {
   validateOptions(options);
   const headBlock = await source.getHeadBlockNumber();
   if (headBlock < options.confirmations) return emptyReport(headBlock);
   const targetBlock = headBlock - options.confirmations;
   if (targetBlock < options.startBlock) return { ...emptyReport(headBlock), targetBlock };
-
-  // The factory is an upgradeable proxy. Never advance truth under an implementation
-  // that has not been explicitly reviewed and frozen for this release.
   await source.assertAuthority(targetBlock);
 
   let checkpoint = await store.getCheckpoint();
@@ -48,9 +42,7 @@ export async function syncSentryTruth(
       }
       const canonicalGuardHash = await source.getBlockHash(checkpoint.guardBlockNumber);
       if (!sameHex(canonicalGuardHash, checkpoint.guardBlockHash)) {
-        throw new Error(
-          `REORG_DEPTH_EXCEEDED:checkpoint=${checkpoint.blockNumber}:guard=${checkpoint.guardBlockNumber}`
-        );
+        throw new Error(`REORG_DEPTH_EXCEEDED:checkpoint=${checkpoint.blockNumber}:guard=${checkpoint.guardBlockNumber}`);
       }
       reorgRewindFrom = maxBigInt(options.startBlock, checkpoint.guardBlockNumber + 1n);
       await store.rewindFromBlock(reorgRewindFrom);
@@ -59,17 +51,14 @@ export async function syncSentryTruth(
     }
   }
 
+  // Existing databases may have launches without v0.4 facts, and a prior process may
+  // have persisted all facts before failing to replace the derived edge projection.
+  // Repair both cases before the no-new-blocks return. Launches remain the authority;
+  // edges are always disposable/rebuildable from durable provenance facts.
+  await ensureProvenanceProjection(store);
+
   if (fromBlock > targetBlock) {
-    return {
-      headBlock,
-      targetBlock,
-      startBlock: null,
-      endBlock: null,
-      inserted: 0,
-      duplicates: 0,
-      batches: 0,
-      reorgRewindFrom
-    };
+    return { headBlock, targetBlock, startBlock: null, endBlock: null, inserted: 0, duplicates: 0, batches: 0, reorgRewindFrom };
   }
 
   const initialFrom = fromBlock;
@@ -80,84 +69,45 @@ export async function syncSentryTruth(
 
   while (fromBlock <= targetBlock) {
     const toBlock = minBigInt(targetBlock, fromBlock + options.maxBatchBlocks - 1n);
-
-    // Historical catch-up must not cross an implementation epoch that has not been
-    // reviewed for this release. Checking both batch endpoints prevents a pre-upgrade
-    // range from being accepted merely because the current target uses the frozen impl.
     await source.assertAuthority(fromBlock);
     await source.assertAuthority(toBlock);
 
     const boundaryHashBefore = await source.getBlockHash(toBlock);
     const launches = await source.catchUp(fromBlock, toBlock);
     await assertLaunchBlocksStillCanonical(source, launches);
-
     const boundaryHashAfterRead = await source.getBlockHash(toBlock);
-    if (!sameHex(boundaryHashBefore, boundaryHashAfterRead)) {
-      throw new Error(`REORG_DURING_READ:block=${toBlock}`);
-    }
+    if (!sameHex(boundaryHashBefore, boundaryHashAfterRead)) throw new Error(`REORG_DURING_READ:block=${toBlock}`);
 
     for (const launch of launches) {
       const result = await store.putLaunch(launch);
       if (result === 'INSERTED') inserted += 1;
       else duplicates += 1;
+      await store.putProvenanceFact(await buildProvenanceFact(launch));
     }
+    const provenanceFacts = await store.listProvenanceFacts();
+    await store.replaceProvenanceEdges(await projectProvenanceEdges(provenanceFacts));
 
-    // Persist one canonical guard exactly one configured reorg horizon behind the
-    // checkpoint. A future checkpoint mismatch is only auto-recoverable while this
-    // guard remains canonical; otherwise the reorg depth is outside our proof window.
-    const guardBlockNumber = toBlock > options.reorgLookbackBlocks
-      ? toBlock - options.reorgLookbackBlocks
-      : 0n;
+    const guardBlockNumber = toBlock > options.reorgLookbackBlocks ? toBlock - options.reorgLookbackBlocks : 0n;
     const guardBlockHash = await source.getBlockHash(guardBlockNumber);
-
-    // Protect the small write/checkpoint window too. If the boundary moved after
-    // writes began, remove this uncommitted batch so a retry cannot retain old-fork data.
     const boundaryHashBeforeCommit = await source.getBlockHash(toBlock);
     if (!sameHex(boundaryHashBefore, boundaryHashBeforeCommit)) {
       await store.rewindFromBlock(fromBlock);
       throw new Error(`REORG_DURING_COMMIT:block=${toBlock}`);
     }
 
-    // Re-check proxy authority after writes and before checkpoint advancement. If the
-    // confirmed target's implementation drifted during a long catch-up, remove only the
-    // uncommitted batch and halt.
-    try {
-      await source.assertAuthority(targetBlock);
-    } catch (error) {
-      await store.rewindFromBlock(fromBlock);
-      throw error;
-    }
+    try { await source.assertAuthority(targetBlock); }
+    catch (error) { await store.rewindFromBlock(fromBlock); throw error; }
 
-    await store.commitCheckpoint({
-      blockNumber: toBlock,
-      blockHash: boundaryHashBeforeCommit,
-      guardBlockNumber,
-      guardBlockHash
-    });
+    await store.commitCheckpoint({ blockNumber: toBlock, blockHash: boundaryHashBeforeCommit, guardBlockNumber, guardBlockHash });
     finalBlock = toBlock;
     batches += 1;
     fromBlock = toBlock + 1n;
   }
 
-  return {
-    headBlock,
-    targetBlock,
-    startBlock: initialFrom,
-    endBlock: finalBlock,
-    inserted,
-    duplicates,
-    batches,
-    reorgRewindFrom
-  };
+  return { headBlock, targetBlock, startBlock: initialFrom, endBlock: finalBlock, inserted, duplicates, batches, reorgRewindFrom };
 }
 
-export async function runSentryTruth(
-  source: LaunchSource,
-  store: Store,
-  options: SentryTruthOptions,
-  signal?: AbortSignal,
-  onSync?: (report: SyncReport) => void
-): Promise<void> {
+export async function runSentryTruth(source: LaunchSource, store: Store, options: SentryTruthOptions, signal?: AbortSignal, onSync?: (report: SyncReport) => void): Promise<void> {
   while (!signal?.aborted) {
     const report = await syncSentryTruth(source, store, options);
     onSync?.(report);
@@ -165,17 +115,21 @@ export async function runSentryTruth(
   }
 }
 
+async function ensureProvenanceProjection(store: Store): Promise<void> {
+  const missing = await store.listLaunchesMissingProvenance();
+  for (const launch of missing) {
+    await store.putProvenanceFact(await buildProvenanceFact(launch));
+  }
+  const facts = await store.listProvenanceFacts();
+  await store.replaceProvenanceEdges(await projectProvenanceEdges(facts));
+}
+
 async function assertLaunchBlocksStillCanonical(source: LaunchSource, launches: LaunchObserved[]): Promise<void> {
   const hashes = new Map<bigint, Hex>();
   for (const launch of launches) {
     let canonical = hashes.get(launch.blockNumber);
-    if (!canonical) {
-      canonical = await source.getBlockHash(launch.blockNumber);
-      hashes.set(launch.blockNumber, canonical);
-    }
-    if (!sameHex(canonical, launch.blockHash)) {
-      throw new Error(`REORG_DURING_SYNC:block=${launch.blockNumber}`);
-    }
+    if (!canonical) { canonical = await source.getBlockHash(launch.blockNumber); hashes.set(launch.blockNumber, canonical); }
+    if (!sameHex(canonical, launch.blockHash)) throw new Error(`REORG_DURING_SYNC:block=${launch.blockNumber}`);
   }
 }
 
@@ -184,22 +138,11 @@ function validateOptions(options: SentryTruthOptions): void {
   if (options.confirmations < 0n) throw new Error('confirmations must be >= 0');
   if (options.maxBatchBlocks < 1n) throw new Error('maxBatchBlocks must be >= 1');
   if (options.reorgLookbackBlocks < 1n) throw new Error('reorgLookbackBlocks must be >= 1');
-  if (!Number.isFinite(options.pollIntervalMs) || options.pollIntervalMs < 100) {
-    throw new Error('pollIntervalMs must be >= 100');
-  }
+  if (!Number.isFinite(options.pollIntervalMs) || options.pollIntervalMs < 100) throw new Error('pollIntervalMs must be >= 100');
 }
 
 function emptyReport(headBlock: bigint): SyncReport {
-  return {
-    headBlock,
-    targetBlock: null,
-    startBlock: null,
-    endBlock: null,
-    inserted: 0,
-    duplicates: 0,
-    batches: 0,
-    reorgRewindFrom: null
-  };
+  return { headBlock, targetBlock: null, startBlock: null, endBlock: null, inserted: 0, duplicates: 0, batches: 0, reorgRewindFrom: null };
 }
 
 function sameHex(a: Hex, b: Hex): boolean { return a.toLowerCase() === b.toLowerCase(); }
@@ -210,9 +153,6 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) return Promise.resolve();
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
+    signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
   });
 }

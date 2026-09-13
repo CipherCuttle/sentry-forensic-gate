@@ -1,5 +1,6 @@
 import type { LaunchObserved } from '../domain.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
+import type { ProvenanceEdge, ProvenanceFact } from '../graph/provenance.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
 import type { ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
 import type { BaselineStore } from '../shadow/baselineStore.js';
@@ -8,6 +9,8 @@ import type { ChainCheckpoint, Store } from './store.js';
 
 export class MemoryStore implements Store, BaselineStore {
   private launches = new Map<string, LaunchObserved>();
+  private provenanceFacts = new Map<string, ProvenanceFact>();
+  private provenanceEdges = new Map<string, ProvenanceEdge>();
   private decisions = new Map<string, DecisionReceipt>();
   private shadow = new Map<string, ShadowEntry>();
   private outcomes = new Map<string, OutcomeReceipt>();
@@ -38,6 +41,48 @@ export class MemoryStore implements Store, BaselineStore {
 
   async getLaunch(launchId: string): Promise<LaunchObserved | null> {
     return this.launches.get(launchId) ?? null;
+  }
+
+  async listLaunchesMissingProvenance(): Promise<LaunchObserved[]> {
+    const covered = new Set([...this.provenanceFacts.values()].map((fact) => fact.launchId));
+    return [...this.launches.values()]
+      .filter((launch) => !covered.has(launch.launchId))
+      .sort(compareLaunches);
+  }
+
+  async putProvenanceFact(fact: ProvenanceFact): Promise<'INSERTED' | 'DUPLICATE'> {
+    if (!this.launches.has(fact.launchId)) throw new Error(`PROVENANCE_LAUNCH_MISSING:${fact.launchId}`);
+    const existing = this.provenanceFacts.get(fact.factId);
+    const launchCollision = [...this.provenanceFacts.values()].find((item) => item.launchId === fact.launchId);
+    const collision = existing ?? launchCollision;
+    if (collision) {
+      if (collision.factId !== fact.factId || collision.evidenceDigest !== fact.evidenceDigest) {
+        throw new Error(`PROVENANCE_FACT_IDENTITY_CONFLICT:${fact.factId}`);
+      }
+      return 'DUPLICATE';
+    }
+    this.provenanceFacts.set(fact.factId, fact);
+    return 'INSERTED';
+  }
+
+  async listProvenanceFacts(): Promise<ProvenanceFact[]> {
+    return [...this.provenanceFacts.values()].sort(compareFacts);
+  }
+
+  async replaceProvenanceEdges(edges: ProvenanceEdge[]): Promise<void> {
+    const next = new Map<string, ProvenanceEdge>();
+    for (const edge of edges) {
+      const existing = next.get(edge.edgeId);
+      if (existing && existing.evidenceDigest !== edge.evidenceDigest) {
+        throw new Error(`PROVENANCE_EDGE_IDENTITY_CONFLICT:${edge.edgeId}`);
+      }
+      next.set(edge.edgeId, edge);
+    }
+    this.provenanceEdges = next;
+  }
+
+  async listProvenanceEdges(): Promise<ProvenanceEdge[]> {
+    return [...this.provenanceEdges.values()].sort(compareEdges);
   }
 
   async putDecision(v: DecisionReceipt) { return this.insertMap(this.decisions, v.decisionId, v); }
@@ -89,6 +134,15 @@ export class MemoryStore implements Store, BaselineStore {
       }
     }
 
+    for (const [id, fact] of this.provenanceFacts) {
+      if (removedLaunches.has(fact.launchId) || fact.observedBlock >= fromBlock) this.provenanceFacts.delete(id);
+    }
+    for (const [id, edge] of this.provenanceEdges) {
+      if (edge.observedBlock >= fromBlock || edge.sourceFactIds.some((factId) => !this.provenanceFacts.has(factId))) {
+        this.provenanceEdges.delete(id);
+      }
+    }
+
     // Evidence is invalidated by its own observation block as well as by launch ancestry.
     for (const [id, receipt] of this.decisions) {
       if (removedLaunches.has(receipt.launchId) || receipt.decisionBlock >= fromBlock) this.decisions.delete(id);
@@ -113,4 +167,24 @@ export class MemoryStore implements Store, BaselineStore {
     map.set(key, value);
     return 'INSERTED';
   }
+}
+
+function compareLaunches(a: LaunchObserved, b: LaunchObserved): number {
+  if (a.chainId !== b.chainId) return a.chainId - b.chainId;
+  if (a.blockNumber !== b.blockNumber) return a.blockNumber < b.blockNumber ? -1 : 1;
+  if (a.logIndex !== b.logIndex) return a.logIndex - b.logIndex;
+  return a.launchId.localeCompare(b.launchId);
+}
+
+function compareFacts(a: ProvenanceFact, b: ProvenanceFact): number {
+  if (a.chainId !== b.chainId) return a.chainId - b.chainId;
+  if (a.observedBlock !== b.observedBlock) return a.observedBlock < b.observedBlock ? -1 : 1;
+  if (a.logIndex !== b.logIndex) return a.logIndex - b.logIndex;
+  return a.factId.localeCompare(b.factId);
+}
+
+function compareEdges(a: ProvenanceEdge, b: ProvenanceEdge): number {
+  if (a.chainId !== b.chainId) return a.chainId - b.chainId;
+  if (a.observedBlock !== b.observedBlock) return a.observedBlock < b.observedBlock ? -1 : 1;
+  return a.edgeId.localeCompare(b.edgeId);
 }
