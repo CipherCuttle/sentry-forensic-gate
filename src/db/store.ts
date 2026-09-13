@@ -5,6 +5,9 @@ import type { ShadowEntry } from '../shadow/ports.js';
 export interface ChainCheckpoint {
   blockNumber: bigint;
   blockHash: Hex;
+  /** One configured reorg horizon behind blockNumber; null only for legacy checkpoints. */
+  guardBlockNumber: bigint | null;
+  guardBlockHash: Hex | null;
 }
 
 export interface Store {

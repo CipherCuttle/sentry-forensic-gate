@@ -47,7 +47,13 @@ export class MemoryStore implements Store {
   }
 
   async commitCheckpoint(checkpoint: ChainCheckpoint): Promise<void> {
-    this.checkpoint = { ...checkpoint, blockHash: checkpoint.blockHash.toLowerCase() as ChainCheckpoint['blockHash'] };
+    this.checkpoint = {
+      ...checkpoint,
+      blockHash: checkpoint.blockHash.toLowerCase() as ChainCheckpoint['blockHash'],
+      guardBlockHash: checkpoint.guardBlockHash
+        ? checkpoint.guardBlockHash.toLowerCase() as NonNullable<ChainCheckpoint['guardBlockHash']>
+        : null
+    };
   }
 
   async rewindFromBlock(fromBlock: bigint): Promise<void> {

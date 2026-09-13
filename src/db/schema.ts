@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS outcomes (
 CREATE TABLE IF NOT EXISTS chain_checkpoints (
   chain_id INTEGER PRIMARY KEY,
   block_number TEXT NOT NULL,
-  block_hash TEXT NOT NULL
+  block_hash TEXT NOT NULL,
+  reorg_guard_block TEXT,
+  reorg_guard_hash TEXT
 );
 `;

@@ -51,6 +51,7 @@ class FakeSource {
   }
   async getHeadBlockNumber() { return this.head; }
   async getBlockHash(block) { return this.hashes.get(block); }
+  async assertAuthority() {}
   async catchUp(from, to) { return this.launches.filter((v) => v.blockNumber >= from && v.blockNumber <= to); }
 }
 
@@ -91,6 +92,27 @@ const reorg = await syncSentryTruth(source, store, options);
 assert.equal(reorg.reorgRewindFrom, 10n);
 assert.equal(await store.getLaunch('c'), null, 'orphaned launch must be removed');
 assert.notEqual(await store.getLaunch('d'), null, 'replacement canonical launch must be inserted');
+
+// A reorg that also changes the persisted guard is deeper than the configured
+// proof horizon. It must halt without deleting or rewriting local history.
+const beforeDeep = await store.getCheckpoint();
+source.hashes.set(12n, '0x12c');
+source.hashes.set(9n, '0x9c');
+await assert.rejects(syncSentryTruth(source, store, options), /REORG_DEPTH_EXCEEDED/);
+assert.deepEqual(await store.getCheckpoint(), beforeDeep, 'deep reorg must not mutate checkpoint state');
+assert.notEqual(await store.getLaunch('d'), null, 'deep reorg must not speculatively delete launch history');
+source.hashes.set(12n, beforeDeep.blockHash);
+source.hashes.set(9n, beforeDeep.guardBlockHash);
+
+// Proxy implementation/authority drift must stop before any ingestion mutation.
+class AuthorityDriftSource extends FakeSource {
+  async assertAuthority() { throw new Error('SENTRY_PROXY_IMPLEMENTATION_DRIFT'); }
+}
+const driftSource = new AuthorityDriftSource();
+const driftStore = new MemoryStore();
+await assert.rejects(syncSentryTruth(driftSource, driftStore, options), /SENTRY_PROXY_IMPLEMENTATION_DRIFT/);
+assert.equal(driftStore.launchCount, 0);
+assert.equal(await driftStore.getCheckpoint(), null);
 
 
 // A canonical duplicate may be observed at a different wall-clock time, but
@@ -136,7 +158,12 @@ await assert.rejects(
   sqlite.putLaunch({ ...sqlLaunch, blockHash: '0xbad' }),
   /LAUNCH_IDENTITY_CONFLICT/
 );
-await sqlite.commitCheckpoint({ blockNumber: 20n, blockHash: sqlLaunch.blockHash });
+await sqlite.commitCheckpoint({
+  blockNumber: 20n,
+  blockHash: sqlLaunch.blockHash,
+  guardBlockNumber: 17n,
+  guardBlockHash: '0x11'
+});
 assert.equal((await sqlite.getCheckpoint()).blockNumber, 20n);
 await sqlite.rewindFromBlock(20n);
 assert.equal(await sqlite.getLaunch(sqlLaunch.launchId), null);

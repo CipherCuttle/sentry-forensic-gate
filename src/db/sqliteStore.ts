@@ -15,6 +15,7 @@ export class SqliteStore implements Store {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.db.exec(SCHEMA_SQL);
+    this.ensureCheckpointGuardColumns();
   }
 
   close(): void {
@@ -108,19 +109,39 @@ export class SqliteStore implements Store {
 
   async getCheckpoint(): Promise<ChainCheckpoint | null> {
     const row = this.db.prepare(`
-      SELECT block_number, block_hash FROM chain_checkpoints WHERE chain_id = ?
-    `).get(this.chainId) as { block_number: string; block_hash: Hex } | undefined;
-    return row ? { blockNumber: BigInt(row.block_number), blockHash: row.block_hash } : null;
+      SELECT block_number, block_hash, reorg_guard_block, reorg_guard_hash
+      FROM chain_checkpoints WHERE chain_id = ?
+    `).get(this.chainId) as {
+      block_number: string;
+      block_hash: Hex;
+      reorg_guard_block: string | null;
+      reorg_guard_hash: Hex | null;
+    } | undefined;
+    return row ? {
+      blockNumber: BigInt(row.block_number),
+      blockHash: row.block_hash,
+      guardBlockNumber: row.reorg_guard_block === null ? null : BigInt(row.reorg_guard_block),
+      guardBlockHash: row.reorg_guard_hash
+    } : null;
   }
 
   async commitCheckpoint(checkpoint: ChainCheckpoint): Promise<void> {
     this.db.prepare(`
-      INSERT INTO chain_checkpoints (chain_id, block_number, block_hash)
-      VALUES (?, ?, ?)
+      INSERT INTO chain_checkpoints (
+        chain_id, block_number, block_hash, reorg_guard_block, reorg_guard_hash
+      ) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(chain_id) DO UPDATE SET
         block_number = excluded.block_number,
-        block_hash = excluded.block_hash
-    `).run(this.chainId, checkpoint.blockNumber.toString(), checkpoint.blockHash.toLowerCase());
+        block_hash = excluded.block_hash,
+        reorg_guard_block = excluded.reorg_guard_block,
+        reorg_guard_hash = excluded.reorg_guard_hash
+    `).run(
+      this.chainId,
+      checkpoint.blockNumber.toString(),
+      checkpoint.blockHash.toLowerCase(),
+      checkpoint.guardBlockNumber?.toString() ?? null,
+      checkpoint.guardBlockHash?.toLowerCase() ?? null
+    );
   }
 
   async rewindFromBlock(fromBlock: bigint): Promise<void> {
@@ -134,6 +155,17 @@ export class SqliteStore implements Store {
       `).run(this.chainId, fromBlock.toString());
     });
     tx();
+  }
+
+  private ensureCheckpointGuardColumns(): void {
+    const columns = this.db.pragma('table_info(chain_checkpoints)') as Array<{ name: string }>;
+    const names = new Set(columns.map((column) => column.name));
+    if (!names.has('reorg_guard_block')) {
+      this.db.exec('ALTER TABLE chain_checkpoints ADD COLUMN reorg_guard_block TEXT');
+    }
+    if (!names.has('reorg_guard_hash')) {
+      this.db.exec('ALTER TABLE chain_checkpoints ADD COLUMN reorg_guard_hash TEXT');
+    }
   }
 }
 

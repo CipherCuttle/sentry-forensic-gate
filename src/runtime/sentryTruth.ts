@@ -32,6 +32,10 @@ export async function syncSentryTruth(
   const targetBlock = headBlock - options.confirmations;
   if (targetBlock < options.startBlock) return { ...emptyReport(headBlock), targetBlock };
 
+  // The factory is an upgradeable proxy. Never advance truth under an implementation
+  // that has not been explicitly reviewed and frozen for this release.
+  await source.assertAuthority(targetBlock);
+
   let checkpoint = await store.getCheckpoint();
   let fromBlock = checkpoint ? checkpoint.blockNumber + 1n : options.startBlock;
   let reorgRewindFrom: bigint | null = null;
@@ -39,10 +43,16 @@ export async function syncSentryTruth(
   if (checkpoint) {
     const canonicalHash = await source.getBlockHash(checkpoint.blockNumber);
     if (!sameHex(canonicalHash, checkpoint.blockHash)) {
-      reorgRewindFrom = maxBigInt(
-        options.startBlock,
-        checkpoint.blockNumber - options.reorgLookbackBlocks + 1n
-      );
+      if (checkpoint.guardBlockNumber === null || checkpoint.guardBlockHash === null) {
+        throw new Error(`REORG_DEPTH_UNVERIFIABLE:checkpoint=${checkpoint.blockNumber}`);
+      }
+      const canonicalGuardHash = await source.getBlockHash(checkpoint.guardBlockNumber);
+      if (!sameHex(canonicalGuardHash, checkpoint.guardBlockHash)) {
+        throw new Error(
+          `REORG_DEPTH_EXCEEDED:checkpoint=${checkpoint.blockNumber}:guard=${checkpoint.guardBlockNumber}`
+        );
+      }
+      reorgRewindFrom = maxBigInt(options.startBlock, checkpoint.guardBlockNumber + 1n);
       await store.rewindFromBlock(reorgRewindFrom);
       checkpoint = await store.getCheckpoint();
       fromBlock = checkpoint ? checkpoint.blockNumber + 1n : reorgRewindFrom;
@@ -85,6 +95,14 @@ export async function syncSentryTruth(
       else duplicates += 1;
     }
 
+    // Persist one canonical guard exactly one configured reorg horizon behind the
+    // checkpoint. A future checkpoint mismatch is only auto-recoverable while this
+    // guard remains canonical; otherwise the reorg depth is outside our proof window.
+    const guardBlockNumber = toBlock > options.reorgLookbackBlocks
+      ? toBlock - options.reorgLookbackBlocks
+      : 0n;
+    const guardBlockHash = await source.getBlockHash(guardBlockNumber);
+
     // Protect the small write/checkpoint window too. If the boundary moved after
     // writes began, remove this uncommitted batch so a retry cannot retain old-fork data.
     const boundaryHashBeforeCommit = await source.getBlockHash(toBlock);
@@ -93,7 +111,22 @@ export async function syncSentryTruth(
       throw new Error(`REORG_DURING_COMMIT:block=${toBlock}`);
     }
 
-    await store.commitCheckpoint({ blockNumber: toBlock, blockHash: boundaryHashBeforeCommit });
+    // Re-check proxy authority after writes and before checkpoint advancement. If the
+    // confirmed target's implementation drifted during a long catch-up, remove only the
+    // uncommitted batch and halt.
+    try {
+      await source.assertAuthority(targetBlock);
+    } catch (error) {
+      await store.rewindFromBlock(fromBlock);
+      throw error;
+    }
+
+    await store.commitCheckpoint({
+      blockNumber: toBlock,
+      blockHash: boundaryHashBeforeCommit,
+      guardBlockNumber,
+      guardBlockHash
+    });
     finalBlock = toBlock;
     batches += 1;
     fromBlock = toBlock + 1n;

@@ -3,6 +3,7 @@ import type { Hex, LaunchObserved, QuoteObservation } from '../domain.js';
 export interface LaunchSource {
   getHeadBlockNumber(): Promise<bigint>;
   getBlockHash(blockNumber: bigint): Promise<Hex>;
+  assertAuthority(blockNumber: bigint): Promise<void>;
   catchUp(fromBlock: bigint, toBlock: bigint): Promise<LaunchObserved[]>;
 }
 

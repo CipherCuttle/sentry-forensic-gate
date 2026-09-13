@@ -11,6 +11,8 @@ import { deriveEventId, deriveLaunchId } from './identity.js';
 import {
   DEFAULT_INK_RPC_URL,
   DEFAULT_SENTRY_LAUNCH_FACTORY,
+  EIP1967_IMPLEMENTATION_SLOT,
+  EXPECTED_SENTRY_LAUNCH_IMPLEMENTATION,
   goPumpMeTokenDeployedEvent,
   INK_CHAIN_ID,
   krakenVerifiedTokenDeployedEvent,
@@ -68,6 +70,45 @@ export class ViemSentryLaunchSource {
     const block = await this.client.getBlock({ blockNumber });
     if (!block.hash) throw new Error(`Missing block hash for ${blockNumber}`);
     return block.hash;
+  }
+
+
+  async assertAuthority(blockNumber: bigint): Promise<void> {
+    const chainId = await this.client.getChainId();
+    if (chainId !== INK_CHAIN_ID) {
+      throw new Error(`INK_CHAIN_ID_DRIFT:expected=${INK_CHAIN_ID}:actual=${chainId}`);
+    }
+    if (this.factory.toLowerCase() !== DEFAULT_SENTRY_LAUNCH_FACTORY.toLowerCase()) {
+      throw new Error(
+        `SENTRY_FACTORY_ADDRESS_DRIFT:expected=${DEFAULT_SENTRY_LAUNCH_FACTORY}:actual=${this.factory}`
+      );
+    }
+
+    const storage = await this.client.getStorageAt({
+      address: this.factory,
+      slot: EIP1967_IMPLEMENTATION_SLOT,
+      blockNumber
+    });
+    if (!storage || storage === '0x' || /^0x0+$/.test(storage)) {
+      throw new Error(`SENTRY_PROXY_IMPLEMENTATION_MISSING:block=${blockNumber}`);
+    }
+    const implementation = `0x${storage.slice(-40)}` as Hex;
+    if (implementation.toLowerCase() !== EXPECTED_SENTRY_LAUNCH_IMPLEMENTATION.toLowerCase()) {
+      throw new Error(
+        `SENTRY_PROXY_IMPLEMENTATION_DRIFT:expected=${EXPECTED_SENTRY_LAUNCH_IMPLEMENTATION}:actual=${implementation}:block=${blockNumber}`
+      );
+    }
+
+    const [proxyCode, implementationCode] = await Promise.all([
+      this.client.getBytecode({ address: this.factory, blockNumber }),
+      this.client.getBytecode({ address: implementation, blockNumber })
+    ]);
+    if (!proxyCode || proxyCode === '0x') {
+      throw new Error(`SENTRY_PROXY_CODE_MISSING:block=${blockNumber}`);
+    }
+    if (!implementationCode || implementationCode === '0x') {
+      throw new Error(`SENTRY_IMPLEMENTATION_CODE_MISSING:block=${blockNumber}`);
+    }
   }
 
   async catchUp(fromBlock: bigint, toBlock: bigint): Promise<LaunchObserved[]> {
