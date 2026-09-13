@@ -1,0 +1,34 @@
+{
+  "version": "SENTRY_AUTHORITY_EPOCHS_R1",
+  "chainId": 57073,
+  "proxy": "0xDc37e11B68052d1539fa23386eE58Ac444bf5BE1",
+  "proxyDeploymentBlock": 39943151,
+  "runtimeAuthorizationPolicy": "Only explicitly reviewed epochs are authorized. Discovery never self-authorizes an implementation.",
+  "authorizedEpochs": [
+    {
+      "fromBlock": 52267792,
+      "implementation": "0x94b22ce6A3dB42e09685D12c3D4330296dc4cE73",
+      "implementationDeploymentTx": "0x430a1e2083d098e6b763808ce6958cd9701e5cf0d7467678673bad7f9f7ee79f",
+      "upgradeTx": "0x4fd4bb9f9c8db9beaddd7aa6cbf2aaa0cb872587ce2d7b20313b3828f4fbb693",
+      "status": "AUTHORIZED",
+      "basis": "Verified current implementation preserves collector-critical deployment events, launch classification reads, npm(), and getSupportedBaseTokens(). Block 52267792 contains implementation deployment followed by ProxyAdmin upgrade and no Sentry launch transaction."
+    }
+  ],
+  "observedUpgrades": [
+    { "blockHex": "0x261882e", "block": 39946286, "implementation": "0x3f01f1e0d8b76e0a7bf476335a9ebcb6755df536", "tx": "0xccbb8bd718a5e13213319c2ce58fb33c17c07420247ed3a01cfa9df56b400f8b" },
+    { "blockHex": "0x270db6c", "block": 40950636, "implementation": "0xd070e996819ce52d33ce6ac3b15ad6ea02d77ea0", "tx": "0xce33b8173a702761e1706b99825dd24f17517a623c4a5f7899a2332b2df4a2e9" },
+    { "blockHex": "0x28100bf", "block": 42008767, "implementation": "0x6f269786695fcd8cc684ebf37604dd2fb1797fcc", "tx": "0xae22a3fcd5d2a1de47f38a2c7cad316e42ad1a9a160e54ae68c56a84f08990e0" },
+    { "blockHex": "0x2a1523e", "block": 44126782, "implementation": "0x71b2296124ce438bf2d0fef01e0adbd14a020282", "tx": "0xba9af796856149b92ed25d3737eafff84a87a13299d83778f0f573bb48cf9ae8" },
+    { "blockHex": "0x2b80d2c", "block": 45616428, "implementation": "0xfab1d73e877947fabe2d0966f9832541b6f82750", "tx": "0x662eeb4d26df7ca140859b49c24933b89951fac71a6f41df44a7fc5d00580bf7" },
+    { "blockHex": "0x2bab637", "block": 45790775, "implementation": "0xbe0e8f5d351b6acb0ec5c4ce6d2ba6c602bbb80f", "tx": "0x29bc1df7fafe3379f3b598c3e989c7501ed481c68eed3b846be6c8af8093d8e7" },
+    { "blockHex": "0x2c70e48", "block": 46599752, "implementation": "0x28ed07daba4ca9025819b64e1abb98d6c15ba069", "tx": "0x8cf3968b7f18214cbd4207227fd10e162d3fad2d28c78d8d249e7bd5336e1db8" },
+    { "blockHex": "0x2c78cbf", "block": 46632127, "implementation": "0x3515ce96c5c6fb8e73ebe04756f2227d035d6334", "tx": "0x85fbb6489291553b9cf0c7ef96f9027ea81fec30665b31c7aca7adac2dafb946" },
+    { "blockHex": "0x2c7a529", "block": 46638377, "implementation": "0x58dbe5062ccf31f9fd40d52bfb3a81e086031289", "tx": "0xc1619696f57fa6d2ee215caa0938733c8262a2e573521a716dbd8482db603a83" },
+    { "blockHex": "0x2c80d6e", "block": 46665070, "implementation": "0xd5bced4c43eef627ee0524368cabafcb9f29cff0", "tx": "0x5b07b818ed1f1ed2376d42f1dbb7ce1970e53943b683e1ee674b3d91737bba38" },
+    { "blockHex": "0x2fb385b", "block": 50018395, "implementation": "0xf7981ed4cf77239145b4a31c28d8790f19dca0be", "tx": "0x2f53010444a0bf90fa960cadc2daa46840fcaee11d29c077533bbb9697b3a39c" },
+    { "blockHex": "0x31d4fd3", "block": 52252627, "implementation": "0x3cbd0083d64a86cbdb0955566c88b13425cfdf3e", "tx": "0xb05123571f3f4cf59f4d6e7fbfb19d947d5288dc535fbe99dd10a88518ce1d1e" },
+    { "blockHex": "0x31d5cd1", "block": 52255953, "implementation": "0xfe10309c79931eebf187234fed02a5646aacc9e4", "tx": "0xe8684d8d5e175c93d19039a8176cb4374a3da08459e5c992a7e003f4c459198e" },
+    { "blockHex": "0x31d62fc", "block": 52257532, "implementation": "0xc39f8b8824d45972ce6990cd818d7be88b1aacd3", "tx": "0x64981af2d3ccb5d838b24d4e25372708e35b1bd764073dace7f0a88a5f1abfeb" },
+    { "blockHex": "0x31d8b10", "block": 52267792, "implementation": "0x94b22ce6a3db42e09685d12c3d4330296dc4ce73", "tx": "0x4fd4bb9f9c8db9beaddd7aa6cbf2aaa0cb872587ce2d7b20313b3828f4fbb693" }
+  ]
+}

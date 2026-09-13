@@ -8,20 +8,22 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "selfcheck": "node scripts/selfcheck.mjs",
+    "authoritycheck": "node scripts/sentry-authority-epoch-check.mjs && node scripts/sentry-ledger-epoch-check.mjs",
     "truthcheck": "node scripts/sentry-truth-check.mjs",
     "baselinecheck": "node scripts/executable-baseline-check.mjs && node scripts/executable-baseline-sqlite-check.mjs",
     "provenancecheck": "node scripts/provenance-facts-check.mjs",
     "creatoroutcomecheck": "node scripts/creator-outcome-check.mjs",
     "forwardoutcomecheck": "node scripts/forward-outcomes-check.mjs && node scripts/forward-outcome-final-authority-race-check.mjs",
     "creatorsignalcheck": "node scripts/creator-signal-eval-check.mjs && node scripts/creator-signal-missing-provenance-check.mjs",
-    "test": "pnpm build && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck",
+    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck",
     "start:truth": "node dist/cli.js",
     "start:baseline": "node dist/baselineCli.js",
     "start:creator-outcome": "node dist/creatorOutcomeCli.js",
     "start:outcomes": "node dist/forwardOutcomeCli.js",
     "start:creator-signal": "node dist/creatorSignalCli.js",
     "start:runtime": "node dist/researchRuntimeCli.js",
-    "start:activation-receipt": "node dist/activationReceiptCli.js"
+    "start:activation-receipt": "node dist/activationReceiptCli.js",
+    "start:provider-capability": "node dist/providerCapabilityCli.js"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",
