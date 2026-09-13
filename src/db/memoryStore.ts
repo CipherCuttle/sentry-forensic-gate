@@ -43,6 +43,13 @@ export class MemoryStore implements Store, BaselineStore {
     return this.launches.get(launchId) ?? null;
   }
 
+  async listLaunchesMissingProvenance(): Promise<LaunchObserved[]> {
+    const covered = new Set([...this.provenanceFacts.values()].map((fact) => fact.launchId));
+    return [...this.launches.values()]
+      .filter((launch) => !covered.has(launch.launchId))
+      .sort(compareLaunches);
+  }
+
   async putProvenanceFact(fact: ProvenanceFact): Promise<'INSERTED' | 'DUPLICATE'> {
     if (!this.launches.has(fact.launchId)) throw new Error(`PROVENANCE_LAUNCH_MISSING:${fact.launchId}`);
     const existing = this.provenanceFacts.get(fact.factId);
@@ -160,6 +167,13 @@ export class MemoryStore implements Store, BaselineStore {
     map.set(key, value);
     return 'INSERTED';
   }
+}
+
+function compareLaunches(a: LaunchObserved, b: LaunchObserved): number {
+  if (a.chainId !== b.chainId) return a.chainId - b.chainId;
+  if (a.blockNumber !== b.blockNumber) return a.blockNumber < b.blockNumber ? -1 : 1;
+  if (a.logIndex !== b.logIndex) return a.logIndex - b.logIndex;
+  return a.launchId.localeCompare(b.launchId);
 }
 
 function compareFacts(a: ProvenanceFact, b: ProvenanceFact): number {
