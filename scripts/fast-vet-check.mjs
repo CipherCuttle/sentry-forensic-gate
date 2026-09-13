@@ -158,6 +158,17 @@ assert.deepEqual(first.metrics, {
   upsideCaptureBps: 6666
 });
 
+const withOutsideControl = await evaluateFastVetShadow([
+  ...rows,
+  {
+    launchId: 'unverified',
+    baseline: baseline('unverified', { status: 'UNVERIFIED' }),
+    creatorFeature: null,
+    targetOutcome: outcome('unverified', 'CATASTROPHIC_LOSS', 0n)
+  }
+]);
+assert.deepEqual(withOutsideControl.metrics, first.metrics);
+
 const wrongHorizon = await evaluateFastVetShadow([
   { launchId: 'short', baseline: baseline('short'), creatorFeature: feature('short'), targetOutcome: outcome('short', 'CATASTROPHIC_LOSS', 0n, 300_000) }
 ]);
