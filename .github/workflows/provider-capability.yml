@@ -28,6 +28,4 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm build
       - name: Probe default public Ink RPC
-        env:
-          PROVIDER_PROBE_BLOCK: '52267792'
         run: pnpm start:provider-capability
