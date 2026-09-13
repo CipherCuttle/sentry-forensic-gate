@@ -1,1 +1,178 @@
-aW1wb3J0IHR5cGUgeyBIZXgsIExhdW5jaE9ic2VydmVkIH0gZnJvbSAnLi4vZG9tYWluLmpzJzsKaW1wb3J0IHR5cGUgeyBTdG9yZSB9IGZyb20gJy4uL2RiL3N0b3JlLmpzJzsKaW1wb3J0IHR5cGUgeyBMYXVuY2hTb3VyY2UgfSBmcm9tICcuLi9zZW50cnkvcG9ydHMuanMnOwoKZXhwb3J0IGludGVyZmFjZSBTZW50cnlUcnV0aE9wdGlvbnMgewogIHN0YXJ0QmxvY2s6IGJpZ2ludDsKICBjb25maXJtYXRpb25zOiBiaWdpbnQ7CiAgbWF4QmF0Y2hCbG9ja3M6IGJpZ2ludDsKICByZW9yZ0xvb2tiYWNrQmxvY2tzOiBiaWdpbnQ7CiAgcG9sbEludGVydmFsTXM6IG51bWJlcjsKfQoKZXhwb3J0IGludGVyZmFjZSBTeW5jUmVwb3J0IHsKICBoZWFkQmxvY2s6IGJpZ2ludDsKICB0YXJnZXRCbG9jazogYmlnaW50IHwgbnVsbDsKICBzdGFydEJsb2NrOiBiaWdpbnQgfCBudWxsOwogIGVuZEJsb2NrOiBiaWdpbnQgfCBudWxsOwogIGluc2VydGVkOiBudW1iZXI7CiAgZHVwbGljYXRlczogbnVtYmVyOwogIGJhdGNoZXM6IG51bWJlcjsKICByZW9yZ1Jld2luZEZyb206IGJpZ2ludCB8IG51bGw7Cn0KCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBzeW5jU2VudHJ5VHJ1dGgoCiAgc291cmNlOiBMYXVuY2hTb3VyY2UsCiAgc3RvcmU6IFN0b3JlLAogIG9wdGlvbnM6IFNlbnRyeVRydXRoT3B0aW9ucwopOiBQcm9taXNlPFN5bmNSZXBvcnQ+IHsKICB2YWxpZGF0ZU9wdGlvbnMob3B0aW9ucyk7CiAgY29uc3QgaGVhZEJsb2NrID0gYXdhaXQgc291cmNlLmdldEhlYWRCbG9ja051bWJlcigpOwogIGlmIChoZWFkQmxvY2sgPCBvcHRpb25zLmNvbmZpcm1hdGlvbnMpIHJldHVybiBlbXB0eVJlcG9ydChoZWFkQmxvY2spOwogIGNvbnN0IHRhcmdldEJsb2NrID0gaGVhZEJsb2NrIC0gb3B0aW9ucy5jb25maXJtYXRpb25zOwogIGlmICh0YXJnZXRCbG9jayA8IG9wdGlvbnMuc3RhcnRCbG9jaykgcmV0dXJuIHsgLi4uZW1wdHlSZXBvcnQoaGVhZEJsb2NrKSwgdGFyZ2V0QmxvY2sgfTsKCiAgbGV0IGNoZWNrcG9pbnQgPSBhd2FpdCBzdG9yZS5nZXRDaGVja3BvaW50KCk7CiAgbGV0IGZyb21CbG9jayA9IGNoZWNrcG9pbnQgPyBjaGVja3BvaW50LmJsb2NrTnVtYmVyICsgMW4gOiBvcHRpb25zLnN0YXJ0QmxvY2s7CiAgbGV0IHJlb3JnUmV3aW5kRnJvbTogYmlnaW50IHwgbnVsbCA9IG51bGw7CgogIGlmIChjaGVja3BvaW50KSB7CiAgICBjb25zdCBjYW5vbmljYWxIYXNoID0gYXdhaXQgc291cmNlLmdldEJsb2NrSGFzaChjaGVja3BvaW50LmJsb2NrTnVtYmVyKTsKICAgIGlmICghc2FtZUhleChjYW5vbmljYWxIYXNoLCBjaGVja3BvaW50LmJsb2NrSGFzaCkpIHsKICAgICAgcmVvcmdSZXdpbmRGcm9tID0gbWF4QmlnSW50KAogICAgICAgIG9wdGlvbnMuc3RhcnRCbG9jaywKICAgICAgICBjaGVja3BvaW50LmJsb2NrTnVtYmVyIC0gb3B0aW9ucy5yZW9yZ0xvb2tiYWNrQmxvY2tzICsgMW4KICAgICAgKTsKICAgICAgYXdhaXQgc3RvcmUucmV3aW5kRnJvbUJsb2NrKHJlb3JnUmV3aW5kRnJvbSk7CiAgICAgIGNoZWNrcG9pbnQgPSBhd2FpdCBzdG9yZS5nZXRDaGVja3BvaW50KCk7CiAgICAgIGZyb21CbG9jayA9IGNoZWNrcG9pbnQgPyBjaGVja3BvaW50LmJsb2NrTnVtYmVyICsgMW4gOiByZW9yZ1Jld2luZEZyb207CiAgICB9CiAgfQoKICBpZiAoZnJvbUJsb2NrID4gdGFyZ2V0QmxvY2spIHsKICAgIHJldHVybiB7CiAgICAgIGhlYWRCbG9jaywKICAgICAgdGFyZ2V0QmxvY2ssCiAgICAgIHN0YXJ0QmxvY2s6IG51bGwsCiAgICAgIGVuZEJsb2NrOiBudWxsLAogICAgICBpbnNlcnRlZDogMCwKICAgICAgZHVwbGljYXRlczogMCwKICAgICAgYmF0Y2hlczogMCwKICAgICAgcmVvcmdSZXdpbmRGcm9tCiAgICB9OwogIH0KCiAgY29uc3QgaW5pdGlhbEZyb20gPSBmcm9tQmxvY2s7CiAgbGV0IGluc2VydGVkID0gMDsKICBsZXQgZHVwbGljYXRlcyA9IDA7CiAgbGV0IGJhdGNoZXMgPSAwOwogIGxldCBmaW5hbEJsb2NrOiBiaWdpbnQgfCBudWxsID0gbnVsbDsKCiAgd2hpbGUgKGZyb21CbG9jayA8PSB0YXJnZXRCbG9jaykgewogICAgY29uc3QgdG9CbG9jayA9IG1pbkJpZ0ludCh0YXJnZXRCbG9jaywgZnJvbUJsb2NrICsgb3B0aW9ucy5tYXhCYXRjaEJsb2NrcyAtIDFuKTsKICAgIGNvbnN0IGJvdW5kYXJ5SGFzaEJlZm9yZSA9IGF3YWl0IHNvdXJjZS5nZXRCbG9ja0hhc2godG9CbG9jayk7CiAgICBjb25zdCBsYXVuY2hlcyA9IGF3YWl0IHNvdXJjZS5jYXRjaFVwKGZyb21CbG9jaywgdG9CbG9jayk7CiAgICBhd2FpdCBhc3NlcnRMYXVuY2hCbG9ja3NTdGlsbENhbm9uaWNhbChzb3VyY2UsIGxhdW5jaGVzKTsKCiAgICBjb25zdCBib3VuZGFyeUhhc2hBZnRlclJlYWQgPSBhd2FpdCBzb3VyY2UuZ2V0QmxvY2tIYXNoKHRvQmxvY2spOwogICAgaWYgKCFzYW1lSGV4KGJvdW5kYXJ5SGFzaEJlZm9yZSwgYm91bmRhcnlIYXNoQWZ0ZXJSZWFkKSkgewogICAgICB0aHJvdyBuZXcgRXJyb3IoYFJFT1JHX0RVUklOR19SRUFEOmJsb2NrPSR7dG9CbG9ja31gKTsKICAgIH0KCiAgICBmb3IgKGNvbnN0IGxhdW5jaCBvZiBsYXVuY2hlcykgewogICAgICBjb25zdCByZXN1bHQgPSBhd2FpdCBzdG9yZS5wdXRMYXVuY2gobGF1bmNoKTsKICAgICAgaWYgKHJlc3VsdCA9PT0gJ0lOU0VSVEVEJykgaW5zZXJ0ZWQgKz0gMTsKICAgICAgZWxzZSBkdXBsaWNhdGVzICs9IDE7CiAgICB9CgogICAgLy8gUHJvdGVjdCB0aGUgc21hbGwgd3JpdGUvY2hlY2twb2ludCB3aW5kb3cgdG9vLiBJZiB0aGUgYm91bmRhcnkgbW92ZWQgYWZ0ZXIKICAgIC8vIHdyaXRlcyBiZWdhbiwgcmVtb3ZlIHRoaXMgdW5jb21taXR0ZWQgYmF0Y2ggc28gYSByZXRyeSBjYW5ub3QgcmV0YWluIG9sZC1mb3JrIGRhdGEuCiAgICBjb25zdCBib3VuZGFyeUhhc2hCZWZvcmVDb21taXQgPSBhd2FpdCBzb3VyY2UuZ2V0QmxvY2tIYXNoKHRvQmxvY2spOwogICAgaWYgKCFzYW1lSGV4KGJvdW5kYXJ5SGFzaEJlZm9yZSwgYm91bmRhcnlIYXNoQmVmb3JlQ29tbWl0KSkgewogICAgICBhd2FpdCBzdG9yZS5yZXdpbmRGcm9tQmxvY2soZnJvbUJsb2NrKTsKICAgICAgdGhyb3cgbmV3IEVycm9yKGBSRU9SR19EVVJJTkdfQ09NTUlUOmJsb2NrPSR7dG9CbG9ja31gKTsKICAgIH0KCiAgICBhd2FpdCBzdG9yZS5jb21taXRDaGVja3BvaW50KHsgYmxvY2tOdW1iZXI6IHRvQmxvY2ssIGJsb2NrSGFzaDogYm91bmRhcnlIYXNoQmVmb3JlQ29tbWl0IH0pOwogICAgZmluYWxCbG9jayA9IHRvQmxvY2s7CiAgICBiYXRjaGVzICs9IDE7CiAgICBmcm9tQmxvY2sgPSB0b0Jsb2NrICsgMW47CiAgfQoKICByZXR1cm4gewogICAgaGVhZEJsb2NrLAogICAgdGFyZ2V0QmxvY2ssCiAgICBzdGFydEJsb2NrOiBpbml0aWFsRnJvbSwKICAgIGVuZEJsb2NrOiBmaW5hbEJsb2NrLAogICAgaW5zZXJ0ZWQsCiAgICBkdXBsaWNhdGVzLAogICAgYmF0Y2hlcywKICAgIHJlb3JnUmV3aW5kRnJvbQogIH07Cn0KCmV4cG9ydCBhc3luYyBmdW5jdGlvbiBydW5TZW50cnlUcnV0aCgKICBzb3VyY2U6IExhdW5jaFNvdXJjZSwKICBzdG9yZTogU3RvcmUsCiAgb3B0aW9uczogU2VudHJ5VHJ1dGhPcHRpb25zLAogIHNpZ25hbD86IEFib3J0U2lnbmFsLAogIG9uU3luYz86IChyZXBvcnQ6IFN5bmNSZXBvcnQpID0+IHZvaWQKKTogUHJvbWlzZTx2b2lkPiB7CiAgd2hpbGUgKCFzaWduYWw/LmFib3J0ZWQpIHsKICAgIGNvbnN0IHJlcG9ydCA9IGF3YWl0IHN5bmNTZW50cnlUcnV0aChzb3VyY2UsIHN0b3JlLCBvcHRpb25zKTsKICAgIG9uU3luYz8uKHJlcG9ydCk7CiAgICBhd2FpdCBzbGVlcChvcHRpb25zLnBvbGxJbnRlcnZhbE1zLCBzaWduYWwpOwogIH0KfQoKYXN5bmMgZnVuY3Rpb24gYXNzZXJ0TGF1bmNoQmxvY2tzU3RpbGxDYW5vbmljYWwoc291cmNlOiBMYXVuY2hTb3VyY2UsIGxhdW5jaGVzOiBMYXVuY2hPYnNlcnZlZFtdKTogUHJvbWlzZTx2b2lkPiB7CiAgY29uc3QgaGFzaGVzID0gbmV3IE1hcDxiaWdpbnQsIEhleD4oKTsKICBmb3IgKGNvbnN0IGxhdW5jaCBvZiBsYXVuY2hlcykgewogICAgbGV0IGNhbm9uaWNhbCA9IGhhc2hlcy5nZXQobGF1bmNoLmJsb2NrTnVtYmVyKTsKICAgIGlmICghY2Fub25pY2FsKSB7CiAgICAgIGNhbm9uaWNhbCA9IGF3YWl0IHNvdXJjZS5nZXRCbG9ja0hhc2gobGF1bmNoLmJsb2NrTnVtYmVyKTsKICAgICAgaGFzaGVzLnNldChsYXVuY2guYmxvY2tOdW1iZXIsIGNhbm9uaWNhbCk7CiAgICB9CiAgICBpZiAoIXNhbWVIZXgoY2Fub25pY2FsLCBsYXVuY2guYmxvY2tIYXNoKSkgewogICAgICB0aHJvdyBuZXcgRXJyb3IoYFJFT1JHX0RVUklOR19TWU5DOmJsb2NrPSR7bGF1bmNoLmJsb2NrTnVtYmVyfWApOwogICAgfQogIH0KfQoKZnVuY3Rpb24gdmFsaWRhdGVPcHRpb25zKG9wdGlvbnM6IFNlbnRyeVRydXRoT3B0aW9ucyk6IHZvaWQgewogIGlmIChvcHRpb25zLnN0YXJ0QmxvY2sgPCAwbikgdGhyb3cgbmV3IEVycm9yKCdzdGFydEJsb2NrIG11c3QgYmUgPj0gMCcpOwogIGlmIChvcHRpb25zLmNvbmZpcm1hdGlvbnMgPCAwbikgdGhyb3cgbmV3IEVycm9yKCdjb25maXJtYXRpb25zIG11c3QgYmUgPj0gMCcpOwogIGlmIChvcHRpb25zLm1heEJhdGNoQmxvY2tzIDwgMW4pIHRocm93IG5ldyBFcnJvcignbWF4QmF0Y2hCbG9ja3MgbXVzdCBiZSA+PSAxJyk7CiAgaWYgKG9wdGlvbnMucmVvcmdMb29rYmFja0Jsb2NrcyA8IDFuKSB0aHJvdyBuZXcgRXJyb3IoJ3Jlb3JnTG9va2JhY2tCbG9ja3MgbXVzdCBiZSA+PSAxJyk7CiAgaWYgKCFOdW1iZXIuaXNGaW5pdGUob3B0aW9ucy5wb2xsSW50ZXJ2YWxNcykgfHwgb3B0aW9ucy5wb2xsSW50ZXJ2YWxNcyA8IDEwMCkgewogICAgdGhyb3cgbmV3IEVycm9yKCdwb2xsSW50ZXJ2YWxNcyBtdXN0IGJlID49IDEwMCcpOwogIH0KfQoKZnVuY3Rpb24gZW1wdHlSZXBvcnQoaGVhZEJsb2NrOiBiaWdpbnQpOiBTeW5jUmVwb3J0IHsKICByZXR1cm4gewogICAgaGVhZEJsb2NrLAogICAgdGFyZ2V0QmxvY2s6IG51bGwsCiAgICBzdGFydEJsb2NrOiBudWxsLAogICAgZW5kQmxvY2s6IG51bGwsCiAgICBpbnNlcnRlZDogMCwKICAgIGR1cGxpY2F0ZXM6IDAsCiAgICBiYXRjaGVzOiAwLAogICAgcmVvcmdSZXdpbmRGcm9tOiBudWxsCiAgfTsKfQoKZnVuY3Rpb24gc2FtZUhleChhOiBIZXgsIGI6IEhleCk6IGJvb2xlYW4geyByZXR1cm4gYS50b0xvd2VyQ2FzZSgpID09PSBiLnRvTG93ZXJDYXNlKCk7IH0KZnVuY3Rpb24gbWluQmlnSW50KGE6IGJpZ2ludCwgYjogYmlnaW50KTogYmlnaW50IHsgcmV0dXJuIGEgPCBiID8gYSA6IGI7IH0KZnVuY3Rpb24gbWF4QmlnSW50KGE6IGJpZ2ludCwgYjogYmlnaW50KTogYmlnaW50IHsgcmV0dXJuIGEgPiBiID8gYSA6IGI7IH0KCmZ1bmN0aW9uIHNsZWVwKG1zOiBudW1iZXIsIHNpZ25hbD86IEFib3J0U2lnbmFsKTogUHJvbWlzZTx2b2lkPiB7CiAgaWYgKHNpZ25hbD8uYWJvcnRlZCkgcmV0dXJuIFByb21pc2UucmVzb2x2ZSgpOwogIHJldHVybiBuZXcgUHJvbWlzZSgocmVzb2x2ZSkgPT4gewogICAgY29uc3QgdGltZXIgPSBzZXRUaW1lb3V0KHJlc29sdmUsIG1zKTsKICAgIHNpZ25hbD8uYWRkRXZlbnRMaXN0ZW5lcignYWJvcnQnLCAoKSA9PiB7CiAgICAgIGNsZWFyVGltZW91dCh0aW1lcik7CiAgICAgIHJlc29sdmUoKTsKICAgIH0sIHsgb25jZTogdHJ1ZSB9KTsKICB9KTsKfQo=
+import type { Hex, LaunchObserved } from '../domain.js';
+import type { Store } from '../db/store.js';
+import type { LaunchSource } from '../sentry/ports.js';
+
+export interface SentryTruthOptions {
+  startBlock: bigint;
+  confirmations: bigint;
+  maxBatchBlocks: bigint;
+  reorgLookbackBlocks: bigint;
+  pollIntervalMs: number;
+}
+
+export interface SyncReport {
+  headBlock: bigint;
+  targetBlock: bigint | null;
+  startBlock: bigint | null;
+  endBlock: bigint | null;
+  inserted: number;
+  duplicates: number;
+  batches: number;
+  reorgRewindFrom: bigint | null;
+}
+
+export async function syncSentryTruth(
+  source: LaunchSource,
+  store: Store,
+  options: SentryTruthOptions
+): Promise<SyncReport> {
+  validateOptions(options);
+  const headBlock = await source.getHeadBlockNumber();
+  if (headBlock < options.confirmations) return emptyReport(headBlock);
+  const targetBlock = headBlock - options.confirmations;
+  if (targetBlock < options.startBlock) return { ...emptyReport(headBlock), targetBlock };
+
+  let checkpoint = await store.getCheckpoint();
+  let fromBlock = checkpoint ? checkpoint.blockNumber + 1n : options.startBlock;
+  let reorgRewindFrom: bigint | null = null;
+
+  if (checkpoint) {
+    const canonicalHash = await source.getBlockHash(checkpoint.blockNumber);
+    if (!sameHex(canonicalHash, checkpoint.blockHash)) {
+      reorgRewindFrom = maxBigInt(
+        options.startBlock,
+        checkpoint.blockNumber - options.reorgLookbackBlocks + 1n
+      );
+      await store.rewindFromBlock(reorgRewindFrom);
+      checkpoint = await store.getCheckpoint();
+      fromBlock = checkpoint ? checkpoint.blockNumber + 1n : reorgRewindFrom;
+    }
+  }
+
+  if (fromBlock > targetBlock) {
+    return {
+      headBlock,
+      targetBlock,
+      startBlock: null,
+      endBlock: null,
+      inserted: 0,
+      duplicates: 0,
+      batches: 0,
+      reorgRewindFrom
+    };
+  }
+
+  const initialFrom = fromBlock;
+  let inserted = 0;
+  let duplicates = 0;
+  let batches = 0;
+  let finalBlock: bigint | null = null;
+
+  while (fromBlock <= targetBlock) {
+    const toBlock = minBigInt(targetBlock, fromBlock + options.maxBatchBlocks - 1n);
+    const boundaryHashBefore = await source.getBlockHash(toBlock);
+    const launches = await source.catchUp(fromBlock, toBlock);
+    await assertLaunchBlocksStillCanonical(source, launches);
+
+    const boundaryHashAfterRead = await source.getBlockHash(toBlock);
+    if (!sameHex(boundaryHashBefore, boundaryHashAfterRead)) {
+      throw new Error(`REORG_DURING_READ:block=${toBlock}`);
+    }
+
+    for (const launch of launches) {
+      const result = await store.putLaunch(launch);
+      if (result === 'INSERTED') inserted += 1;
+      else duplicates += 1;
+    }
+
+    // Protect the small write/checkpoint window too. If the boundary moved after
+    // writes began, remove this uncommitted batch so a retry cannot retain old-fork data.
+    const boundaryHashBeforeCommit = await source.getBlockHash(toBlock);
+    if (!sameHex(boundaryHashBefore, boundaryHashBeforeCommit)) {
+      await store.rewindFromBlock(fromBlock);
+      throw new Error(`REORG_DURING_COMMIT:block=${toBlock}`);
+    }
+
+    await store.commitCheckpoint({ blockNumber: toBlock, blockHash: boundaryHashBeforeCommit });
+    finalBlock = toBlock;
+    batches += 1;
+    fromBlock = toBlock + 1n;
+  }
+
+  return {
+    headBlock,
+    targetBlock,
+    startBlock: initialFrom,
+    endBlock: finalBlock,
+    inserted,
+    duplicates,
+    batches,
+    reorgRewindFrom
+  };
+}
+
+export async function runSentryTruth(
+  source: LaunchSource,
+  store: Store,
+  options: SentryTruthOptions,
+  signal?: AbortSignal,
+  onSync?: (report: SyncReport) => void
+): Promise<void> {
+  while (!signal?.aborted) {
+    const report = await syncSentryTruth(source, store, options);
+    onSync?.(report);
+    await sleep(options.pollIntervalMs, signal);
+  }
+}
+
+async function assertLaunchBlocksStillCanonical(source: LaunchSource, launches: LaunchObserved[]): Promise<void> {
+  const hashes = new Map<bigint, Hex>();
+  for (const launch of launches) {
+    let canonical = hashes.get(launch.blockNumber);
+    if (!canonical) {
+      canonical = await source.getBlockHash(launch.blockNumber);
+      hashes.set(launch.blockNumber, canonical);
+    }
+    if (!sameHex(canonical, launch.blockHash)) {
+      throw new Error(`REORG_DURING_SYNC:block=${launch.blockNumber}`);
+    }
+  }
+}
+
+function validateOptions(options: SentryTruthOptions): void {
+  if (options.startBlock < 0n) throw new Error('startBlock must be >= 0');
+  if (options.confirmations < 0n) throw new Error('confirmations must be >= 0');
+  if (options.maxBatchBlocks < 1n) throw new Error('maxBatchBlocks must be >= 1');
+  if (options.reorgLookbackBlocks < 1n) throw new Error('reorgLookbackBlocks must be >= 1');
+  if (!Number.isFinite(options.pollIntervalMs) || options.pollIntervalMs < 100) {
+    throw new Error('pollIntervalMs must be >= 100');
+  }
+}
+
+function emptyReport(headBlock: bigint): SyncReport {
+  return {
+    headBlock,
+    targetBlock: null,
+    startBlock: null,
+    endBlock: null,
+    inserted: 0,
+    duplicates: 0,
+    batches: 0,
+    reorgRewindFrom: null
+  };
+}
+
+function sameHex(a: Hex, b: Hex): boolean { return a.toLowerCase() === b.toLowerCase(); }
+function minBigInt(a: bigint, b: bigint): bigint { return a < b ? a : b; }
+function maxBigInt(a: bigint, b: bigint): bigint { return a > b ? a : b; }
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+}
