@@ -14,8 +14,8 @@ jobs:
           node-version: 20
       - run: corepack enable
       - name: Test research-only guardrails
-        run: pnpm dlx @ast-grep/cli@0.45.0 test --skip-snapshot-tests
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests
       - name: Enforce research-only guardrails
-        run: pnpm dlx @ast-grep/cli@0.45.0 scan
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm test
