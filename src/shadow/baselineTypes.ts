@@ -162,8 +162,13 @@ export function flattenBaselineQuotes(batch: ExecutableBaselineBatch): BaselineQ
   return quotes;
 }
 
-export function isLaunchEligibleForDecision(launch: LaunchObserved, headBlock: bigint, decisionDelayBlocks: bigint): boolean {
-  return launch.blockNumber + decisionDelayBlocks <= headBlock;
+export function isLaunchEligibleForDecision(
+  launch: LaunchObserved,
+  headBlock: bigint,
+  decisionDelayBlocks: bigint,
+  confirmations: bigint = 0n
+): boolean {
+  return launch.blockNumber + decisionDelayBlocks + confirmations <= headBlock;
 }
 
 function stripObservedAt(quote: BaselineQuoteReceipt) {
