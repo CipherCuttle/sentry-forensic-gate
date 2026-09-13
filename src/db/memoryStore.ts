@@ -1,9 +1,10 @@
 import type { LaunchObserved } from '../domain.js';
+import { canonicalJson } from '../evidence/canonical.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
 import type { ProvenanceEdge, ProvenanceFact } from '../graph/provenance.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
 import type { ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
-import type { BaselineStore } from '../shadow/baselineStore.js';
+import type { BaselineDecisionPoint, BaselineStore } from '../shadow/baselineStore.js';
 import type { ShadowEntry } from '../shadow/ports.js';
 import type { ChainCheckpoint, Store } from './store.js';
 
@@ -89,13 +90,44 @@ export class MemoryStore implements Store, BaselineStore {
   async putShadowEntry(v: ShadowEntry) {
     return this.insertMap(this.shadow, `${v.launchId}:${v.notionalUsdMicros}`, v);
   }
-  async putOutcome(v: OutcomeReceipt) { return this.insertMap(this.outcomes, v.outcomeId, v); }
+
+  async putOutcome(v: OutcomeReceipt): Promise<'INSERTED' | 'DUPLICATE'> {
+    if (!this.launches.has(v.launchId)) throw new Error(`OUTCOME_LAUNCH_MISSING:${v.launchId}`);
+    const byId = this.outcomes.get(v.outcomeId);
+    const bySlot = [...this.outcomes.values()].find((item) => item.launchId === v.launchId && item.horizonMs === v.horizonMs);
+    const collision = byId ?? bySlot;
+    if (collision) {
+      if (collision.outcomeId !== v.outcomeId || canonicalJson(collision) !== canonicalJson(v)) {
+        throw new Error(`OUTCOME_IDENTITY_CONFLICT:${v.launchId}:${v.horizonMs}`);
+      }
+      return 'DUPLICATE';
+    }
+    this.outcomes.set(v.outcomeId, v);
+    return 'INSERTED';
+  }
+
+  async listOutcomes(): Promise<OutcomeReceipt[]> {
+    return [...this.outcomes.values()].sort(compareOutcomes);
+  }
 
   async listLaunchesPendingBaseline(maxLaunchBlock: bigint, limit: number): Promise<LaunchObserved[]> {
     return [...this.launches.values()]
       .filter((launch) => launch.blockNumber <= maxLaunchBlock && !this.baselines.has(launch.launchId))
       .sort((a, b) => a.blockNumber === b.blockNumber ? a.logIndex - b.logIndex : a.blockNumber < b.blockNumber ? -1 : 1)
       .slice(0, limit);
+  }
+
+  async listBaselineDecisionPoints(): Promise<BaselineDecisionPoint[]> {
+    return [...this.baselines.values()]
+      .map((batch) => ({
+        baselineId: batch.baselineId,
+        authorityDigest: batch.authorityDigest,
+        launchId: batch.launchId,
+        decisionBlock: batch.decisionBlock,
+        decisionBlockHash: batch.decisionBlockHash,
+        status: batch.status
+      }))
+      .sort(compareBaselineDecisionPoints);
   }
 
   async putBaselineBatch(batch: ExecutableBaselineBatch): Promise<'INSERTED' | 'DUPLICATE'> {
@@ -187,4 +219,15 @@ function compareEdges(a: ProvenanceEdge, b: ProvenanceEdge): number {
   if (a.chainId !== b.chainId) return a.chainId - b.chainId;
   if (a.observedBlock !== b.observedBlock) return a.observedBlock < b.observedBlock ? -1 : 1;
   return a.edgeId.localeCompare(b.edgeId);
+}
+
+function compareOutcomes(a: OutcomeReceipt, b: OutcomeReceipt): number {
+  if (a.observedBlock !== b.observedBlock) return a.observedBlock < b.observedBlock ? -1 : 1;
+  if (a.horizonMs !== b.horizonMs) return a.horizonMs - b.horizonMs;
+  return a.outcomeId.localeCompare(b.outcomeId);
+}
+
+function compareBaselineDecisionPoints(a: BaselineDecisionPoint, b: BaselineDecisionPoint): number {
+  if (a.decisionBlock !== b.decisionBlock) return a.decisionBlock < b.decisionBlock ? -1 : 1;
+  return a.launchId.localeCompare(b.launchId);
 }

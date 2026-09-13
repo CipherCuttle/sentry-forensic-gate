@@ -14,6 +14,7 @@ export * from './tsunami/viemBaselineSource.js';
 export * from './graph/provenance.js';
 export * from './graph/types.js';
 export * from './forensic/ports.js';
+export * from './forensic/creatorOutcome.js';
 export * from './shadow/ports.js';
 export * from './shadow/baselineTypes.js';
 export * from './shadow/baselineStore.js';
