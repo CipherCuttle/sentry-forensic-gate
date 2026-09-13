@@ -33,6 +33,14 @@ export type CreatorSignalEvaluationStatus = 'COMPLETE' | 'INSUFFICIENT_SAMPLE';
 export type CreatorSignalVerdict = 'DESCRIPTIVE_WORTH_PROSPECTIVE_TEST' | 'DESCRIPTIVE_NOT_SUPPORTED';
 export type CreatorSignalDecision = 'PASS' | 'REJECT';
 
+type ResolvedForwardOutcomeReceipt = ForwardOutcomeReceipt & {
+  policyVersion: typeof FORWARD_OUTCOMES_R1;
+  status: 'COMPLETE';
+  executableValueUsdMicros: bigint;
+  executableReturnBps: bigint;
+  classification: Exclude<NonNullable<ForwardOutcomeReceipt['classification']>, 'FAT_TAIL_WIN'>;
+};
+
 export interface MatureLaunchEvidence {
   launchId: string;
   factId: string;
@@ -337,7 +345,7 @@ function validateFeature(row: CreatorSignalComparableRow): void {
   }
 }
 
-function resolvedTarget(row: CreatorSignalComparableRow): ForwardOutcomeReceipt | null {
+function resolvedTarget(row: CreatorSignalComparableRow): ResolvedForwardOutcomeReceipt | null {
   const target = row.targetOutcome;
   if (!target || target.status !== 'COMPLETE') return null;
   if (
@@ -359,7 +367,7 @@ function resolvedTarget(row: CreatorSignalComparableRow): ForwardOutcomeReceipt 
   if (target.classification === 'FAT_TAIL_WIN') {
     throw new Error(`CREATOR_SIGNAL_UNEXPECTED_R1_FAT_TAIL_LABEL:${row.launchId}`);
   }
-  return target;
+  return target as ResolvedForwardOutcomeReceipt;
 }
 
 function isAdverse(classification: NonNullable<ForwardOutcomeReceipt['classification']>): boolean {
