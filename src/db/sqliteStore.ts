@@ -52,6 +52,17 @@ export class SqliteStore implements Store, BaselineStore {
     return row ? fromLaunchRow(row) : null;
   }
 
+  async listLaunchesMissingProvenance(): Promise<LaunchObserved[]> {
+    const rows = this.db.prepare(`
+      SELECT l.*
+      FROM launches l
+      LEFT JOIN provenance_facts p ON p.launch_id = l.launch_id
+      WHERE l.chain_id = ? AND p.launch_id IS NULL
+      ORDER BY CAST(l.block_number AS INTEGER), l.log_index, l.launch_id
+    `).all(this.chainId) as LaunchRow[];
+    return rows.map(fromLaunchRow);
+  }
+
   async putProvenanceFact(fact: ProvenanceFact): Promise<'INSERTED' | 'DUPLICATE'> {
     if (fact.chainId !== this.chainId) throw new Error(`PROVENANCE_CHAIN_MISMATCH:${fact.factId}`);
     const result = this.db.prepare(`
