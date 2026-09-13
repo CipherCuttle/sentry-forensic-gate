@@ -1,0 +1,5 @@
+id: research-only-no-direct-network-js
+valid:
+  - "client.readContract();"
+invalid:
+  - "const WebSocket = 1;"
