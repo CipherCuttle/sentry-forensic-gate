@@ -122,6 +122,12 @@ assert.equal(evaluateFastVet({ baseline: baseline('bad'), creatorFeature: featur
 assert.equal(evaluateFastVet({ baseline: baseline('partial'), creatorFeature: feature('partial', { coverage: 'PARTIAL' }) }).decision, 'UNKNOWN');
 assert.equal(evaluateFastVet({ baseline: baseline('nosell', { reverse: false }), creatorFeature: feature('nosell') }).decision, 'REJECT');
 assert.equal(evaluateFastVet({ baseline: null, creatorFeature: null }).action, 'SKIP');
+const staleFeature = feature('stale');
+staleFeature.baselineId = 'baseline-other';
+assert.throws(
+  () => evaluateFastVet({ baseline: baseline('stale', { reverse: false }), creatorFeature: staleFeature }),
+  /FAST_VET_BINDING_MISMATCH/
+);
 
 const rows = [
   { launchId: 'a', baseline: baseline('a'), creatorFeature: feature('a'), targetOutcome: outcome('a', 'NORMAL_WIN', 3_000_000n) },
