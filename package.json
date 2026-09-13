@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "selfcheck": "node scripts/selfcheck.mjs",
-    "authoritycheck": "node scripts/sentry-authority-epoch-check.mjs",
+    "authoritycheck": "node scripts/sentry-authority-epoch-check.mjs && node scripts/sentry-ledger-epoch-check.mjs",
     "truthcheck": "node scripts/sentry-truth-check.mjs",
     "baselinecheck": "node scripts/executable-baseline-check.mjs && node scripts/executable-baseline-sqlite-check.mjs",
     "provenancecheck": "node scripts/provenance-facts-check.mjs",
