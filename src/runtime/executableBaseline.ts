@@ -85,6 +85,7 @@ export async function buildBaselineBatch(
   decisionDelayBlocks: bigint,
   notionalsUsdMicros: readonly bigint[]
 ): Promise<ExecutableBaselineBatch> {
+  resolveAuthorizedExecutableInfra(launch.blockNumber);
   const decisionBlock = launch.blockNumber + decisionDelayBlocks;
   resolveAuthorizedExecutableInfra(decisionBlock);
   const decisionBlockHash = await source.getBlockHash(decisionBlock);
