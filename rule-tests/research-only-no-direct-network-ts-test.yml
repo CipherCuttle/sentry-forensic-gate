@@ -1,0 +1,8 @@
+id: research-only-no-direct-network-ts
+valid:
+  - "client.readContract();"
+  - "const readOnlyAdapter = 1;"
+invalid:
+  - "const fetch = 1;"
+  - "client.request({});"
+  - "import net from 'node:net';"
