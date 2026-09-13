@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { assertLedgerWithinAuthorizedEpoch } from './authority/ledgerEpochGuard.js';
 import { assertAuthorizedSentryStartBlock, CURRENT_SENTRY_AUTHORITY_EPOCH } from './authority/sentryAuthority.js';
 import { SqliteStore } from './db/sqliteStore.js';
 import { ViemForwardOutcomeSource } from './outcome/viemSource.js';
@@ -25,6 +26,7 @@ if (process.env.SHADOW_ONLY !== 'true') {
 
 const dbPath = resolve(process.env.DB_PATH ?? './data/sentry-forensic-gate.sqlite');
 mkdirSync(dirname(dbPath), { recursive: true });
+assertLedgerWithinAuthorizedEpoch(dbPath, INK_CHAIN_ID, CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock);
 
 const rpcUrl = process.env.INK_RPC_URL ?? DEFAULT_INK_RPC_URL;
 const factory = (process.env.SENTRY_LAUNCH_FACTORY as Hex | undefined) ?? DEFAULT_SENTRY_LAUNCH_FACTORY;
