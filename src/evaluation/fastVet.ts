@@ -64,27 +64,28 @@ export function evaluateFastVet(input: FastVetInput): FastVetResult {
     });
   }
 
+  const feature = input.creatorFeature;
+  if (feature && (feature.launchId !== baseline.launchId || feature.baselineId !== baseline.baselineId)) {
+    throw new Error(`FAST_VET_BINDING_MISMATCH:${baseline.launchId}`);
+  }
+
   if (baseline.status !== 'COMPLETE') {
-    return result('UNKNOWN', ['BASELINE_UNVERIFIED'], evidenceFrom(baseline, input.creatorFeature));
+    return result('UNKNOWN', ['BASELINE_UNVERIFIED'], evidenceFrom(baseline, feature));
   }
 
   const primaryLeg = baseline.legs.find((leg) => leg.notionalUsdMicros === FAST_VET_PRIMARY_NOTIONAL_USD_MICROS);
   if (!primaryLeg) {
-    return result('UNKNOWN', ['PRIMARY_LEG_MISSING'], evidenceFrom(baseline, input.creatorFeature));
+    return result('UNKNOWN', ['PRIMARY_LEG_MISSING'], evidenceFrom(baseline, feature));
   }
   if (!primaryLeg.entry.executable) {
-    return result('REJECT', ['PRIMARY_ENTRY_NOT_EXECUTABLE'], evidenceFrom(baseline, input.creatorFeature));
+    return result('REJECT', ['PRIMARY_ENTRY_NOT_EXECUTABLE'], evidenceFrom(baseline, feature));
   }
   if (!primaryLeg.reverse?.executable || primaryLeg.independentReverseRecoveryBps === null) {
-    return result('REJECT', ['PRIMARY_REVERSE_NOT_EXECUTABLE'], evidenceFrom(baseline, input.creatorFeature));
+    return result('REJECT', ['PRIMARY_REVERSE_NOT_EXECUTABLE'], evidenceFrom(baseline, feature));
   }
 
-  const feature = input.creatorFeature;
   if (!feature) {
     return result('UNKNOWN', ['CREATOR_FEATURE_MISSING'], evidenceFrom(baseline, null));
-  }
-  if (feature.launchId !== baseline.launchId || feature.baselineId !== baseline.baselineId) {
-    throw new Error(`FAST_VET_BINDING_MISMATCH:${baseline.launchId}`);
   }
 
   if (adverseCreatorCount(feature) > 0) {
