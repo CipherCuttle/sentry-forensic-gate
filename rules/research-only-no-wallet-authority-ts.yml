@@ -7,7 +7,10 @@ rule:
   any:
     - all:
         - kind: identifier
-        - regex: '^(createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|deployContract|signTransaction|signMessage|signTypedData|__researchBoundaryForbiddenTestOnly)$'
+        - regex: '^(createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|sendCalls|deployContract|signTransaction|signMessage|signTypedData|signAuthorization|__researchBoundaryForbiddenTestOnly)$'
     - all:
         - kind: property_identifier
-        - regex: '^(createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|deployContract|signTransaction|signMessage|signTypedData|__researchBoundaryForbiddenTestOnly)$'
+        - regex: '^(createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|sendCalls|deployContract|signTransaction|signMessage|signTypedData|signAuthorization|__researchBoundaryForbiddenTestOnly)$'
+    - all:
+        - kind: string
+        - regex: '^[''\"](?:createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|sendCalls|deployContract|signTransaction|signMessage|signTypedData|signAuthorization|__researchBoundaryForbiddenTestOnly)[''\"]$'
