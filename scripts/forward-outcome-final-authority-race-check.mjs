@@ -1,0 +1,123 @@
+import assert from 'node:assert/strict';
+import { buildForwardOutcome, EXECUTABLE_BASELINE_R1 } from '../dist/index.js';
+
+const ONE_MINUTE = 60_000;
+const token = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const base = '0x0200c29006150606b650577bbe7b6248f58470c1';
+const pool = '0x1111111111111111111111111111111111111111';
+
+function hash(block, suffix = '') {
+  return `0x${block.toString(16).padStart(64 - suffix.length, '0')}${suffix}`;
+}
+
+const launch = {
+  chainId: 57073,
+  blockNumber: 10n,
+  blockHash: hash(10n),
+  observedAtMs: 1,
+  launchId: 'launch-final-authority-race',
+  eventId: 'event-final-authority-race',
+  factory: '0xdc37e11b68052d1539fa23386ee58ac444bf5be1',
+  txHash: hash(100n),
+  logIndex: 1,
+  token,
+  creator: '0xcccccccccccccccccccccccccccccccccccccccc',
+  tokenId: 7n,
+  name: 'A',
+  symbol: 'A',
+  launchType: 'STANDARD',
+  sourceEvent: 'TokenDeployed'
+};
+
+const batch = {
+  baselineId: 'baseline-final-authority-race',
+  authorityDigest: 'authority-final-authority-race',
+  launchId: launch.launchId,
+  policyVersion: EXECUTABLE_BASELINE_R1,
+  decisionBlock: 12n,
+  decisionBlockHash: hash(12n),
+  observedAtMs: 2,
+  status: 'COMPLETE',
+  market: {
+    launchId: launch.launchId,
+    launchedToken: token,
+    baseToken: base,
+    token0: token,
+    token1: base,
+    fee: 10_000,
+    pool,
+    positionLiquidity: 100n,
+    activeLiquidity: 90n,
+    sqrtPriceX96Before: 123n
+  },
+  legs: [{
+    notionalUsdMicros: 1_000_000n,
+    calibration: {
+      kind: 'USDT0_NOMINAL_PEG_V0',
+      notionalUsdMicros: 1_000_000n,
+      baseToken: base,
+      baseAmount: 1_000_000n,
+      baseDecimals: 6
+    },
+    entry: {
+      quoteId: 'entry-final-authority-race',
+      launchId: launch.launchId,
+      blockNumber: 12n,
+      blockHash: hash(12n),
+      observedAtMs: 2,
+      kind: 'ENTRY',
+      mode: 'EXACT_INPUT',
+      notionalUsdMicros: 1_000_000n,
+      pool,
+      tokenIn: base,
+      tokenOut: token,
+      fee: 10_000,
+      amountIn: 1_000_000n,
+      amountOut: 2_000_000n,
+      executable: true
+    },
+    reverse: null,
+    independentReverseRecoveryBps: null
+  }],
+  reverseSemantics: 'INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL'
+};
+
+class FinalAuthorityRaceSource {
+  authorityCalls = 0;
+  reorged = false;
+
+  async getBlockPoint(blockNumber) {
+    const timestampMs = 900_000 + Number(blockNumber) * 10_000;
+    return {
+      blockNumber,
+      blockHash: this.reorged && blockNumber === 16n ? hash(blockNumber, 'ff') : hash(blockNumber),
+      timestampMs
+    };
+  }
+
+  async assertMarketAuthority() {
+    this.authorityCalls += 1;
+    // Simulate the shallow reorg landing during the *final* authority pass.
+    if (this.authorityCalls === 2) this.reorged = true;
+  }
+
+  async readMarketState() { return { activeLiquidity: 100n }; }
+  async quoteTokenToBase() { return { executable: true, amountOut: 150_000n }; }
+  async valueBaseAmountUsdMicros() { return 150_000n; }
+}
+
+const source = new FinalAuthorityRaceSource();
+const confirmedHeadPoint = {
+  blockNumber: 18n,
+  blockHash: hash(18n),
+  timestampMs: 1_080_000
+};
+
+await assert.rejects(
+  buildForwardOutcome(source, launch, batch, ONE_MINUTE, confirmedHeadPoint),
+  /OUTCOME_REORG_DURING_READ/,
+  'a fork change during the final authority read must be caught by the last canonicality check'
+);
+assert.equal(source.authorityCalls, 2);
+
+console.log('forward-outcome-final-authority-race-check: PASS');
