@@ -42,6 +42,13 @@ const a3 = launch('a3', creatorA, 12n, 0, 'a3');
 const launches = [a1, b1, a2, a3];
 const facts = await Promise.all(launches.map(buildProvenanceFact));
 
+const checkpointHash = `0x${'12'.padStart(64, '0')}`;
+const guardHash = `0x${'10'.padStart(64, '0')}`;
+const legacyLaunches = launches.map((item) => ({
+  ...item,
+  blockHash: item.blockNumber === 12n ? checkpointHash : guardHash
+}));
+
 assert.deepEqual(await buildProvenanceFact(a1), facts[0], 'fact construction must be deterministic');
 assert.equal(facts[0].evidenceDigest.length, 64);
 
@@ -111,13 +118,6 @@ async function exerciseLegacyBackfill(store) {
   await seedLegacyStore(store);
   await assertLegacyBackfill(store);
 }
-
-const checkpointHash = `0x${'12'.padStart(64, '0')}`;
-const guardHash = `0x${'10'.padStart(64, '0')}`;
-const legacyLaunches = launches.map((item) => ({
-  ...item,
-  blockHash: item.blockNumber === 12n ? checkpointHash : guardHash
-}));
 
 async function seedLegacyStore(store) {
   for (const item of legacyLaunches) await store.putLaunch(item);
