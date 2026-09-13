@@ -27,4 +27,6 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm build
       - name: Discover executable infrastructure sub-epochs
+        env:
+          INFRA_DISCOVERY_MAX_BATCH_BLOCKS: '10000'
         run: pnpm start:infra-discovery
