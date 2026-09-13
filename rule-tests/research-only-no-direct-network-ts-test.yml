@@ -6,3 +6,4 @@ invalid:
   - "const fetch = 1;"
   - "client.request({});"
   - "import net from 'node:net';"
+  - "client['__directNetworkForbiddenTestOnly']();"
