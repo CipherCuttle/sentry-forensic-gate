@@ -1,0 +1,271 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  EXECUTABLE_BASELINE_R1,
+  FORWARD_OUTCOMES_R1,
+  MemoryStore,
+  SqliteStore,
+  classifyExecutableOutcome,
+  syncForwardOutcomes
+} from '../dist/index.js';
+
+const ONE_MINUTE = 60_000;
+const FIVE_MINUTES = 300_000;
+const creator = '0xcccccccccccccccccccccccccccccccccccccccc';
+const token = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const base = '0x0200c29006150606b650577bbe7b6248f58470c1';
+const pool = '0x1111111111111111111111111111111111111111';
+
+assert.equal(classifyExecutableOutcome(2_000n), 'CATASTROPHIC_LOSS');
+assert.equal(classifyExecutableOutcome(2_001n), 'NORMAL_LOSS');
+assert.equal(classifyExecutableOutcome(9_999n), 'NORMAL_LOSS');
+assert.equal(classifyExecutableOutcome(10_000n), 'NORMAL_WIN');
+
+function hash(block) {
+  return `0x${block.toString(16).padStart(64, '0')}`;
+}
+
+function makeLaunch(id = 'launch-a') {
+  return {
+    chainId: 57073,
+    blockNumber: 10n,
+    blockHash: hash(10n),
+    observedAtMs: 1,
+    launchId: id,
+    eventId: `event-${id}`,
+    factory: '0xdc37e11b68052d1539fa23386ee58ac444bf5be1',
+    txHash: `0x${id.padEnd(64, '0').slice(0, 64)}`,
+    logIndex: 1,
+    token,
+    creator,
+    tokenId: 7n,
+    name: 'A',
+    symbol: 'A',
+    launchType: 'STANDARD',
+    sourceEvent: 'TokenDeployed'
+  };
+}
+
+function makeBatch(launchId = 'launch-a') {
+  const entry = {
+    quoteId: `entry-${launchId}`,
+    launchId,
+    blockNumber: 12n,
+    blockHash: hash(12n),
+    observedAtMs: 2,
+    kind: 'ENTRY',
+    mode: 'EXACT_INPUT',
+    notionalUsdMicros: 1_000_000n,
+    pool,
+    tokenIn: base,
+    tokenOut: token,
+    fee: 10_000,
+    amountIn: 1_000_000n,
+    amountOut: 2_000_000n,
+    executable: true
+  };
+  return {
+    baselineId: `baseline-${launchId}`,
+    authorityDigest: `authority-${launchId}`,
+    launchId,
+    policyVersion: EXECUTABLE_BASELINE_R1,
+    decisionBlock: 12n,
+    decisionBlockHash: hash(12n),
+    observedAtMs: 2,
+    status: 'COMPLETE',
+    market: {
+      launchId,
+      launchedToken: token,
+      baseToken: base,
+      token0: token,
+      token1: base,
+      fee: 10_000,
+      pool,
+      positionLiquidity: 100n,
+      activeLiquidity: 90n,
+      sqrtPriceX96Before: 123n
+    },
+    legs: [{
+      notionalUsdMicros: 1_000_000n,
+      calibration: {
+        kind: 'USDT0_NOMINAL_PEG_V0',
+        notionalUsdMicros: 1_000_000n,
+        baseToken: base,
+        baseAmount: 1_000_000n,
+        baseDecimals: 6
+      },
+      entry,
+      reverse: null,
+      independentReverseRecoveryBps: null
+    }],
+    reverseSemantics: 'INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL'
+  };
+}
+
+class FakeOutcomeSource {
+  head = 20n;
+  activeLiquidity = 100n;
+  exitExecutable = true;
+  baseAmountOut = 150_000n;
+  usdValue = 150_000n;
+  valuationError = null;
+  quoteCalls = 0;
+  authorityBlocks = [];
+  hashReads = new Map();
+  mutateBlock = null;
+
+  async getHeadBlockNumber() { return this.head; }
+  async getBlockPoint(blockNumber) {
+    const reads = (this.hashReads.get(blockNumber) ?? 0) + 1;
+    this.hashReads.set(blockNumber, reads);
+    const mutated = this.mutateBlock === blockNumber && reads >= 2;
+    return {
+      blockNumber,
+      blockHash: mutated ? `${hash(blockNumber)}ff` : hash(blockNumber),
+      timestampMs: 900_000 + Number(blockNumber) * 10_000
+    };
+  }
+  async assertMarketAuthority(_market, blockNumber) { this.authorityBlocks.push(blockNumber); }
+  async readMarketState() { return { activeLiquidity: this.activeLiquidity }; }
+  async quoteTokenToBase() {
+    this.quoteCalls += 1;
+    return this.exitExecutable
+      ? { executable: true, amountOut: this.baseAmountOut }
+      : { executable: false, amountOut: 0n, failureReason: 'EVM_REVERT' };
+  }
+  async valueBaseAmountUsdMicros() {
+    if (this.valuationError) throw new Error(this.valuationError);
+    return this.usdValue;
+  }
+}
+
+const options = {
+  confirmations: 2n,
+  maxOutcomesPerSync: 10,
+  horizons: [{ label: '1m', ms: ONE_MINUTE }, { label: '5m', ms: FIVE_MINUTES }]
+};
+
+// Canonical horizon selection: launch block timestamp is 1,000,000 ms, so 1m lands on block 16.
+const store = new MemoryStore();
+await store.putLaunch(makeLaunch());
+await store.putBaselineBatch(makeBatch());
+const source = new FakeOutcomeSource();
+const report = await syncForwardOutcomes(source, store, options);
+assert.equal(report.processed, 1);
+assert.equal(report.complete, 1);
+assert.equal(report.pendingMaturity, 1, '5m horizon should remain pending');
+const [receipt] = await store.listOutcomes();
+assert.equal(receipt.policyVersion, FORWARD_OUTCOMES_R1);
+assert.equal(receipt.observedBlock, 16n, 'must use first confirmed block at/after launch+horizon');
+assert.equal(receipt.targetTimestampMs, 1_060_000);
+assert.equal(receipt.observedTimestampMs, 1_060_000);
+assert.equal(receipt.classification, 'CATASTROPHIC_LOSS');
+assert.equal(receipt.executableReturnBps, 1_500n);
+assert.equal(receipt.sellable, true);
+assert.equal(receipt.baseAmountOut, 150_000n);
+assert.ok(receipt.evidenceDigest?.length === 64);
+assert.ok(source.authorityBlocks.every((block) => block === 16n));
+
+const restart = await syncForwardOutcomes(source, store, options);
+assert.equal(restart.processed, 0, 'persisted horizon must be restart-idempotent');
+
+// Rewind by the outcome's own observation block must delete the receipt while preserving launch/baseline.
+await store.rewindFromBlock(16n);
+assert.equal((await store.listOutcomes()).length, 0);
+assert.equal(store.launchCount, 1);
+assert.equal(store.baselineCount, 1);
+
+// Zero active liquidity is deterministic liquidity-collapse evidence; no quote call is needed.
+const liquidityStore = new MemoryStore();
+await liquidityStore.putLaunch(makeLaunch('launch-liq'));
+await liquidityStore.putBaselineBatch(makeBatch('launch-liq'));
+const liquiditySource = new FakeOutcomeSource();
+liquiditySource.activeLiquidity = 0n;
+await syncForwardOutcomes(liquiditySource, liquidityStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] });
+const [liquidityReceipt] = await liquidityStore.listOutcomes();
+assert.equal(liquidityReceipt.classification, 'LIQUIDITY_COLLAPSE');
+assert.equal(liquidityReceipt.sellable, false);
+assert.equal(liquiditySource.quoteCalls, 0);
+
+// A quote revert is an exit failure, not a provider failure.
+const exitStore = new MemoryStore();
+await exitStore.putLaunch(makeLaunch('launch-exit'));
+await exitStore.putBaselineBatch(makeBatch('launch-exit'));
+const exitSource = new FakeOutcomeSource();
+exitSource.exitExecutable = false;
+await syncForwardOutcomes(exitSource, exitStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] });
+const [exitReceipt] = await exitStore.listOutcomes();
+assert.equal(exitReceipt.classification, 'EXIT_FAILURE');
+assert.equal(exitReceipt.status, 'COMPLETE');
+assert.equal(exitReceipt.executableValueUsdMicros, 0n);
+
+// Deterministic USD-calibration gaps are durable UNVERIFIED evidence, not fabricated losses.
+const valuationStore = new MemoryStore();
+await valuationStore.putLaunch(makeLaunch('launch-value'));
+await valuationStore.putBaselineBatch(makeBatch('launch-value'));
+const valuationSource = new FakeOutcomeSource();
+valuationSource.valuationError = 'OUTCOME_USD_VALUATION_UNAVAILABLE:no-route';
+await syncForwardOutcomes(valuationSource, valuationStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] });
+const [valuationReceipt] = await valuationStore.listOutcomes();
+assert.equal(valuationReceipt.status, 'UNVERIFIED');
+assert.equal(valuationReceipt.sellable, true);
+assert.equal(valuationReceipt.classification, undefined);
+assert.equal(valuationReceipt.executableValueUsdMicros, undefined);
+
+// Provider failures must escape and leave the horizon pending for retry.
+const providerStore = new MemoryStore();
+await providerStore.putLaunch(makeLaunch('launch-provider'));
+await providerStore.putBaselineBatch(makeBatch('launch-provider'));
+const providerSource = new FakeOutcomeSource();
+providerSource.valuationError = 'RPC_TIMEOUT';
+await assert.rejects(
+  syncForwardOutcomes(providerSource, providerStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] }),
+  /RPC_TIMEOUT/
+);
+assert.equal((await providerStore.listOutcomes()).length, 0);
+assert.equal((await providerStore.listBaselineBatchesPendingOutcome(ONE_MINUTE, 10)).length, 1);
+
+// A moving horizon block invalidates the read before persistence.
+const reorgStore = new MemoryStore();
+await reorgStore.putLaunch(makeLaunch('launch-reorg'));
+await reorgStore.putBaselineBatch(makeBatch('launch-reorg'));
+const reorgSource = new FakeOutcomeSource();
+reorgSource.mutateBlock = 16n;
+await assert.rejects(
+  syncForwardOutcomes(reorgSource, reorgStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] }),
+  /OUTCOME_REORG_DURING_READ/
+);
+assert.equal((await reorgStore.listOutcomes()).length, 0);
+
+// SQLite revival must preserve all bigint evidence and pending-slot semantics.
+const dir = mkdtempSync(join(tmpdir(), 'sentry-forward-outcome-'));
+const dbPath = join(dir, 'test.sqlite');
+try {
+  const sqlite = new SqliteStore(dbPath, 57073);
+  await sqlite.putLaunch(makeLaunch('launch-sqlite'));
+  await sqlite.putBaselineBatch(makeBatch('launch-sqlite'));
+  const sqliteSource = new FakeOutcomeSource();
+  sqliteSource.usdValue = 1_250_000n;
+  await syncForwardOutcomes(sqliteSource, sqlite, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] });
+  sqlite.close();
+
+  const reopened = new SqliteStore(dbPath, 57073);
+  const [sqliteReceipt] = await reopened.listOutcomes();
+  assert.equal(sqliteReceipt.entryTokenAmount, 2_000_000n);
+  assert.equal(sqliteReceipt.baseAmountOut, 150_000n);
+  assert.equal(sqliteReceipt.executableValueUsdMicros, 1_250_000n);
+  assert.equal(sqliteReceipt.executableReturnBps, 12_500n);
+  assert.equal(sqliteReceipt.poolActiveLiquidity, 100n);
+  assert.equal(sqliteReceipt.classification, 'NORMAL_WIN');
+  assert.equal((await reopened.listBaselineBatchesPendingOutcome(ONE_MINUTE, 10)).length, 0);
+  await reopened.rewindFromBlock(16n);
+  assert.equal((await reopened.listOutcomes()).length, 0);
+  assert.equal((await reopened.listBaselineBatchesPendingOutcome(ONE_MINUTE, 10)).length, 1);
+  reopened.close();
+} finally {
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('forward-outcomes-check: PASS');

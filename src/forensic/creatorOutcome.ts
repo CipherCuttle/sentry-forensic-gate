@@ -1,5 +1,5 @@
 import type { Hex } from '../domain.js';
-import { sha256Hex } from '../evidence/canonical.js';
+import { canonicalJson, sha256Hex } from '../evidence/canonical.js';
 import type { OutcomeReceipt } from '../evidence/receipts.js';
 import type { ProvenanceFact } from '../graph/provenance.js';
 import type { BaselineDecisionPoint } from '../shadow/baselineStore.js';
@@ -161,7 +161,7 @@ function classify(outcomes: readonly OutcomeReceipt[], priorLaunchCount: number)
   let fatTailWinCount = 0;
 
   for (const outcome of outcomes) {
-    if (!outcome.sellable) unsellableOutcomeCount += 1;
+    if (outcome.classification !== undefined && !outcome.sellable) unsellableOutcomeCount += 1;
     switch (outcome.classification) {
       case 'CATASTROPHIC_LOSS': classifiedOutcomeCount += 1; catastrophicLossCount += 1; break;
       case 'EXIT_FAILURE': classifiedOutcomeCount += 1; exitFailureCount += 1; break;
@@ -207,12 +207,5 @@ function compareBaselines(a: BaselineDecisionPoint, b: BaselineDecisionPoint): n
 }
 
 function sameOutcome(a: OutcomeReceipt, b: OutcomeReceipt): boolean {
-  return a.outcomeId === b.outcomeId &&
-    a.launchId === b.launchId &&
-    a.horizonMs === b.horizonMs &&
-    a.observedBlock === b.observedBlock &&
-    a.executableValueUsdMicros === b.executableValueUsdMicros &&
-    a.sellable === b.sellable &&
-    a.liquidityUsdMicros === b.liquidityUsdMicros &&
-    a.classification === b.classification;
+  return canonicalJson(a) === canonicalJson(b);
 }

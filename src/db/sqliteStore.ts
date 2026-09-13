@@ -3,6 +3,7 @@ import type { Hex, LaunchObserved } from '../domain.js';
 import { canonicalJson } from '../evidence/canonical.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
 import type { ProvenanceEdge, ProvenanceFact } from '../graph/provenance.js';
+import type { ForwardOutcomeStore } from '../outcome/store.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
 import { flattenBaselineQuotes, type BaselineStatus, type ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
 import type { BaselineDecisionPoint, BaselineStore } from '../shadow/baselineStore.js';
@@ -10,7 +11,7 @@ import type { ShadowEntry } from '../shadow/ports.js';
 import { SCHEMA_SQL } from './schema.js';
 import type { ChainCheckpoint, Store } from './store.js';
 
-export class SqliteStore implements Store, BaselineStore {
+export class SqliteStore implements Store, BaselineStore, ForwardOutcomeStore {
   private readonly db: Database.Database;
 
   constructor(path: string, private readonly chainId: number) {
@@ -199,6 +200,19 @@ export class SqliteStore implements Store, BaselineStore {
     }));
   }
 
+  async listBaselineBatchesPendingOutcome(horizonMs: number, limit: number): Promise<ExecutableBaselineBatch[]> {
+    const rows = this.db.prepare(`
+      SELECT b.payload_json
+      FROM baseline_batches b
+      JOIN launches l ON l.launch_id = b.launch_id
+      LEFT JOIN outcomes o ON o.launch_id = b.launch_id AND o.horizon_ms = ?
+      WHERE l.chain_id = ? AND b.status = 'COMPLETE' AND o.outcome_id IS NULL
+      ORDER BY CAST(b.decision_block AS INTEGER), b.launch_id
+      LIMIT ?
+    `).all(horizonMs, this.chainId, limit) as Array<{ payload_json: string }>;
+    return rows.map((row) => reviveBaselineBatch(row.payload_json));
+  }
+
   async putBaselineBatch(batch: ExecutableBaselineBatch): Promise<'INSERTED' | 'DUPLICATE'> {
     const tx = this.db.transaction((): 'INSERTED' | 'DUPLICATE' => {
       const result = this.db.prepare(`
@@ -313,16 +327,54 @@ function reviveProvenanceEdge(json: string): ProvenanceEdge {
 }
 
 function reviveOutcome(json: string): OutcomeReceipt {
-  const value = JSON.parse(json) as Omit<OutcomeReceipt, 'observedBlock' | 'executableValueUsdMicros' | 'liquidityUsdMicros'> & {
-    observedBlock: string;
-    executableValueUsdMicros?: string;
-    liquidityUsdMicros?: string;
-  };
-  const { observedBlock, executableValueUsdMicros, liquidityUsdMicros, ...rest } = value;
-  return {
-    ...rest,
-    observedBlock: BigInt(observedBlock),
-    ...(executableValueUsdMicros === undefined ? {} : { executableValueUsdMicros: BigInt(executableValueUsdMicros) }),
-    ...(liquidityUsdMicros === undefined ? {} : { liquidityUsdMicros: BigInt(liquidityUsdMicros) })
-  };
+  const value = JSON.parse(json) as Record<string, unknown>;
+  return reviveBigInts(value, [
+    'observedBlock',
+    'executableValueUsdMicros',
+    'liquidityUsdMicros',
+    'entryNotionalUsdMicros',
+    'entryTokenAmount',
+    'baseAmountOut',
+    'executableReturnBps',
+    'poolActiveLiquidity'
+  ]) as unknown as OutcomeReceipt;
+}
+
+function reviveBaselineBatch(json: string): ExecutableBaselineBatch {
+  const raw = JSON.parse(json) as Record<string, unknown>;
+  const value = reviveDeepBigInts(raw, new Set([
+    'decisionBlock',
+    'positionLiquidity',
+    'activeLiquidity',
+    'sqrtPriceX96Before',
+    'notionalUsdMicros',
+    'baseAmount',
+    'blockNumber',
+    'amountIn',
+    'amountOut',
+    'sqrtPriceX96After',
+    'gasEstimate',
+    'independentReverseRecoveryBps'
+  ]));
+  return value as unknown as ExecutableBaselineBatch;
+}
+
+function reviveBigInts(value: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const out = { ...value };
+  for (const key of keys) {
+    if (typeof out[key] === 'string' && /^-?\d+$/.test(out[key] as string)) out[key] = BigInt(out[key] as string);
+  }
+  return out;
+}
+
+function reviveDeepBigInts(value: unknown, bigintKeys: ReadonlySet<string>, key?: string): unknown {
+  if (Array.isArray(value)) return value.map((item) => reviveDeepBigInts(item, bigintKeys));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([childKey, child]) => [
+      childKey,
+      reviveDeepBigInts(child, bigintKeys, childKey)
+    ]));
+  }
+  if (key && bigintKeys.has(key) && typeof value === 'string' && /^-?\d+$/.test(value)) return BigInt(value);
+  return value;
 }

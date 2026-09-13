@@ -2,13 +2,14 @@ import type { LaunchObserved } from '../domain.js';
 import { canonicalJson } from '../evidence/canonical.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
 import type { ProvenanceEdge, ProvenanceFact } from '../graph/provenance.js';
+import type { ForwardOutcomeStore } from '../outcome/store.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
 import type { ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
 import type { BaselineDecisionPoint, BaselineStore } from '../shadow/baselineStore.js';
 import type { ShadowEntry } from '../shadow/ports.js';
 import type { ChainCheckpoint, Store } from './store.js';
 
-export class MemoryStore implements Store, BaselineStore {
+export class MemoryStore implements Store, BaselineStore, ForwardOutcomeStore {
   private launches = new Map<string, LaunchObserved>();
   private provenanceFacts = new Map<string, ProvenanceFact>();
   private provenanceEdges = new Map<string, ProvenanceEdge>();
@@ -130,6 +131,18 @@ export class MemoryStore implements Store, BaselineStore {
       .sort(compareBaselineDecisionPoints);
   }
 
+  async listBaselineBatchesPendingOutcome(horizonMs: number, limit: number): Promise<ExecutableBaselineBatch[]> {
+    const covered = new Set(
+      [...this.outcomes.values()]
+        .filter((outcome) => outcome.horizonMs === horizonMs)
+        .map((outcome) => outcome.launchId)
+    );
+    return [...this.baselines.values()]
+      .filter((batch) => batch.status === 'COMPLETE' && !covered.has(batch.launchId))
+      .sort(compareBaselineBatches)
+      .slice(0, limit);
+  }
+
   async putBaselineBatch(batch: ExecutableBaselineBatch): Promise<'INSERTED' | 'DUPLICATE'> {
     if (!this.launches.has(batch.launchId)) throw new Error(`BASELINE_LAUNCH_MISSING:${batch.launchId}`);
     const existing = this.baselines.get(batch.launchId);
@@ -228,6 +241,11 @@ function compareOutcomes(a: OutcomeReceipt, b: OutcomeReceipt): number {
 }
 
 function compareBaselineDecisionPoints(a: BaselineDecisionPoint, b: BaselineDecisionPoint): number {
+  if (a.decisionBlock !== b.decisionBlock) return a.decisionBlock < b.decisionBlock ? -1 : 1;
+  return a.launchId.localeCompare(b.launchId);
+}
+
+function compareBaselineBatches(a: ExecutableBaselineBatch, b: ExecutableBaselineBatch): number {
   if (a.decisionBlock !== b.decisionBlock) return a.decisionBlock < b.decisionBlock ? -1 : 1;
   return a.launchId.localeCompare(b.launchId);
 }
