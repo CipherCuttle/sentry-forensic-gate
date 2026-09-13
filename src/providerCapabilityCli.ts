@@ -1,7 +1,17 @@
+import { createPublicClient, defineChain, http, type Address } from 'viem';
 import { CURRENT_SENTRY_AUTHORITY_EPOCH } from './authority/sentryAuthority.js';
 import { DEFAULT_INK_RPC_URL, DEFAULT_SENTRY_LAUNCH_FACTORY, INK_CHAIN_ID } from './sentry/contracts.js';
 import { ViemSentryLaunchSource } from './sentry/viemSource.js';
 import { ViemExecutableBaselineSource } from './tsunami/viemBaselineSource.js';
+import { sentryBaselineReadAbi } from './tsunami/contracts.js';
+
+const ink = defineChain({
+  id: INK_CHAIN_ID,
+  name: 'Ink',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: [DEFAULT_INK_RPC_URL] } },
+  blockExplorers: { default: { name: 'Ink Explorer', url: 'https://explorer.inkonchain.com' } }
+});
 
 const rpcUrl = process.env.INK_RPC_URL ?? DEFAULT_INK_RPC_URL;
 const probeBlock = process.env.PROVIDER_PROBE_BLOCK
@@ -16,16 +26,24 @@ if (probeBlock < CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock) {
 
 const truth = new ViemSentryLaunchSource({ rpcUrl });
 const baseline = new ViemExecutableBaselineSource({ rpcUrl });
+const client = createPublicClient({ chain: ink, transport: http(rpcUrl) });
 const head = await truth.getHeadBlockNumber();
 if (head < probeBlock) throw new Error(`PROVIDER_PROBE_BLOCK_AHEAD_OF_HEAD:block=${probeBlock}:head=${head}`);
 
 const confirmedBlock = head > 2n ? head - 2n : head;
 
-// These calls intentionally exercise the exact reviewed adapters used by the runtime:
+// These calls intentionally exercise the exact reviewed viem surfaces used by the runtime:
 // historical block/hash access, ERC-1967 storage, proxy/implementation bytecode,
-// Sentry/Tsunami authority reads, and historical Sentry log retrieval.
+// Sentry/Tsunami authority reads, supported-base discovery, and historical Sentry logs.
 await truth.assertAuthority(probeBlock);
 await baseline.assertAuthority(probeBlock);
+const supportedBaseTokens = await client.readContract({
+  address: DEFAULT_SENTRY_LAUNCH_FACTORY as Address,
+  abi: sentryBaselineReadAbi,
+  functionName: 'getSupportedBaseTokens',
+  blockNumber: probeBlock
+}) as readonly Address[];
+if (!Array.isArray(supportedBaseTokens)) throw new Error('PROVIDER_SUPPORTED_BASE_TOKENS_MALFORMED');
 const historicalBlockHash = await truth.getBlockHash(probeBlock);
 const historicalLaunches = await truth.catchUp(probeBlock, probeBlock);
 
@@ -49,11 +67,13 @@ console.log(JSON.stringify({
     blockNumber: probeBlock.toString(),
     blockHash: historicalBlockHash,
     launchEventsObserved: historicalLaunches.length,
+    supportedBaseTokenCount: supportedBaseTokens.length,
     capabilities: {
       blockHeader: 'PASS',
       implementationStorage: 'PASS',
       proxyAndImplementationBytecode: 'PASS',
       sentryAndTsunamiAuthorityReads: 'PASS',
+      supportedBaseTokensRead: 'PASS',
       sentryLogs: 'PASS'
     }
   },
