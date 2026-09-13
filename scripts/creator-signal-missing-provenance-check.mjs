@@ -10,19 +10,7 @@ function launch(id, blockNumber) {
     chainId: 57073,
     blockNumber,
     blockHash: hash(blockNumber),
-    observedAtMs: Number(blockNumber) * 1_000_000,
-    launchId: id,
-    eventId: `event-${id}`,
-    factory: '0xdc37e11b68052d1539fa23386ee58ac444bf5be1',
-    txHash: hash(blockNumber + 1_000n),
-    logIndex: 0,
-    token: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    creator: '0xcccccccccccccccccccccccccccccccccccccccc',
-    tokenId: blockNumber,
-    name: id,
-    symbol: 'T',
-    launchType: 'STANDARD',
-    sourceEvent: 'TokenDeployed'
+    launchId: id
   };
 }
 
@@ -39,8 +27,7 @@ class Source {
 
 function storeWithMissing(missing) {
   return {
-    async listLaunchesMissingProvenance() { return missing; },
-    async listProvenanceFacts() { return []; },
+    async readLaunchProvenanceSnapshot() { return { missingProvenance: missing, facts: [] }; },
     async listBaselineDecisionPoints() { return []; },
     async listOutcomes() { return []; }
   };
