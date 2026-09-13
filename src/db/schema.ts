@@ -132,8 +132,9 @@ CREATE TABLE IF NOT EXISTS outcomes (
   launch_id TEXT NOT NULL REFERENCES launches(launch_id) ON DELETE CASCADE,
   horizon_ms INTEGER NOT NULL,
   observed_block TEXT NOT NULL,
+  policy_version TEXT,
   payload_json TEXT NOT NULL,
-  UNIQUE(launch_id, horizon_ms)
+  UNIQUE(launch_id, horizon_ms, policy_version)
 );
 
 CREATE TABLE IF NOT EXISTS chain_checkpoints (

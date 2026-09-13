@@ -6,6 +6,7 @@ import {
   CREATOR_OUTCOME_HORIZON_MS,
   CREATOR_OUTCOME_JOIN_V0,
   EXECUTABLE_BASELINE_R1,
+  FORWARD_OUTCOMES_R1,
   MemoryStore,
   SqliteStore,
   buildProvenanceFact,
@@ -64,7 +65,7 @@ function point(batch) {
   };
 }
 
-function outcome(outcomeId, launchId, horizonMs, observedBlock, classification, sellable = true) {
+function outcome(outcomeId, launchId, horizonMs, observedBlock, classification, sellable = true, policyVersion) {
   return {
     outcomeId,
     launchId,
@@ -73,7 +74,8 @@ function outcome(outcomeId, launchId, horizonMs, observedBlock, classification, 
     executableValueUsdMicros: 1_000_000n,
     sellable,
     liquidityUsdMicros: 5_000_000n,
-    ...(classification ? { classification } : {})
+    ...(classification ? { classification } : {}),
+    ...(policyVersion ? { policyVersion } : {})
   };
 }
 
@@ -92,7 +94,8 @@ const baselinePoints = baselineBatches.map(point);
 const outcomes = [
   outcome('a1-5m', 'a1', 300_000, 11n, 'NORMAL_WIN'),
   outcome('b1-24h', 'b1', CREATOR_OUTCOME_HORIZON_MS, 18n, 'NORMAL_WIN'),
-  outcome('a1-24h', 'a1', CREATOR_OUTCOME_HORIZON_MS, 20n, 'CATASTROPHIC_LOSS', false),
+  outcome('a1-24h', 'a1', CREATOR_OUTCOME_HORIZON_MS, 20n, 'NORMAL_WIN', true),
+  outcome('a1-24h-r1', 'a1', CREATOR_OUTCOME_HORIZON_MS, 20n, 'CATASTROPHIC_LOSS', false, FORWARD_OUTCOMES_R1),
   outcome('a2-24h', 'a2', CREATOR_OUTCOME_HORIZON_MS, 35n, 'FAT_TAIL_WIN')
 ];
 
@@ -121,10 +124,10 @@ assert.equal(target.outcomeReceiptCount, 1, 'wrong horizon, other creator and fu
 assert.equal(target.classifiedOutcomeCount, 1);
 assert.equal(target.unresolvedOutcomeCount, 1);
 assert.equal(target.coverage, 'PARTIAL');
-assert.equal(target.catastrophicLossCount, 1);
+assert.equal(target.catastrophicLossCount, 1, 'canonical R1 receipt must supersede legacy receipt for the same slot');
 assert.equal(target.unsellableOutcomeCount, 1);
 assert.equal(target.fatTailWinCount, 0, 'a2 24h result occurs after the target decision block');
-assert.deepEqual(target.sourceOutcomeIds, ['a1-24h']);
+assert.deepEqual(target.sourceOutcomeIds, ['a1-24h-r1']);
 assert.ok(target.sourceFactIds.includes(facts.find((fact) => fact.launchId === 'a3').factId));
 
 await exerciseStore(new MemoryStore());
@@ -158,13 +161,14 @@ async function exerciseStore(store) {
 
   assert.equal(await store.putOutcome(outcomes[2]), 'DUPLICATE');
   await assert.rejects(
-    store.putOutcome({ ...outcomes[2], classification: 'NORMAL_WIN' }),
+    store.putOutcome({ ...outcomes[2], classification: 'CATASTROPHIC_LOSS' }),
     /OUTCOME_IDENTITY_CONFLICT/
   );
   await assert.rejects(
     store.putOutcome({ ...outcomes[2], outcomeId: 'conflicting-slot' }),
     /OUTCOME_IDENTITY_CONFLICT/
   );
+  assert.equal(await store.putOutcome(outcomes[3]), 'DUPLICATE', 'R1 replay should be idempotent in its own policy slot');
 
   const receipts = await projectCreatorOutcomeFeatures(
     await store.listBaselineDecisionPoints(),
