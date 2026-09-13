@@ -22,6 +22,7 @@ export interface Store {
   putDecision(receipt: DecisionReceipt): Promise<'INSERTED' | 'DUPLICATE'>;
   putShadowEntry(entry: ShadowEntry): Promise<'INSERTED' | 'DUPLICATE'>;
   putOutcome(receipt: OutcomeReceipt): Promise<'INSERTED' | 'DUPLICATE'>;
+  listOutcomes(): Promise<OutcomeReceipt[]>;
   getCheckpoint(): Promise<ChainCheckpoint | null>;
   commitCheckpoint(checkpoint: ChainCheckpoint): Promise<void>;
   rewindFromBlock(fromBlock: bigint): Promise<void>;

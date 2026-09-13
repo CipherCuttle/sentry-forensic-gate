@@ -4,8 +4,8 @@ import { canonicalJson } from '../evidence/canonical.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
 import type { ProvenanceEdge, ProvenanceFact } from '../graph/provenance.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
-import { flattenBaselineQuotes, type ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
-import type { BaselineStore } from '../shadow/baselineStore.js';
+import { flattenBaselineQuotes, type BaselineStatus, type ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
+import type { BaselineDecisionPoint, BaselineStore } from '../shadow/baselineStore.js';
 import type { ShadowEntry } from '../shadow/ports.js';
 import { SCHEMA_SQL } from './schema.js';
 import type { ChainCheckpoint, Store } from './store.js';
@@ -145,9 +145,26 @@ export class SqliteStore implements Store, BaselineStore {
   }
 
   async putOutcome(v: OutcomeReceipt): Promise<'INSERTED' | 'DUPLICATE'> {
+    const payload = canonicalJson(v);
     const result = this.db.prepare(`INSERT OR IGNORE INTO outcomes (outcome_id, launch_id, horizon_ms, observed_block, payload_json) VALUES (?, ?, ?, ?, ?)`)
-      .run(v.outcomeId, v.launchId, v.horizonMs, v.observedBlock.toString(), canonicalJson(v));
-    return result.changes === 1 ? 'INSERTED' : 'DUPLICATE';
+      .run(v.outcomeId, v.launchId, v.horizonMs, v.observedBlock.toString(), payload);
+    if (result.changes === 1) return 'INSERTED';
+    const existing = this.db.prepare(`
+      SELECT outcome_id, payload_json FROM outcomes
+      WHERE outcome_id = ? OR (launch_id = ? AND horizon_ms = ?) LIMIT 1
+    `).get(v.outcomeId, v.launchId, v.horizonMs) as { outcome_id: string; payload_json: string } | undefined;
+    if (!existing || existing.outcome_id !== v.outcomeId || existing.payload_json !== payload) {
+      throw new Error(`OUTCOME_IDENTITY_CONFLICT:${v.launchId}:${v.horizonMs}`);
+    }
+    return 'DUPLICATE';
+  }
+
+  async listOutcomes(): Promise<OutcomeReceipt[]> {
+    const rows = this.db.prepare(`
+      SELECT payload_json FROM outcomes
+      ORDER BY CAST(observed_block AS INTEGER), horizon_ms, outcome_id
+    `).all() as Array<{ payload_json: string }>;
+    return rows.map((row) => reviveOutcome(row.payload_json));
   }
 
   async listLaunchesPendingBaseline(maxLaunchBlock: bigint, limit: number): Promise<LaunchObserved[]> {
@@ -157,6 +174,29 @@ export class SqliteStore implements Store, BaselineStore {
       ORDER BY CAST(l.block_number AS INTEGER), l.log_index LIMIT ?
     `).all(this.chainId, maxLaunchBlock.toString(), limit) as LaunchRow[];
     return rows.map(fromLaunchRow);
+  }
+
+  async listBaselineDecisionPoints(): Promise<BaselineDecisionPoint[]> {
+    const rows = this.db.prepare(`
+      SELECT baseline_id, authority_digest, launch_id, decision_block, decision_block_hash, status
+      FROM baseline_batches
+      ORDER BY CAST(decision_block AS INTEGER), launch_id
+    `).all() as Array<{
+      baseline_id: string;
+      authority_digest: string;
+      launch_id: string;
+      decision_block: string;
+      decision_block_hash: Hex;
+      status: BaselineStatus;
+    }>;
+    return rows.map((row) => ({
+      baselineId: row.baseline_id,
+      authorityDigest: row.authority_digest,
+      launchId: row.launch_id,
+      decisionBlock: BigInt(row.decision_block),
+      decisionBlockHash: row.decision_block_hash,
+      status: row.status
+    }));
   }
 
   async putBaselineBatch(batch: ExecutableBaselineBatch): Promise<'INSERTED' | 'DUPLICATE'> {
@@ -270,4 +310,18 @@ function reviveProvenanceFact(json: string): ProvenanceFact {
 function reviveProvenanceEdge(json: string): ProvenanceEdge {
   const value = JSON.parse(json) as Omit<ProvenanceEdge, 'observedBlock'> & { observedBlock: string };
   return { ...value, observedBlock: BigInt(value.observedBlock) };
+}
+
+function reviveOutcome(json: string): OutcomeReceipt {
+  const value = JSON.parse(json) as Omit<OutcomeReceipt, 'observedBlock' | 'executableValueUsdMicros' | 'liquidityUsdMicros'> & {
+    observedBlock: string;
+    executableValueUsdMicros?: string;
+    liquidityUsdMicros?: string;
+  };
+  return {
+    ...value,
+    observedBlock: BigInt(value.observedBlock),
+    executableValueUsdMicros: value.executableValueUsdMicros === undefined ? undefined : BigInt(value.executableValueUsdMicros),
+    liquidityUsdMicros: value.liquidityUsdMicros === undefined ? undefined : BigInt(value.liquidityUsdMicros)
+  };
 }
