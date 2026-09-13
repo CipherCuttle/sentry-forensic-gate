@@ -2,13 +2,24 @@
 
 Point-in-time adverse-selection research for newly launched Sentry tokens on Ink.
 
-**Current authority:** shadow/research only. No private keys, signing, approvals, swap construction, or transaction broadcast.
+**Current authority:** shadow/research only. No private keys, signing, approvals, swap construction, transaction broadcast, or execution authority.
 
 ## Current slices
 
-- **Scaffold / receipt spine:** immutable evidence contracts, hard-gate states, policy versioning.
-- **SENTRY_TRUTH_R1:** confirmed-block Sentry deployment capture with deterministic identity, SQLite exactly-once persistence, bounded catch-up, restart checkpointing, and reorg rewind.
-- Quote/executable baseline and forensic scoring remain intentionally unimplemented.
+- **Receipt spine:** immutable/versioned evidence contracts and fail-closed gate states.
+- **SENTRY_TRUTH_R1:** confirmed-block Sentry deployment capture with deterministic identity, SQLite exactly-once persistence, guarded reorg recovery, and pinned proxy implementation authority.
+- **EXECUTABLE_BASELINE_R1:** deterministic point-in-time Tsunami market resolution plus read-only multi-notional entry/reverse diagnostics and atomic baseline receipts.
+- Creator/provenance and higher forensic scoring remain intentionally unimplemented.
+
+## Install and test
+
+```bash
+corepack enable
+pnpm install
+pnpm test
+```
+
+`pnpm test` runs the scaffold self-check, Sentry truth/reorg checks, executable-baseline behavioral checks, and SQLite baseline persistence/rewind checks.
 
 ## Run Sentry truth
 
@@ -16,12 +27,22 @@ Point-in-time adverse-selection research for newly launched Sentry tokens on Ink
 cp .env.example .env
 # Set SENTRY_START_BLOCK deliberately.
 set -a && . ./.env && set +a
-pnpm install
-pnpm test
+pnpm build
 pnpm start:truth -- --once
 pnpm start:truth
 ```
 
-The watcher defaults to Ink chain ID `57073`, `https://rpc-gel.inkonchain.com`, and the canonical Sentry Launch Factory `0xDc37e11B68052d1539fa23386eE58Ac444bf5BE1`.
+## Run executable baseline
 
-See [`docs/SENTRY_TRUTH_R1.md`](docs/SENTRY_TRUTH_R1.md) for the authority snapshot and failure semantics.
+The baseline reads canonical launches already stored in the shared SQLite database. It evaluates each launch at a fixed point in time (`launch block + BASELINE_DECISION_DELAY_BLOCKS`, default `2`), waits `BASELINE_CONFIRMATIONS` (default `2`) before persistence, and records `$0.25 / $0.50 / $1 / $2 / $5` read-only quote evidence.
+
+```bash
+set -a && . ./.env && set +a
+pnpm build
+pnpm start:baseline -- --once
+pnpm start:baseline
+```
+
+Important: the immediate reverse quote is an **independent quote against the same pre-trade historical state**. It is a sellability/recovery diagnostic, not sequential paper PnL. The receipt explicitly records `INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL` so later analysis cannot silently reinterpret it.
+
+See [`docs/SENTRY_TRUTH_R1.md`](docs/SENTRY_TRUTH_R1.md) and [`docs/EXECUTABLE_BASELINE_R1.md`](docs/EXECUTABLE_BASELINE_R1.md).
