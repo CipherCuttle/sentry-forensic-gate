@@ -53,11 +53,13 @@ class FakeSource {
   reverseInputs = [];
   entryExecutable = true;
   failMarket = false;
+  failProvider = false;
   async getHeadBlockNumber() { return this.head; }
   async getBlockHash(block) { return this.hashes.get(block) ?? `0x${block}`; }
   async assertAuthority(block) { this.authorityBlocks.push(block); }
   async resolveMarket(_launch, decisionBlock) {
     assert.equal(decisionBlock, 12n, 'market reads must pin launch+delay, not latest');
+    if (this.failProvider) throw new Error('RPC_TIMEOUT');
     if (this.failMarket) throw new Error('UNSUPPORTED_SENTRY_BASE:0xbad');
     return market;
   }
@@ -115,6 +117,15 @@ unverifiedSource.failMarket = true;
 const uv = await syncExecutableBaseline(unverifiedSource, unverifiedStore, options);
 assert.equal(uv.unverified, 1);
 assert.equal((await unverifiedStore.listLaunchesPendingBaseline(10n, 10)).length, 0);
+
+// Provider/transport failures are not market evidence: halt and leave the launch pending for retry.
+const providerStore = new MemoryStore();
+await providerStore.putLaunch({ ...launch, launchId:'launch-p', eventId:'event-p', txHash:'0xp', token:'0xab0' });
+const providerSource = new FakeSource();
+providerSource.failProvider = true;
+await assert.rejects(syncExecutableBaseline(providerSource, providerStore, options), /RPC_TIMEOUT/);
+assert.equal(providerStore.baselineCount, 0);
+assert.equal((await providerStore.listLaunchesPendingBaseline(10n, 10)).length, 1);
 
 // Authority drift is global: halt and do not convert it into a per-launch UNVERIFIED record.
 const driftStore = new MemoryStore();
