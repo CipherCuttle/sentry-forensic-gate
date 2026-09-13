@@ -7,7 +7,8 @@ import {
   PROVENANCE_DERIVATION_VERSION,
   SqliteStore,
   buildProvenanceFact,
-  projectProvenanceEdges
+  projectProvenanceEdges,
+  syncSentryTruth
 } from '../dist/index.js';
 
 const creatorA = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -60,9 +61,11 @@ assert.ok(edges.every((edge) => !Object.hasOwn(edge, 'confidence')));
 assert.equal(edges.some((edge) => edge.kind === 'PREVIOUS_LAUNCH' && edge.from === 'launch:57073:a1'), false);
 
 await exerciseStore(new MemoryStore());
+await exerciseLegacyBackfill(new MemoryStore());
 
 const dir = mkdtempSync(join(tmpdir(), 'sentry-provenance-'));
 const dbPath = join(dir, 'test.sqlite');
+const legacyDbPath = join(dir, 'legacy.sqlite');
 try {
   const store = new SqliteStore(dbPath, 57073);
   await exerciseStore(store);
@@ -70,6 +73,13 @@ try {
   const reopened = new SqliteStore(dbPath, 57073);
   assert.equal((await reopened.listProvenanceFacts()).length, 3, 'rewound SQLite facts must persist');
   reopened.close();
+
+  const legacySeed = new SqliteStore(legacyDbPath, 57073);
+  await seedLegacyStore(legacySeed);
+  legacySeed.close();
+  const legacyReopened = new SqliteStore(legacyDbPath, 57073);
+  await assertLegacyBackfill(legacyReopened);
+  legacyReopened.close();
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
@@ -95,6 +105,55 @@ async function exerciseStore(store) {
   const afterEdges = await store.listProvenanceEdges();
   assert.equal(afterEdges.some((edge) => edge.from === 'launch:57073:a3'), false);
   assert.equal(afterEdges.filter((edge) => edge.kind === 'PREVIOUS_LAUNCH').length, 1);
+}
+
+async function exerciseLegacyBackfill(store) {
+  await seedLegacyStore(store);
+  await assertLegacyBackfill(store);
+}
+
+const checkpointHash = `0x${'12'.padStart(64, '0')}`;
+const guardHash = `0x${'10'.padStart(64, '0')}`;
+const legacyLaunches = launches.map((item) => ({
+  ...item,
+  blockHash: item.blockNumber === 12n ? checkpointHash : guardHash
+}));
+
+async function seedLegacyStore(store) {
+  for (const item of legacyLaunches) await store.putLaunch(item);
+  await store.commitCheckpoint({
+    blockNumber: 12n,
+    blockHash: checkpointHash,
+    guardBlockNumber: 10n,
+    guardBlockHash: guardHash
+  });
+  assert.equal((await store.listProvenanceFacts()).length, 0, 'legacy seed must begin without provenance');
+}
+
+async function assertLegacyBackfill(store) {
+  const source = {
+    getHeadBlockNumber: async () => 14n,
+    assertAuthority: async () => {},
+    getBlockHash: async (blockNumber) => {
+      if (blockNumber === 12n) return checkpointHash;
+      if (blockNumber === 10n) return guardHash;
+      return `0x${blockNumber.toString(16).padStart(64, '0')}`;
+    },
+    catchUp: async () => { throw new Error('LEGACY_BACKFILL_MUST_NOT_CATCH_UP'); }
+  };
+  const report = await syncSentryTruth(source, store, {
+    startBlock: 1n,
+    confirmations: 2n,
+    maxBatchBlocks: 100n,
+    reorgLookbackBlocks: 2n,
+    pollIntervalMs: 100
+  });
+  assert.equal(report.startBlock, null, 'current checkpoint should still take the no-new-blocks path');
+  assert.equal(report.batches, 0);
+  assert.deepEqual((await store.listProvenanceFacts()).map((fact) => fact.launchId), ['a1', 'b1', 'a2', 'a3']);
+  const backfilledEdges = await store.listProvenanceEdges();
+  assert.equal(backfilledEdges.length, 6);
+  assert.ok(backfilledEdges.some((edge) => edge.kind === 'PREVIOUS_LAUNCH' && edge.from === 'launch:57073:a3' && edge.to === 'launch:57073:a2'));
 }
 
 console.log('provenance-facts-check: PASS');
