@@ -82,10 +82,10 @@ class FakeSource {
 
 const options = { decisionDelayBlocks: 2n, confirmations: 2n, maxLaunchesPerSync: 10, notionalsUsdMicros: [1_000_000n] };
 
-// The executable authority begins at decision block 52269353. Earlier decisions must fail closed.
-const preEpochLaunch = { ...launch, blockNumber: 52_269_350n, launchId:'launch-pre-epoch', eventId:'event-pre-epoch', txHash:'0xpre', token:'0xafe' };
+// Launches before the executable epoch must fail closed even if their later decision block would be authorized.
+const updateBlockLaunch = { ...launch, blockNumber: 52_269_352n, launchId:'launch-update-block', eventId:'event-update-block', txHash:'0xupdate', token:'0xafe' };
 await assert.rejects(
-  buildBaselineBatch(new FakeSource(), preEpochLaunch, 2n, [1_000_000n]),
+  buildBaselineBatch(new FakeSource(), updateBlockLaunch, 2n, [1_000_000n]),
   /EXECUTABLE_INFRA_EPOCH_UNAUTHORIZED:block=52269352:earliestAuthorized=52269353/
 );
 
