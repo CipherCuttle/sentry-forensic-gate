@@ -21,9 +21,20 @@ The independent reverse quote remains the existing same-state sellability diagno
 
 ## Compressed shadow semantics
 
-`FAST_VET_SHADOW_R0` compares all supplied resolved 24h R1 outcomes with the subset whose R0 decision is `PASS`. It reports trade retention, adverse exposure removed, ordinary-win retention, and positive executable upside capture.
+`FAST_VET_SHADOW_R0` uses only canonical `FORWARD_OUTCOMES_R1` receipts at the frozen 24h horizon. The control cohort requires a complete executable baseline; candidate exposure is the subset whose R0 decision is `PASS`. It reports trade retention, adverse exposure removed, ordinary-win retention, and positive executable upside capture.
 
 There is deliberately no sample-adequacy claim, probability, p-value, confidence interval, ML model, tuned threshold, or promotion decision. Receipt status is always `SMOKE_ONLY`; strategy label remains `EDGE_UNPROVEN`.
+
+## Run against an existing ledger
+
+The runner is read-only and does not perform RPC or other network reads:
+
+```bash
+pnpm build
+DB_PATH=./data/sentry-forensic-gate.sqlite pnpm start:fast-vet-shadow
+```
+
+It rebuilds creator features from the canonical provenance facts and 24h R1 outcomes already stored in the ledger, joins them to stored executable baseline batches, and emits one JSON smoke receipt. The output explicitly records `READ_ONLY_LOCAL_LEDGER_SMOKE_NO_CHAIN_REFETCH`; it is for fast directional screening, not final evidence promotion.
 
 ## Deferred
 
