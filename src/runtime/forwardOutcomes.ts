@@ -181,10 +181,11 @@ export async function buildForwardOutcome(
     }
   }
 
-  // Authority must still be pinned at the evidence block, but every authority
-  // read is by block number and can itself straddle a shallow reorg. Therefore
-  // the canonical hash/boundary revalidation below is deliberately the final
-  // RPC operation before the immutable receipt is assembled and returned.
+  // Authority reads are still required, but they are by block number and can
+  // themselves straddle a shallow reorg. The canonicality anchor therefore
+  // runs after the final authority pass, with the selected horizon block read
+  // strictly last so any suffix reorg affecting earlier validated evidence
+  // also changes that final selected-block hash.
   await source.assertMarketAuthority(batch.market, observed.blockNumber);
   await assertEvidenceStable(source, launch, batch, observed, predecessor, targetTimestampMs);
 
@@ -276,25 +277,30 @@ async function assertEvidenceStable(
   predecessor: OutcomeBlockPoint | null,
   targetTimestampMs: number
 ): Promise<void> {
-  const [launchAgain, decisionAgain, observedAgain, predecessorAgain] = await Promise.all([
+  const [launchAgain, decisionAgain] = await Promise.all([
     source.getBlockPoint(launch.blockNumber),
-    source.getBlockPoint(batch.decisionBlock),
-    source.getBlockPoint(observed.blockNumber),
-    predecessor ? source.getBlockPoint(predecessor.blockNumber) : Promise.resolve(null)
+    source.getBlockPoint(batch.decisionBlock)
   ]);
   assertHash('OUTCOME_LAUNCH_REORG', launch.blockNumber, launch.blockHash, launchAgain.blockHash);
   assertHash('OUTCOME_BASELINE_REORG', batch.decisionBlock, batch.decisionBlockHash, decisionAgain.blockHash);
-  assertHash('OUTCOME_REORG_DURING_READ', observed.blockNumber, observed.blockHash, observedAgain.blockHash);
-  if (observedAgain.timestampMs < targetTimestampMs) {
-    throw new Error(`OUTCOME_HORIZON_BEFORE_TARGET:block=${observed.blockNumber}`);
-  }
-  if (predecessor && predecessorAgain) {
+
+  if (predecessor) {
+    const predecessorAgain = await source.getBlockPoint(predecessor.blockNumber);
     assertHash('OUTCOME_REORG_DURING_BOUNDARY_READ', predecessor.blockNumber, predecessor.blockHash, predecessorAgain.blockHash);
     if (predecessorAgain.timestampMs >= targetTimestampMs) {
       throw new Error(
         `OUTCOME_HORIZON_NONMINIMAL:block=${observed.blockNumber}:predecessor=${predecessor.blockNumber}`
       );
     }
+  }
+
+  // This selected-block read is intentionally the final RPC operation before
+  // receipt assembly. Any reorg affecting launch/decision/predecessor evidence
+  // necessarily changes this suffix block as well and therefore fails closed.
+  const observedAgain = await source.getBlockPoint(observed.blockNumber);
+  assertHash('OUTCOME_REORG_DURING_READ', observed.blockNumber, observed.blockHash, observedAgain.blockHash);
+  if (observedAgain.timestampMs < targetTimestampMs) {
+    throw new Error(`OUTCOME_HORIZON_BEFORE_TARGET:block=${observed.blockNumber}`);
   }
 }
 
