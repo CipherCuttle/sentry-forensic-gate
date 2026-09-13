@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { MemoryStore } from '../dist/db/memoryStore.js';
-import { syncExecutableBaseline } from '../dist/runtime/executableBaseline.js';
+import { buildBaselineBatch, syncExecutableBaseline } from '../dist/runtime/executableBaseline.js';
 import { classifyLaunchMarket } from '../dist/tsunami/market.js';
 import { scaleUsdMicrosToTokenUnits } from '../dist/shadow/baselineTypes.js';
 
+const LAUNCH_BLOCK = 52_269_353n;
+const DECISION_BLOCK = LAUNCH_BLOCK + 2n;
+const MATURE_HEAD = LAUNCH_BLOCK + 4n;
+
 const launch = {
   chainId: 57073,
-  blockNumber: 10n,
-  blockHash: '0x10',
+  blockNumber: LAUNCH_BLOCK,
+  blockHash: `0x${LAUNCH_BLOCK}`,
   observedAtMs: 1,
   launchId: 'launch-a',
   eventId: 'event-a',
@@ -47,8 +51,8 @@ assert.throws(() => classifyLaunchMarket({
 }), /MARKET_TOKEN_POSITION_MISMATCH/);
 
 class FakeSource {
-  head = 14n;
-  hashes = new Map([[12n, '0x12']]);
+  head = MATURE_HEAD;
+  hashes = new Map([[DECISION_BLOCK, `0x${DECISION_BLOCK}`]]);
   authorityBlocks = [];
   reverseInputs = [];
   entryExecutable = true;
@@ -58,13 +62,13 @@ class FakeSource {
   async getBlockHash(block) { return this.hashes.get(block) ?? `0x${block}`; }
   async assertAuthority(block) { this.authorityBlocks.push(block); }
   async resolveMarket(_launch, decisionBlock) {
-    assert.equal(decisionBlock, 12n, 'market reads must pin launch+delay, not latest');
+    assert.equal(decisionBlock, DECISION_BLOCK, 'market reads must pin launch+delay, not latest');
     if (this.failProvider) throw new Error('RPC_TIMEOUT');
     if (this.failMarket) throw new Error('UNSUPPORTED_SENTRY_BASE:0xbad');
     return market;
   }
   async calibrateUsd({ notionalUsdMicros, decisionBlock }) {
-    assert.equal(decisionBlock, 12n);
+    assert.equal(decisionBlock, DECISION_BLOCK);
     return { kind: 'USDT0_NOMINAL_PEG_V0', notionalUsdMicros, baseToken: market.baseToken, baseAmount: notionalUsdMicros, baseDecimals: 6 };
   }
   async quoteEntry({ launch, decisionBlockHash, decisionBlock, notionalUsdMicros, amountIn }) {
@@ -76,12 +80,20 @@ class FakeSource {
   }
 }
 
+const options = { decisionDelayBlocks: 2n, confirmations: 2n, maxLaunchesPerSync: 10, notionalsUsdMicros: [1_000_000n] };
+
+// The executable authority begins at decision block 52269353. Earlier decisions must fail closed.
+const preEpochLaunch = { ...launch, blockNumber: 52_269_350n, launchId:'launch-pre-epoch', eventId:'event-pre-epoch', txHash:'0xpre', token:'0xafe' };
+await assert.rejects(
+  buildBaselineBatch(new FakeSource(), preEpochLaunch, 2n, [1_000_000n]),
+  /EXECUTABLE_INFRA_EPOCH_UNAUTHORIZED:block=52269352:earliestAuthorized=52269353/
+);
+
 const store = new MemoryStore();
 await store.putLaunch(launch);
 const source = new FakeSource();
-const options = { decisionDelayBlocks: 2n, confirmations: 2n, maxLaunchesPerSync: 10, notionalsUsdMicros: [1_000_000n] };
 const immatureSource = new FakeSource();
-immatureSource.head = 13n;
+immatureSource.head = MATURE_HEAD - 1n;
 const immatureStore = new MemoryStore();
 await immatureStore.putLaunch({ ...launch, launchId:'launch-immature', eventId:'event-immature', txHash:'0ximmature', token:'0xaaf' });
 assert.equal((await syncExecutableBaseline(immatureSource, immatureStore, options)).processed, 0, 'decision block must mature before persistence');
@@ -89,12 +101,12 @@ const report = await syncExecutableBaseline(source, store, options);
 assert.equal(report.complete, 1);
 assert.equal(store.baselineCount, 1);
 assert.deepEqual(source.reverseInputs, [3_000_000n], 'reverse must spend entry token output, never base input');
-assert.ok(source.authorityBlocks.every((b) => b === 12n), 'authority reads must pin decision block');
+assert.ok(source.authorityBlocks.every((b) => b === DECISION_BLOCK), 'authority reads must pin decision block');
 const restart = await syncExecutableBaseline(source, store, options);
 assert.equal(restart.processed, 0, 'completed baseline must be restart-idempotent');
 
-// Reorg at decision block: launch at block 10 survives, quote evidence at block 12 must not.
-await store.rewindFromBlock(12n);
+// Reorg at decision block: launch survives, quote evidence at decision block must not.
+await store.rewindFromBlock(DECISION_BLOCK);
 assert.equal(store.launchCount, 1);
 assert.equal(store.baselineCount, 0, 'decision-block evidence must be invalidated even when launch survives');
 const replay = await syncExecutableBaseline(source, store, options);
@@ -116,7 +128,7 @@ const unverifiedSource = new FakeSource();
 unverifiedSource.failMarket = true;
 const uv = await syncExecutableBaseline(unverifiedSource, unverifiedStore, options);
 assert.equal(uv.unverified, 1);
-assert.equal((await unverifiedStore.listLaunchesPendingBaseline(10n, 10)).length, 0);
+assert.equal((await unverifiedStore.listLaunchesPendingBaseline(LAUNCH_BLOCK, 10)).length, 0);
 
 // Provider/transport failures are not market evidence: halt and leave the launch pending for retry.
 const providerStore = new MemoryStore();
@@ -125,7 +137,7 @@ const providerSource = new FakeSource();
 providerSource.failProvider = true;
 await assert.rejects(syncExecutableBaseline(providerSource, providerStore, options), /RPC_TIMEOUT/);
 assert.equal(providerStore.baselineCount, 0);
-assert.equal((await providerStore.listLaunchesPendingBaseline(10n, 10)).length, 1);
+assert.equal((await providerStore.listLaunchesPendingBaseline(LAUNCH_BLOCK, 10)).length, 1);
 
 // Authority drift is global: halt and do not convert it into a per-launch UNVERIFIED record.
 const driftStore = new MemoryStore();
@@ -139,10 +151,10 @@ const raceStore = new MemoryStore();
 await raceStore.putLaunch({ ...launch, launchId:'launch-r', eventId:'event-r', txHash:'0xr', token:'0xaae' });
 class RaceSource extends FakeSource {
   reads = 0;
-  async getBlockHash(block) { this.reads += 1; return this.reads === 1 ? '0x12' : '0x12b'; }
+  async getBlockHash(block) { this.reads += 1; return this.reads === 1 ? `0x${DECISION_BLOCK}` : `0x${DECISION_BLOCK}b`; }
 }
 await assert.rejects(syncExecutableBaseline(new RaceSource(), raceStore, options), /BASELINE_REORG_DURING_READ/);
 assert.equal(raceStore.baselineCount, 0);
-assert.equal((await raceStore.listLaunchesPendingBaseline(10n, 10)).length, 1);
+assert.equal((await raceStore.listLaunchesPendingBaseline(LAUNCH_BLOCK, 10)).length, 1);
 
 console.log('executable-baseline-check: PASS');
