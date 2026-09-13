@@ -8,5 +8,8 @@ invalid:
   - "const privateKeyToAccount = 1;"
   - "const writeContract = 1;"
   - "const sendTransaction = 1;"
+  - "const sendCalls = 1;"
+  - "const signAuthorization = 1;"
   - "const signTypedData = 1;"
   - "client.__researchBoundaryForbiddenTestOnly();"
+  - "client['__researchBoundaryForbiddenTestOnly']();"
