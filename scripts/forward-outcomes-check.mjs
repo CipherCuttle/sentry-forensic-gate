@@ -8,12 +8,14 @@ import {
   FORWARD_OUTCOMES_R1,
   MemoryStore,
   SqliteStore,
+  buildForwardOutcome,
   classifyExecutableOutcome,
   syncForwardOutcomes
 } from '../dist/index.js';
 
 const ONE_MINUTE = 60_000;
 const FIVE_MINUTES = 300_000;
+const BLOCK_OFFSET = 52_269_343n; // logical block 10 => first authorized executable block 52269353
 const creator = '0xcccccccccccccccccccccccccccccccccccccccc';
 const token = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const base = '0x0200c29006150606b650577bbe7b6248f58470c1';
@@ -24,15 +26,23 @@ assert.equal(classifyExecutableOutcome(2_001n), 'NORMAL_LOSS');
 assert.equal(classifyExecutableOutcome(9_999n), 'NORMAL_LOSS');
 assert.equal(classifyExecutableOutcome(10_000n), 'NORMAL_WIN');
 
-function hash(block) {
-  return `0x${block.toString(16).padStart(64, '0')}`;
+function block(logical) {
+  return BLOCK_OFFSET + BigInt(logical);
+}
+
+function logicalBlock(blockNumber) {
+  return Number(blockNumber - BLOCK_OFFSET);
+}
+
+function hash(blockNumber) {
+  return `0x${blockNumber.toString(16).padStart(64, '0')}`;
 }
 
 function makeLaunch(id = 'launch-a') {
   return {
     chainId: 57073,
-    blockNumber: 10n,
-    blockHash: hash(10n),
+    blockNumber: block(10),
+    blockHash: hash(block(10)),
     observedAtMs: 1,
     launchId: id,
     eventId: `event-${id}`,
@@ -53,8 +63,8 @@ function makeBatch(launchId = 'launch-a') {
   const entry = {
     quoteId: `entry-${launchId}`,
     launchId,
-    blockNumber: 12n,
-    blockHash: hash(12n),
+    blockNumber: block(12),
+    blockHash: hash(block(12)),
     observedAtMs: 2,
     kind: 'ENTRY',
     mode: 'EXACT_INPUT',
@@ -72,8 +82,8 @@ function makeBatch(launchId = 'launch-a') {
     authorityDigest: `authority-${launchId}`,
     launchId,
     policyVersion: EXECUTABLE_BASELINE_R1,
-    decisionBlock: 12n,
-    decisionBlockHash: hash(12n),
+    decisionBlock: block(12),
+    decisionBlockHash: hash(block(12)),
     observedAtMs: 2,
     status: 'COMPLETE',
     market: {
@@ -110,7 +120,7 @@ function legacyOutcome(launchId, outcomeId = `legacy-${launchId}`) {
     outcomeId,
     launchId,
     horizonMs: ONE_MINUTE,
-    observedBlock: 16n,
+    observedBlock: block(16),
     executableValueUsdMicros: 900_000n,
     sellable: true,
     classification: 'NORMAL_LOSS'
@@ -118,7 +128,7 @@ function legacyOutcome(launchId, outcomeId = `legacy-${launchId}`) {
 }
 
 class FakeOutcomeSource {
-  head = 20n;
+  head = block(20);
   activeLiquidity = 100n;
   exitExecutable = true;
   baseAmountOut = 150_000n;
@@ -135,8 +145,8 @@ class FakeOutcomeSource {
     const reads = (this.hashReads.get(blockNumber) ?? 0) + 1;
     this.hashReads.set(blockNumber, reads);
     const mutated = this.mutateBlock === blockNumber && reads >= 2;
-    let timestampMs = 900_000 + Number(blockNumber) * 10_000;
-    if (this.predecessorTurnsEligible && blockNumber === 15n && reads >= 2) timestampMs = 1_060_000;
+    let timestampMs = 900_000 + logicalBlock(blockNumber) * 10_000;
+    if (this.predecessorTurnsEligible && blockNumber === block(15) && reads >= 2) timestampMs = 1_060_000;
     return {
       blockNumber,
       blockHash: mutated ? `${hash(blockNumber)}ff` : hash(blockNumber),
@@ -163,7 +173,24 @@ const options = {
   horizons: [{ label: '1m', ms: ONE_MINUTE }, { label: '5m', ms: FIVE_MINUTES }]
 };
 
-// Canonical horizon selection: launch block timestamp is 1,000,000 ms, so 1m lands on block 16.
+// Exported outcome construction must reject an excluded launch even when called without the CLI ledger guard.
+const preEpochLaunch = {
+  ...makeLaunch('launch-pre-epoch'),
+  blockNumber: block(10) - 1n,
+  blockHash: hash(block(10) - 1n)
+};
+await assert.rejects(
+  buildForwardOutcome(
+    new FakeOutcomeSource(),
+    preEpochLaunch,
+    makeBatch('launch-pre-epoch'),
+    ONE_MINUTE,
+    { blockNumber: block(18), blockHash: hash(block(18)), timestampMs: 1_080_000 }
+  ),
+  /EXECUTABLE_INFRA_EPOCH_UNAUTHORIZED:block=52269352:earliestAuthorized=52269353/
+);
+
+// Canonical horizon selection: logical launch block timestamp is 1,000,000 ms, so 1m lands on logical block 16.
 const store = new MemoryStore();
 await store.putLaunch(makeLaunch());
 await store.putBaselineBatch(makeBatch());
@@ -174,7 +201,7 @@ assert.equal(report.complete, 1);
 assert.equal(report.pendingMaturity, 1, '5m horizon should remain pending');
 const [receipt] = await store.listOutcomes();
 assert.equal(receipt.policyVersion, FORWARD_OUTCOMES_R1);
-assert.equal(receipt.observedBlock, 16n, 'must use first confirmed block at/after launch+horizon');
+assert.equal(receipt.observedBlock, block(16), 'must use first confirmed block at/after launch+horizon');
 assert.equal(receipt.targetTimestampMs, 1_060_000);
 assert.equal(receipt.observedTimestampMs, 1_060_000);
 assert.equal(receipt.classification, 'CATASTROPHIC_LOSS');
@@ -182,13 +209,13 @@ assert.equal(receipt.executableReturnBps, 1_500n);
 assert.equal(receipt.sellable, true);
 assert.equal(receipt.baseAmountOut, 150_000n);
 assert.ok(receipt.evidenceDigest?.length === 64);
-assert.ok(source.authorityBlocks.every((block) => block === 16n));
+assert.ok(source.authorityBlocks.every((observedBlock) => observedBlock === block(16)));
 
 const restart = await syncForwardOutcomes(source, store, options);
 assert.equal(restart.processed, 0, 'persisted R1 horizon must be restart-idempotent');
 
 // Rewind by the outcome's own observation block must delete the receipt while preserving launch/baseline.
-await store.rewindFromBlock(16n);
+await store.rewindFromBlock(block(16));
 assert.equal((await store.listOutcomes()).length, 0);
 assert.equal(store.launchCount, 1);
 assert.equal(store.baselineCount, 1);
@@ -261,7 +288,7 @@ const reorgStore = new MemoryStore();
 await reorgStore.putLaunch(makeLaunch('launch-reorg'));
 await reorgStore.putBaselineBatch(makeBatch('launch-reorg'));
 const reorgSource = new FakeOutcomeSource();
-reorgSource.mutateBlock = 16n;
+reorgSource.mutateBlock = block(16);
 await assert.rejects(
   syncForwardOutcomes(reorgSource, reorgStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] }),
   /OUTCOME_REORG_DURING_READ/
@@ -313,7 +340,7 @@ try {
   assert.equal(sqliteReceipt.poolActiveLiquidity, 100n);
   assert.equal(sqliteReceipt.classification, 'NORMAL_WIN');
   assert.equal((await reopened.listBaselineBatchesPendingOutcome(ONE_MINUTE, 10)).length, 0);
-  await reopened.rewindFromBlock(16n);
+  await reopened.rewindFromBlock(block(16));
   assert.equal((await reopened.listOutcomes()).length, 0);
   assert.equal((await reopened.listBaselineBatchesPendingOutcome(ONE_MINUTE, 10)).length, 1);
   reopened.close();

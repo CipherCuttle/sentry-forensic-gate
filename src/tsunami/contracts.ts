@@ -1,10 +1,12 @@
 import type { Hex } from '../domain.js';
+import { CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH } from '../authority/executableInfraAuthority.js';
 
-// Frozen from mavrkofficial/inkonchain-mcp current config, cross-checked 2026-09-13.
-export const TSUNAMI_V3_FACTORY: Hex = '0xD8B0826150B7686D1F56d6F10E31E58e1BCF1193';
-export const TSUNAMI_POSITION_MANAGER: Hex = '0x98b6267DA27c5A21Bd6e3edfBC2DA6b0428Fa9F7';
-export const TSUNAMI_QUOTER_V2: Hex = '0x547D43a6F83A28720908537Aa25179ff8c6A6411';
-export const WETH9: Hex = '0x4200000000000000000000000000000000000006';
+// Legacy exported names retained to avoid widening the adapter surface. Values are
+// now sourced from the reviewed current executable-infrastructure authority epoch.
+export const TSUNAMI_V3_FACTORY: Hex = CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.factory;
+export const TSUNAMI_POSITION_MANAGER: Hex = CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.npm;
+export const TSUNAMI_QUOTER_V2: Hex = CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.quoterV2;
+export const WETH9: Hex = CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.weth;
 export const USDT0: Hex = '0x0200c29006150606b650577bbe7b6248f58470c1';
 export const TSUNAMI_FEE_TIERS = [500, 3000, 10000] as const;
 export const ZERO_ADDRESS: Hex = '0x0000000000000000000000000000000000000000';

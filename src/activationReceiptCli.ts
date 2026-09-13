@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 import Database from 'better-sqlite3';
+import { CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH } from './authority/executableInfraAuthority.js';
+import { assertLedgerWithinAuthorizedEpoch } from './authority/ledgerEpochGuard.js';
 import { FORWARD_OUTCOMES_R1 } from './outcome/forwardTypes.js';
 import { ViemForwardOutcomeSource } from './outcome/viemSource.js';
 import { DEFAULT_INK_RPC_URL, INK_CHAIN_ID } from './sentry/contracts.js';
@@ -9,6 +11,7 @@ import {
 } from './shadow/baselineTypes.js';
 
 const dbPath = resolve(process.env.DB_PATH ?? './data/sentry-forensic-gate.sqlite');
+assertLedgerWithinAuthorizedEpoch(dbPath, INK_CHAIN_ID, CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock);
 const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
 
@@ -94,6 +97,7 @@ try {
     dbPath,
     shadowOnly: process.env.SHADOW_ONLY === 'true',
     sentryStartBlock: process.env.SENTRY_START_BLOCK ?? null,
+    executableInfraStartBlock: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock,
     chainHead,
     checkpoint: snapshot.checkpoint ? {
       blockNumber: snapshot.checkpoint.block_number,

@@ -1,4 +1,5 @@
 import type { Hex, LaunchObserved } from '../domain.js';
+import { resolveAuthorizedExecutableInfra } from '../authority/executableInfraAuthority.js';
 import {
   DEFAULT_BASELINE_NOTIONALS_USD_MICROS,
   EXECUTABLE_BASELINE_R1,
@@ -84,7 +85,9 @@ export async function buildBaselineBatch(
   decisionDelayBlocks: bigint,
   notionalsUsdMicros: readonly bigint[]
 ): Promise<ExecutableBaselineBatch> {
+  resolveAuthorizedExecutableInfra(launch.blockNumber);
   const decisionBlock = launch.blockNumber + decisionDelayBlocks;
+  resolveAuthorizedExecutableInfra(decisionBlock);
   const decisionBlockHash = await source.getBlockHash(decisionBlock);
 
   // Authority drift is global, not a per-launch data gap. Fail closed and do not

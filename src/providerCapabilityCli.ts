@@ -1,4 +1,5 @@
 import { createPublicClient, defineChain, http, type Address } from 'viem';
+import { CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH } from './authority/executableInfraAuthority.js';
 import { CURRENT_SENTRY_AUTHORITY_EPOCH } from './authority/sentryAuthority.js';
 import { DEFAULT_INK_RPC_URL, DEFAULT_SENTRY_LAUNCH_FACTORY, INK_CHAIN_ID } from './sentry/contracts.js';
 import { ViemSentryLaunchSource } from './sentry/viemSource.js';
@@ -24,11 +25,11 @@ const ink = defineChain({
 const rpcUrl = process.env.INK_RPC_URL ?? DEFAULT_INK_RPC_URL;
 const probeBlock = process.env.PROVIDER_PROBE_BLOCK
   ? BigInt(process.env.PROVIDER_PROBE_BLOCK)
-  : CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock;
+  : CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock;
 
-if (probeBlock < CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock) {
+if (probeBlock < CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock) {
   throw new Error(
-    `PROVIDER_PROBE_BLOCK_UNAUTHORIZED:block=${probeBlock}:earliestAuthorized=${CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock}`
+    `PROVIDER_PROBE_BLOCK_UNAUTHORIZED:block=${probeBlock}:earliestAuthorized=${CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock}`
   );
 }
 
@@ -40,10 +41,6 @@ if (head < probeBlock) throw new Error(`PROVIDER_PROBE_BLOCK_AHEAD_OF_HEAD:block
 
 const confirmedBlock = head > 2n ? head - 2n : head;
 
-// Provider capability and semantic baseline compatibility are intentionally separate.
-// An RPC can correctly serve historical state while that state proves a frozen authority
-// invariant has drifted. In that case this receipt remains a provider PASS but blocks the
-// executable canary until the infrastructure change is separately reviewed.
 await truth.assertAuthority(probeBlock);
 const historicalInfrastructure = await readInfrastructure(probeBlock);
 const historicalBlockHash = await truth.getBlockHash(probeBlock);
@@ -70,6 +67,16 @@ console.log(JSON.stringify({
     implementation: CURRENT_SENTRY_AUTHORITY_EPOCH.implementation,
     epochStartBlock: CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock.toString(),
     upgradeTx: CURRENT_SENTRY_AUTHORITY_EPOCH.upgradeTx
+  },
+  executableInfraAuthority: {
+    version: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.version,
+    epochStartBlock: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock.toString(),
+    activationBlock: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.activationBlock.toString(),
+    activationTx: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.activationTx,
+    npm: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.npm,
+    factory: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.factory,
+    quoterV2: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.quoterV2,
+    weth: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.weth
   },
   head: head.toString(),
   historicalProbe: {

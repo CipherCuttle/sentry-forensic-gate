@@ -1,5 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH } from './authority/executableInfraAuthority.js';
+import { assertLedgerWithinAuthorizedEpoch } from './authority/ledgerEpochGuard.js';
 import { CreatorSignalSqliteStore } from './evaluation/creatorSignalSqliteStore.js';
 import { buildCreatorSignalEvaluation } from './runtime/creatorSignalEval.js';
 import { ViemForwardOutcomeSource } from './outcome/viemSource.js';
@@ -7,6 +9,7 @@ import { DEFAULT_INK_RPC_URL, INK_CHAIN_ID } from './sentry/contracts.js';
 
 const dbPath = resolve(process.env.DB_PATH ?? './data/sentry-forensic-gate.sqlite');
 mkdirSync(dirname(dbPath), { recursive: true });
+assertLedgerWithinAuthorizedEpoch(dbPath, INK_CHAIN_ID, CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock);
 const store = new CreatorSignalSqliteStore(dbPath, INK_CHAIN_ID);
 const source = new ViemForwardOutcomeSource({ rpcUrl: process.env.INK_RPC_URL ?? DEFAULT_INK_RPC_URL });
 

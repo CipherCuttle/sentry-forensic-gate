@@ -1,5 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH } from './authority/executableInfraAuthority.js';
+import { assertLedgerWithinAuthorizedEpoch } from './authority/ledgerEpochGuard.js';
 import { SqliteStore } from './db/sqliteStore.js';
 import { runExecutableBaseline, syncExecutableBaseline, type ExecutableBaselineOptions } from './runtime/executableBaseline.js';
 import { DEFAULT_INK_RPC_URL, INK_CHAIN_ID } from './sentry/contracts.js';
@@ -7,6 +9,7 @@ import { ViemExecutableBaselineSource } from './tsunami/viemBaselineSource.js';
 
 const dbPath = resolve(process.env.DB_PATH ?? './data/sentry-forensic-gate.sqlite');
 mkdirSync(dirname(dbPath), { recursive: true });
+assertLedgerWithinAuthorizedEpoch(dbPath, INK_CHAIN_ID, CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock);
 
 const options: ExecutableBaselineOptions = {
   decisionDelayBlocks: envBigInt('BASELINE_DECISION_DELAY_BLOCKS', 2n),
