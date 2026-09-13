@@ -1,4 +1,4 @@
-import type { Hex, LaunchObserved } from '../domain.js';
+import type { Hex } from '../domain.js';
 import type { Store } from '../db/store.js';
 import type { OutcomeReceipt } from '../evidence/receipts.js';
 import { projectCreatorOutcomeFeatures } from '../forensic/creatorOutcome.js';
@@ -17,10 +17,25 @@ import { INK_CHAIN_ID } from '../sentry/contracts.js';
 import type { BaselineDecisionPoint, BaselineStore } from '../shadow/baselineStore.js';
 
 export type CreatorSignalSource = Pick<ForwardOutcomeSource, 'getHeadBlockNumber' | 'getBlockPoint'>;
+
+export interface CreatorSignalMissingProvenanceLaunch {
+  chainId: number;
+  launchId: string;
+  blockNumber: bigint;
+  blockHash: Hex;
+}
+
+export interface CreatorSignalLaunchProvenanceSnapshot {
+  missingProvenance: CreatorSignalMissingProvenanceLaunch[];
+  facts: ProvenanceFact[];
+}
+
 export type CreatorSignalStore = Pick<
   Store & BaselineStore,
-  'listLaunchesMissingProvenance' | 'listProvenanceFacts' | 'listOutcomes' | 'listBaselineDecisionPoints'
->;
+  'listOutcomes' | 'listBaselineDecisionPoints'
+> & {
+  readLaunchProvenanceSnapshot(): Promise<CreatorSignalLaunchProvenanceSnapshot>;
+};
 
 export async function buildCreatorSignalEvaluation(
   source: CreatorSignalSource,
@@ -33,14 +48,13 @@ export async function buildCreatorSignalEvaluation(
   const asOfBlock = headBlock - CREATOR_SIGNAL_CONFIRMATIONS;
   const asOfStart = await source.getBlockPoint(asOfBlock);
 
-  const [missingProvenanceRaw, factsRaw, baselinesRaw, outcomesRaw] = await Promise.all([
-    store.listLaunchesMissingProvenance(),
-    store.listProvenanceFacts(),
+  const [launchProvenanceSnapshot, baselinesRaw, outcomesRaw] = await Promise.all([
+    store.readLaunchProvenanceSnapshot(),
     store.listBaselineDecisionPoints(),
     store.listOutcomes()
   ]);
 
-  const missingProvenance = [...missingProvenanceRaw].sort(compareLaunches);
+  const missingProvenance = [...launchProvenanceSnapshot.missingProvenance].sort(compareMissingProvenanceLaunches);
   for (const launch of missingProvenance) {
     if (launch.chainId !== INK_CHAIN_ID) throw new Error(`CREATOR_SIGNAL_CHAIN_MISMATCH:${launch.launchId}`);
     if (launch.blockNumber > asOfBlock) continue;
@@ -51,7 +65,7 @@ export async function buildCreatorSignalEvaluation(
     }
   }
 
-  const facts = [...factsRaw].sort(compareFacts);
+  const facts = [...launchProvenanceSnapshot.facts].sort(compareFacts);
   for (const fact of facts) {
     if (fact.chainId !== INK_CHAIN_ID) throw new Error(`CREATOR_SIGNAL_CHAIN_MISMATCH:${fact.factId}`);
   }
@@ -71,7 +85,6 @@ export async function buildCreatorSignalEvaluation(
   const featureByLaunch = new Map(features.map((feature) => [feature.launchId, feature]));
 
   const matureLaunches: MatureLaunchEvidence[] = [];
-  const matureFactByLaunch = new Map<string, ProvenanceFact>();
 
   for (const fact of facts) {
     if (fact.observedBlock > asOfBlock) continue;
@@ -79,7 +92,6 @@ export async function buildCreatorSignalEvaluation(
     assertHash('CREATOR_SIGNAL_FACT_REORG', fact.observedBlock, fact.observedBlockHash, point.blockHash);
     if (point.timestampMs + CREATOR_SIGNAL_HORIZON_MS > asOfStart.timestampMs) continue;
 
-    matureFactByLaunch.set(fact.launchId, fact);
     const baseline = baselineByLaunch.get(fact.launchId) ?? null;
     if (baseline) {
       if (baseline.decisionBlock > asOfBlock) {
@@ -200,9 +212,11 @@ function assertHash(label: string, blockNumber: bigint, expected: Hex, actual: H
   }
 }
 
-function compareLaunches(a: LaunchObserved, b: LaunchObserved): number {
+function compareMissingProvenanceLaunches(
+  a: CreatorSignalMissingProvenanceLaunch,
+  b: CreatorSignalMissingProvenanceLaunch
+): number {
   if (a.blockNumber !== b.blockNumber) return a.blockNumber < b.blockNumber ? -1 : 1;
-  if (a.logIndex !== b.logIndex) return a.logIndex - b.logIndex;
   return a.launchId.localeCompare(b.launchId);
 }
 
