@@ -1,23 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const blockedExtensions = new Set([
-  '.' + 'p' + 'y',
-  '.' + 's' + 'h',
-  '.' + 'b' + 'ash',
-  '.' + 'z' + 'sh',
-  '.' + 'p' + 's1',
-  '.' + 'r' + 'b',
-  '.' + 'p' + 'hp',
-  '.' + 'p' + 'l',
-  '.' + 'l' + 'ua',
-  '.' + 'g' + 'o',
-  '.' + 'r' + 's',
-  '.' + 'j' + 'ava',
-  '.' + 'k' + 't',
-  '.' + 's' + 'wift',
-  '.' + 's' + 'ol'
+const allowedFileExtensions = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.json', '.md', '.yml', '.yaml', '.sql', '.example'
 ]);
+const allowedExtensionlessFiles = new Set(['.gitignore']);
 const skippedDirs = new Set(['.git', 'node_modules', 'dist']);
 
 function assertSupportedSurfaces(dir) {
@@ -28,8 +16,13 @@ function assertSupportedSurfaces(dir) {
       assertSupportedSurfaces(full);
       continue;
     }
-    if (entry.isFile() && blockedExtensions.has(path.extname(entry.name).toLowerCase())) {
-      throw new Error(`UNSUPPORTED_EXECUTABLE_SURFACE:${path.relative(process.cwd(), full)}`);
+    if (!entry.isFile()) {
+      throw new Error(`UNSUPPORTED_FILE_SURFACE:${path.relative(process.cwd(), full)}`);
+    }
+    const relative = path.relative(process.cwd(), full);
+    const extension = path.extname(entry.name).toLowerCase();
+    if (!allowedFileExtensions.has(extension) && !allowedExtensionlessFiles.has(relative)) {
+      throw new Error(`UNSUPPORTED_FILE_SURFACE:${relative}`);
     }
   }
 }
