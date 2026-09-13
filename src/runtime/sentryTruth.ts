@@ -51,10 +51,11 @@ export async function syncSentryTruth(source: LaunchSource, store: Store, option
     }
   }
 
-  // A v0.3 database can already have a current chain checkpoint while the v0.4
-  // provenance tables are newly created and empty. Backfill from durable canonical
-  // launches before the no-new-blocks return so creator history is complete on upgrade.
-  await backfillMissingProvenance(store);
+  // Existing databases may have launches without v0.4 facts, and a prior process may
+  // have persisted all facts before failing to replace the derived edge projection.
+  // Repair both cases before the no-new-blocks return. Launches remain the authority;
+  // edges are always disposable/rebuildable from durable provenance facts.
+  await ensureProvenanceProjection(store);
 
   if (fromBlock > targetBlock) {
     return { headBlock, targetBlock, startBlock: null, endBlock: null, inserted: 0, duplicates: 0, batches: 0, reorgRewindFrom };
@@ -114,9 +115,8 @@ export async function runSentryTruth(source: LaunchSource, store: Store, options
   }
 }
 
-async function backfillMissingProvenance(store: Store): Promise<void> {
+async function ensureProvenanceProjection(store: Store): Promise<void> {
   const missing = await store.listLaunchesMissingProvenance();
-  if (missing.length === 0) return;
   for (const launch of missing) {
     await store.putProvenanceFact(await buildProvenanceFact(launch));
   }
