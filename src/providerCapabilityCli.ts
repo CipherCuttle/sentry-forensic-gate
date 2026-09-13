@@ -120,7 +120,7 @@ async function readInfrastructure(blockNumber: bigint) {
   ]);
   if (!Array.isArray(supportedBaseTokens)) throw new Error('PROVIDER_SUPPORTED_BASE_TOKENS_MALFORMED');
 
-  const [npmCode, npmFactory, npmWeth, factoryCode, quoterCode, quoterFactory, quoterWeth] = await Promise.all([
+  const [npmCode, npmFactory, npmWeth, pinnedFactoryCode, quoterCode, quoterFactory, quoterWeth] = await Promise.all([
     client.getBytecode({ address: sentryNpm, blockNumber }),
     client.readContract({ address: sentryNpm, abi: positionManagerReadAbi, functionName: 'factory', blockNumber }) as Promise<Address>,
     client.readContract({ address: sentryNpm, abi: positionManagerReadAbi, functionName: 'WETH9', blockNumber }) as Promise<Address>,
@@ -129,9 +129,11 @@ async function readInfrastructure(blockNumber: bigint) {
     client.readContract({ address: TSUNAMI_QUOTER_V2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'factory', blockNumber }) as Promise<Address>,
     client.readContract({ address: TSUNAMI_QUOTER_V2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'WETH9', blockNumber }) as Promise<Address>
   ]);
+  const npmFactoryCode = await client.getBytecode({ address: npmFactory, blockNumber });
 
   if (!npmCode || npmCode === '0x') throw new Error(`PROVIDER_NPM_CODE_MISSING:block=${blockNumber}`);
-  if (!factoryCode || factoryCode === '0x') throw new Error(`PROVIDER_FACTORY_CODE_MISSING:block=${blockNumber}`);
+  if (!npmFactoryCode || npmFactoryCode === '0x') throw new Error(`PROVIDER_NPM_FACTORY_CODE_MISSING:block=${blockNumber}`);
+  if (!pinnedFactoryCode || pinnedFactoryCode === '0x') throw new Error(`PROVIDER_PINNED_FACTORY_CODE_MISSING:block=${blockNumber}`);
   if (!quoterCode || quoterCode === '0x') throw new Error(`PROVIDER_QUOTER_CODE_MISSING:block=${blockNumber}`);
 
   return {
