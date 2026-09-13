@@ -1,4 +1,4 @@
--- Human-readable mirror of src/db/schema.ts. Runtime authority is SCHEMA_SQL.
+export const SCHEMA_SQL = String.raw`
 PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS launches (
@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS launches (
   observed_at_ms INTEGER NOT NULL,
   UNIQUE(chain_id, tx_hash, token)
 );
-CREATE INDEX IF NOT EXISTS idx_launches_block_number ON launches(chain_id, block_number);
+
+CREATE INDEX IF NOT EXISTS idx_launches_block_number
+  ON launches(chain_id, block_number);
 
 CREATE TABLE IF NOT EXISTS decisions (
   decision_id TEXT PRIMARY KEY,
@@ -82,3 +84,4 @@ CREATE TABLE IF NOT EXISTS chain_checkpoints (
   reorg_guard_block TEXT,
   reorg_guard_hash TEXT
 );
+`;

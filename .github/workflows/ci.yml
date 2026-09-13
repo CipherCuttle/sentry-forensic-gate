@@ -14,5 +14,4 @@ jobs:
           node-version: 20
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile
-      - run: pnpm build
-      - run: pnpm selfcheck
+      - run: pnpm test

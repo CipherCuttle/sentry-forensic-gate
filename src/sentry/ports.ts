@@ -1,8 +1,10 @@
-import type { LaunchObserved, QuoteObservation } from '../domain.js';
+import type { Hex, LaunchObserved, QuoteObservation } from '../domain.js';
 
 export interface LaunchSource {
+  getHeadBlockNumber(): Promise<bigint>;
+  getBlockHash(blockNumber: bigint): Promise<Hex>;
+  assertAuthority(blockNumber: bigint): Promise<void>;
   catchUp(fromBlock: bigint, toBlock: bigint): Promise<LaunchObserved[]>;
-  watch(onLaunch: (launch: LaunchObserved) => Promise<void>): Promise<() => Promise<void>>;
 }
 
 export interface ProtocolVerifier {
