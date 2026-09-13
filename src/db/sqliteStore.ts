@@ -3,6 +3,7 @@ import type { Hex, LaunchObserved } from '../domain.js';
 import { canonicalJson } from '../evidence/canonical.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
 import type { ProvenanceEdge, ProvenanceFact } from '../graph/provenance.js';
+import { FORWARD_OUTCOMES_R1 } from '../outcome/forwardTypes.js';
 import type { ForwardOutcomeStore } from '../outcome/store.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
 import { flattenBaselineQuotes, type BaselineStatus, type ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
@@ -20,6 +21,7 @@ export class SqliteStore implements Store, BaselineStore, ForwardOutcomeStore {
     this.db.pragma('foreign_keys = ON');
     this.db.exec(SCHEMA_SQL);
     this.ensureCheckpointGuardColumns();
+    this.ensureOutcomePolicyVersion();
   }
 
   close(): void { this.db.close(); }
@@ -147,15 +149,24 @@ export class SqliteStore implements Store, BaselineStore, ForwardOutcomeStore {
 
   async putOutcome(v: OutcomeReceipt): Promise<'INSERTED' | 'DUPLICATE'> {
     const payload = canonicalJson(v);
-    const result = this.db.prepare(`INSERT OR IGNORE INTO outcomes (outcome_id, launch_id, horizon_ms, observed_block, payload_json) VALUES (?, ?, ?, ?, ?)`)
-      .run(v.outcomeId, v.launchId, v.horizonMs, v.observedBlock.toString(), payload);
+    const policyVersion = v.policyVersion ?? null;
+    const result = this.db.prepare(`
+      INSERT OR IGNORE INTO outcomes (
+        outcome_id, launch_id, horizon_ms, observed_block, policy_version, payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(v.outcomeId, v.launchId, v.horizonMs, v.observedBlock.toString(), policyVersion, payload);
     if (result.changes === 1) return 'INSERTED';
     const existing = this.db.prepare(`
       SELECT outcome_id, payload_json FROM outcomes
-      WHERE outcome_id = ? OR (launch_id = ? AND horizon_ms = ?) LIMIT 1
-    `).get(v.outcomeId, v.launchId, v.horizonMs) as { outcome_id: string; payload_json: string } | undefined;
+      WHERE outcome_id = ?
+         OR (
+           launch_id = ? AND horizon_ms = ? AND
+           ((policy_version IS NULL AND ? IS NULL) OR policy_version = ?)
+         )
+      LIMIT 1
+    `).get(v.outcomeId, v.launchId, v.horizonMs, policyVersion, policyVersion) as { outcome_id: string; payload_json: string } | undefined;
     if (!existing || existing.outcome_id !== v.outcomeId || existing.payload_json !== payload) {
-      throw new Error(`OUTCOME_IDENTITY_CONFLICT:${v.launchId}:${v.horizonMs}`);
+      throw new Error(`OUTCOME_IDENTITY_CONFLICT:${v.launchId}:${v.horizonMs}:${policyVersion ?? 'LEGACY'}`);
     }
     return 'DUPLICATE';
   }
@@ -163,7 +174,7 @@ export class SqliteStore implements Store, BaselineStore, ForwardOutcomeStore {
   async listOutcomes(): Promise<OutcomeReceipt[]> {
     const rows = this.db.prepare(`
       SELECT payload_json FROM outcomes
-      ORDER BY CAST(observed_block AS INTEGER), horizon_ms, outcome_id
+      ORDER BY CAST(observed_block AS INTEGER), horizon_ms, COALESCE(policy_version, ''), outcome_id
     `).all() as Array<{ payload_json: string }>;
     return rows.map((row) => reviveOutcome(row.payload_json));
   }
@@ -205,11 +216,14 @@ export class SqliteStore implements Store, BaselineStore, ForwardOutcomeStore {
       SELECT b.payload_json
       FROM baseline_batches b
       JOIN launches l ON l.launch_id = b.launch_id
-      LEFT JOIN outcomes o ON o.launch_id = b.launch_id AND o.horizon_ms = ?
+      LEFT JOIN outcomes o
+        ON o.launch_id = b.launch_id
+       AND o.horizon_ms = ?
+       AND o.policy_version = ?
       WHERE l.chain_id = ? AND b.status = 'COMPLETE' AND o.outcome_id IS NULL
       ORDER BY CAST(b.decision_block AS INTEGER), b.launch_id
       LIMIT ?
-    `).all(horizonMs, this.chainId, limit) as Array<{ payload_json: string }>;
+    `).all(horizonMs, FORWARD_OUTCOMES_R1, this.chainId, limit) as Array<{ payload_json: string }>;
     return rows.map((row) => reviveBaselineBatch(row.payload_json));
   }
 
@@ -298,6 +312,41 @@ export class SqliteStore implements Store, BaselineStore, ForwardOutcomeStore {
     const names = new Set(columns.map((column) => column.name));
     if (!names.has('reorg_guard_block')) this.db.exec('ALTER TABLE chain_checkpoints ADD COLUMN reorg_guard_block TEXT');
     if (!names.has('reorg_guard_hash')) this.db.exec('ALTER TABLE chain_checkpoints ADD COLUMN reorg_guard_hash TEXT');
+  }
+
+  private ensureOutcomePolicyVersion(): void {
+    const columns = this.db.pragma('table_info(outcomes)') as Array<{ name: string }>;
+    if (columns.some((column) => column.name === 'policy_version')) return;
+
+    const migrate = this.db.transaction(() => {
+      this.db.exec('ALTER TABLE outcomes RENAME TO outcomes_legacy_r0');
+      this.db.exec(`
+        CREATE TABLE outcomes (
+          outcome_id TEXT PRIMARY KEY,
+          launch_id TEXT NOT NULL REFERENCES launches(launch_id) ON DELETE CASCADE,
+          horizon_ms INTEGER NOT NULL,
+          observed_block TEXT NOT NULL,
+          policy_version TEXT,
+          payload_json TEXT NOT NULL,
+          UNIQUE(launch_id, horizon_ms, policy_version)
+        )
+      `);
+      this.db.exec(`
+        INSERT INTO outcomes (
+          outcome_id, launch_id, horizon_ms, observed_block, policy_version, payload_json
+        )
+        SELECT
+          outcome_id,
+          launch_id,
+          horizon_ms,
+          observed_block,
+          json_extract(payload_json, '$.policyVersion'),
+          payload_json
+        FROM outcomes_legacy_r0
+      `);
+      this.db.exec('DROP TABLE outcomes_legacy_r0');
+    });
+    migrate();
   }
 }
 

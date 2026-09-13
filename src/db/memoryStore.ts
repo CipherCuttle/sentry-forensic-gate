@@ -2,6 +2,7 @@ import type { LaunchObserved } from '../domain.js';
 import { canonicalJson } from '../evidence/canonical.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
 import type { ProvenanceEdge, ProvenanceFact } from '../graph/provenance.js';
+import { FORWARD_OUTCOMES_R1 } from '../outcome/forwardTypes.js';
 import type { ForwardOutcomeStore } from '../outcome/store.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
 import type { ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
@@ -94,12 +95,17 @@ export class MemoryStore implements Store, BaselineStore, ForwardOutcomeStore {
 
   async putOutcome(v: OutcomeReceipt): Promise<'INSERTED' | 'DUPLICATE'> {
     if (!this.launches.has(v.launchId)) throw new Error(`OUTCOME_LAUNCH_MISSING:${v.launchId}`);
+    const policySlot = v.policyVersion ?? null;
     const byId = this.outcomes.get(v.outcomeId);
-    const bySlot = [...this.outcomes.values()].find((item) => item.launchId === v.launchId && item.horizonMs === v.horizonMs);
+    const bySlot = [...this.outcomes.values()].find((item) =>
+      item.launchId === v.launchId &&
+      item.horizonMs === v.horizonMs &&
+      (item.policyVersion ?? null) === policySlot
+    );
     const collision = byId ?? bySlot;
     if (collision) {
       if (collision.outcomeId !== v.outcomeId || canonicalJson(collision) !== canonicalJson(v)) {
-        throw new Error(`OUTCOME_IDENTITY_CONFLICT:${v.launchId}:${v.horizonMs}`);
+        throw new Error(`OUTCOME_IDENTITY_CONFLICT:${v.launchId}:${v.horizonMs}:${policySlot ?? 'LEGACY'}`);
       }
       return 'DUPLICATE';
     }
@@ -134,7 +140,7 @@ export class MemoryStore implements Store, BaselineStore, ForwardOutcomeStore {
   async listBaselineBatchesPendingOutcome(horizonMs: number, limit: number): Promise<ExecutableBaselineBatch[]> {
     const covered = new Set(
       [...this.outcomes.values()]
-        .filter((outcome) => outcome.horizonMs === horizonMs)
+        .filter((outcome) => outcome.horizonMs === horizonMs && outcome.policyVersion === FORWARD_OUTCOMES_R1)
         .map((outcome) => outcome.launchId)
     );
     return [...this.baselines.values()]
@@ -237,6 +243,8 @@ function compareEdges(a: ProvenanceEdge, b: ProvenanceEdge): number {
 function compareOutcomes(a: OutcomeReceipt, b: OutcomeReceipt): number {
   if (a.observedBlock !== b.observedBlock) return a.observedBlock < b.observedBlock ? -1 : 1;
   if (a.horizonMs !== b.horizonMs) return a.horizonMs - b.horizonMs;
+  const policyOrder = (a.policyVersion ?? '').localeCompare(b.policyVersion ?? '');
+  if (policyOrder !== 0) return policyOrder;
   return a.outcomeId.localeCompare(b.outcomeId);
 }
 

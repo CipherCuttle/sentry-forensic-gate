@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -104,6 +105,18 @@ function makeBatch(launchId = 'launch-a') {
   };
 }
 
+function legacyOutcome(launchId, outcomeId = `legacy-${launchId}`) {
+  return {
+    outcomeId,
+    launchId,
+    horizonMs: ONE_MINUTE,
+    observedBlock: 16n,
+    executableValueUsdMicros: 900_000n,
+    sellable: true,
+    classification: 'NORMAL_LOSS'
+  };
+}
+
 class FakeOutcomeSource {
   head = 20n;
   activeLiquidity = 100n;
@@ -115,16 +128,19 @@ class FakeOutcomeSource {
   authorityBlocks = [];
   hashReads = new Map();
   mutateBlock = null;
+  predecessorTurnsEligible = false;
 
   async getHeadBlockNumber() { return this.head; }
   async getBlockPoint(blockNumber) {
     const reads = (this.hashReads.get(blockNumber) ?? 0) + 1;
     this.hashReads.set(blockNumber, reads);
     const mutated = this.mutateBlock === blockNumber && reads >= 2;
+    let timestampMs = 900_000 + Number(blockNumber) * 10_000;
+    if (this.predecessorTurnsEligible && blockNumber === 15n && reads >= 2) timestampMs = 1_060_000;
     return {
       blockNumber,
       blockHash: mutated ? `${hash(blockNumber)}ff` : hash(blockNumber),
-      timestampMs: 900_000 + Number(blockNumber) * 10_000
+      timestampMs
     };
   }
   async assertMarketAuthority(_market, blockNumber) { this.authorityBlocks.push(blockNumber); }
@@ -169,7 +185,7 @@ assert.ok(receipt.evidenceDigest?.length === 64);
 assert.ok(source.authorityBlocks.every((block) => block === 16n));
 
 const restart = await syncForwardOutcomes(source, store, options);
-assert.equal(restart.processed, 0, 'persisted horizon must be restart-idempotent');
+assert.equal(restart.processed, 0, 'persisted R1 horizon must be restart-idempotent');
 
 // Rewind by the outcome's own observation block must delete the receipt while preserving launch/baseline.
 await store.rewindFromBlock(16n);
@@ -177,19 +193,32 @@ assert.equal((await store.listOutcomes()).length, 0);
 assert.equal(store.launchCount, 1);
 assert.equal(store.baselineCount, 1);
 
-// Zero active liquidity is deterministic liquidity-collapse evidence; no quote call is needed.
+// Zero active liquidity is diagnostic, not sufficient by itself to claim collapse: V3 can cross empty ranges.
+const zeroLiquidityStore = new MemoryStore();
+await zeroLiquidityStore.putLaunch(makeLaunch('launch-zero-liq'));
+await zeroLiquidityStore.putBaselineBatch(makeBatch('launch-zero-liq'));
+const zeroLiquiditySource = new FakeOutcomeSource();
+zeroLiquiditySource.activeLiquidity = 0n;
+await syncForwardOutcomes(zeroLiquiditySource, zeroLiquidityStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] });
+const [zeroLiquidityReceipt] = await zeroLiquidityStore.listOutcomes();
+assert.equal(zeroLiquidityReceipt.classification, 'CATASTROPHIC_LOSS');
+assert.equal(zeroLiquidityReceipt.sellable, true);
+assert.equal(zeroLiquiditySource.quoteCalls, 1, 'zero active liquidity must still ask the executable quoter');
+
+// Quote failure plus zero active liquidity is deterministic liquidity-collapse evidence.
 const liquidityStore = new MemoryStore();
 await liquidityStore.putLaunch(makeLaunch('launch-liq'));
 await liquidityStore.putBaselineBatch(makeBatch('launch-liq'));
 const liquiditySource = new FakeOutcomeSource();
 liquiditySource.activeLiquidity = 0n;
+liquiditySource.exitExecutable = false;
 await syncForwardOutcomes(liquiditySource, liquidityStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] });
 const [liquidityReceipt] = await liquidityStore.listOutcomes();
 assert.equal(liquidityReceipt.classification, 'LIQUIDITY_COLLAPSE');
 assert.equal(liquidityReceipt.sellable, false);
-assert.equal(liquiditySource.quoteCalls, 0);
+assert.equal(liquiditySource.quoteCalls, 1);
 
-// A quote revert is an exit failure, not a provider failure.
+// A quote revert with active liquidity is an exit failure, not a provider failure.
 const exitStore = new MemoryStore();
 await exitStore.putLaunch(makeLaunch('launch-exit'));
 await exitStore.putBaselineBatch(makeBatch('launch-exit'));
@@ -214,7 +243,7 @@ assert.equal(valuationReceipt.sellable, true);
 assert.equal(valuationReceipt.classification, undefined);
 assert.equal(valuationReceipt.executableValueUsdMicros, undefined);
 
-// Provider failures must escape and leave the horizon pending for retry.
+// Provider failures must escape and leave the R1 horizon pending for retry.
 const providerStore = new MemoryStore();
 await providerStore.putLaunch(makeLaunch('launch-provider'));
 await providerStore.putBaselineBatch(makeBatch('launch-provider'));
@@ -227,7 +256,7 @@ await assert.rejects(
 assert.equal((await providerStore.listOutcomes()).length, 0);
 assert.equal((await providerStore.listBaselineBatchesPendingOutcome(ONE_MINUTE, 10)).length, 1);
 
-// A moving horizon block invalidates the read before persistence.
+// A moving selected horizon block invalidates the read before persistence.
 const reorgStore = new MemoryStore();
 await reorgStore.putLaunch(makeLaunch('launch-reorg'));
 await reorgStore.putBaselineBatch(makeBatch('launch-reorg'));
@@ -238,6 +267,30 @@ await assert.rejects(
   /OUTCOME_REORG_DURING_READ/
 );
 assert.equal((await reorgStore.listOutcomes()).length, 0);
+
+// Mixed-fork binary search: predecessor changes from below-target to target-eligible after it was skipped.
+const boundaryStore = new MemoryStore();
+await boundaryStore.putLaunch(makeLaunch('launch-boundary'));
+await boundaryStore.putBaselineBatch(makeBatch('launch-boundary'));
+const boundarySource = new FakeOutcomeSource();
+boundarySource.predecessorTurnsEligible = true;
+await assert.rejects(
+  syncForwardOutcomes(boundarySource, boundaryStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] }),
+  /OUTCOME_HORIZON_NONMINIMAL/
+);
+assert.equal((await boundaryStore.listOutcomes()).length, 0, 'mixed-fork boundary must never persist');
+
+// Legacy receipts are preserved but must not satisfy the R1 collection slot.
+const legacyStore = new MemoryStore();
+await legacyStore.putLaunch(makeLaunch('launch-legacy'));
+await legacyStore.putBaselineBatch(makeBatch('launch-legacy'));
+await legacyStore.putOutcome(legacyOutcome('launch-legacy'));
+assert.equal((await legacyStore.listBaselineBatchesPendingOutcome(ONE_MINUTE, 10)).length, 1);
+await syncForwardOutcomes(new FakeOutcomeSource(), legacyStore, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] });
+const legacyAndR1 = await legacyStore.listOutcomes();
+assert.equal(legacyAndR1.length, 2);
+assert.equal(legacyAndR1.filter((item) => item.policyVersion === FORWARD_OUTCOMES_R1).length, 1);
+assert.equal(legacyAndR1.filter((item) => item.policyVersion === undefined).length, 1);
 
 // SQLite revival must preserve all bigint evidence and pending-slot semantics.
 const dir = mkdtempSync(join(tmpdir(), 'sentry-forward-outcome-'));
@@ -266,6 +319,75 @@ try {
   reopened.close();
 } finally {
   rmSync(dir, { recursive: true, force: true });
+}
+
+// Upgrade a real v0.5-style SQLite outcomes table without deleting legacy evidence.
+const migrationDir = mkdtempSync(join(tmpdir(), 'sentry-forward-outcome-migration-'));
+const migrationPath = join(migrationDir, 'legacy.sqlite');
+try {
+  const legacyDb = new Database(migrationPath);
+  legacyDb.exec(`
+    PRAGMA foreign_keys=ON;
+    CREATE TABLE launches (
+      launch_id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      chain_id INTEGER NOT NULL,
+      block_number TEXT NOT NULL,
+      block_hash TEXT NOT NULL,
+      tx_hash TEXT NOT NULL,
+      log_index INTEGER NOT NULL,
+      factory TEXT NOT NULL,
+      token TEXT NOT NULL,
+      creator TEXT NOT NULL,
+      token_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      launch_type TEXT NOT NULL,
+      source_event TEXT NOT NULL,
+      observed_at_ms INTEGER NOT NULL,
+      UNIQUE(chain_id, tx_hash, token)
+    );
+    CREATE TABLE outcomes (
+      outcome_id TEXT PRIMARY KEY,
+      launch_id TEXT NOT NULL REFERENCES launches(launch_id) ON DELETE CASCADE,
+      horizon_ms INTEGER NOT NULL,
+      observed_block TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      UNIQUE(launch_id, horizon_ms)
+    );
+  `);
+  const migrationLaunch = makeLaunch('launch-migrate');
+  legacyDb.prepare(`
+    INSERT INTO launches (
+      launch_id, event_id, chain_id, block_number, block_hash, tx_hash, log_index,
+      factory, token, creator, token_id, name, symbol, launch_type, source_event, observed_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    migrationLaunch.launchId, migrationLaunch.eventId, migrationLaunch.chainId,
+    migrationLaunch.blockNumber.toString(), migrationLaunch.blockHash, migrationLaunch.txHash,
+    migrationLaunch.logIndex, migrationLaunch.factory, migrationLaunch.token, migrationLaunch.creator,
+    migrationLaunch.tokenId.toString(), migrationLaunch.name, migrationLaunch.symbol,
+    migrationLaunch.launchType, migrationLaunch.sourceEvent, migrationLaunch.observedAtMs
+  );
+  const old = legacyOutcome('launch-migrate', 'legacy-migration');
+  const oldPayload = JSON.stringify({ ...old, observedBlock: old.observedBlock.toString(), executableValueUsdMicros: old.executableValueUsdMicros.toString() });
+  legacyDb.prepare('INSERT INTO outcomes (outcome_id, launch_id, horizon_ms, observed_block, payload_json) VALUES (?, ?, ?, ?, ?)')
+    .run(old.outcomeId, old.launchId, old.horizonMs, old.observedBlock.toString(), oldPayload);
+  legacyDb.close();
+
+  const migrated = new SqliteStore(migrationPath, 57073);
+  const [preserved] = await migrated.listOutcomes();
+  assert.equal(preserved.outcomeId, 'legacy-migration');
+  assert.equal(preserved.policyVersion, undefined);
+  await migrated.putBaselineBatch(makeBatch('launch-migrate'));
+  assert.equal((await migrated.listBaselineBatchesPendingOutcome(ONE_MINUTE, 10)).length, 1, 'legacy row must not satisfy R1 slot');
+  await syncForwardOutcomes(new FakeOutcomeSource(), migrated, { ...options, horizons: [{ label: '1m', ms: ONE_MINUTE }] });
+  const migratedOutcomes = await migrated.listOutcomes();
+  assert.equal(migratedOutcomes.length, 2, 'migration must preserve legacy evidence and admit R1 beside it');
+  assert.equal(migratedOutcomes.filter((item) => item.policyVersion === FORWARD_OUTCOMES_R1).length, 1);
+  migrated.close();
+} finally {
+  rmSync(migrationDir, { recursive: true, force: true });
 }
 
 console.log('forward-outcomes-check: PASS');

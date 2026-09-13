@@ -132,6 +132,7 @@ export async function buildForwardOutcome(
     targetTimestampMs
   );
   if (!observed) return null;
+  const predecessor = await captureHorizonBoundary(source, observed, lowerBound, targetTimestampMs);
 
   await source.assertMarketAuthority(batch.market, observed.blockNumber);
   const state = await source.readMarketState(batch.market, observed.blockNumber);
@@ -149,10 +150,6 @@ export async function buildForwardOutcome(
   if (!primaryLeg.entry.executable || entryTokenAmount <= 0n) {
     status = 'UNVERIFIED';
     reason = 'BASELINE_ENTRY_NOT_EXECUTABLE';
-  } else if (state.activeLiquidity === 0n) {
-    executableValueUsdMicros = 0n;
-    executableReturnBps = 0n;
-    classification = 'LIQUIDITY_COLLAPSE';
   } else {
     const exit = await source.quoteTokenToBase({
       market: batch.market,
@@ -165,7 +162,7 @@ export async function buildForwardOutcome(
     if (!sellable) {
       executableValueUsdMicros = 0n;
       executableReturnBps = 0n;
-      classification = 'EXIT_FAILURE';
+      classification = state.activeLiquidity === 0n ? 'LIQUIDITY_COLLAPSE' : 'EXIT_FAILURE';
       reason = exit.failureReason;
     } else {
       try {
@@ -184,7 +181,7 @@ export async function buildForwardOutcome(
     }
   }
 
-  await assertEvidenceStable(source, launch, batch, observed);
+  await assertEvidenceStable(source, launch, batch, observed, predecessor, targetTimestampMs);
   await source.assertMarketAuthority(batch.market, observed.blockNumber);
 
   const withoutDigest: Omit<ForwardOutcomeReceipt, 'evidenceDigest'> = {
@@ -248,20 +245,53 @@ export function classifyExecutableOutcome(recoveryBps: bigint): NonNullable<Outc
   return 'NORMAL_WIN';
 }
 
+async function captureHorizonBoundary(
+  source: ForwardOutcomeSource,
+  observed: OutcomeBlockPoint,
+  lowerBound: bigint,
+  targetTimestampMs: number
+): Promise<OutcomeBlockPoint | null> {
+  if (observed.timestampMs < targetTimestampMs) {
+    throw new Error(`OUTCOME_HORIZON_BEFORE_TARGET:block=${observed.blockNumber}`);
+  }
+  if (observed.blockNumber === lowerBound) return null;
+  const predecessor = await source.getBlockPoint(observed.blockNumber - 1n);
+  if (predecessor.timestampMs >= targetTimestampMs) {
+    throw new Error(
+      `OUTCOME_HORIZON_NONMINIMAL:block=${observed.blockNumber}:predecessor=${predecessor.blockNumber}`
+    );
+  }
+  return predecessor;
+}
+
 async function assertEvidenceStable(
   source: ForwardOutcomeSource,
   launch: LaunchObserved,
   batch: ExecutableBaselineBatch,
-  observed: OutcomeBlockPoint
+  observed: OutcomeBlockPoint,
+  predecessor: OutcomeBlockPoint | null,
+  targetTimestampMs: number
 ): Promise<void> {
-  const [launchAgain, decisionAgain, observedAgain] = await Promise.all([
+  const [launchAgain, decisionAgain, observedAgain, predecessorAgain] = await Promise.all([
     source.getBlockPoint(launch.blockNumber),
     source.getBlockPoint(batch.decisionBlock),
-    source.getBlockPoint(observed.blockNumber)
+    source.getBlockPoint(observed.blockNumber),
+    predecessor ? source.getBlockPoint(predecessor.blockNumber) : Promise.resolve(null)
   ]);
   assertHash('OUTCOME_LAUNCH_REORG', launch.blockNumber, launch.blockHash, launchAgain.blockHash);
   assertHash('OUTCOME_BASELINE_REORG', batch.decisionBlock, batch.decisionBlockHash, decisionAgain.blockHash);
   assertHash('OUTCOME_REORG_DURING_READ', observed.blockNumber, observed.blockHash, observedAgain.blockHash);
+  if (observedAgain.timestampMs < targetTimestampMs) {
+    throw new Error(`OUTCOME_HORIZON_BEFORE_TARGET:block=${observed.blockNumber}`);
+  }
+  if (predecessor && predecessorAgain) {
+    assertHash('OUTCOME_REORG_DURING_BOUNDARY_READ', predecessor.blockNumber, predecessor.blockHash, predecessorAgain.blockHash);
+    if (predecessorAgain.timestampMs >= targetTimestampMs) {
+      throw new Error(
+        `OUTCOME_HORIZON_NONMINIMAL:block=${observed.blockNumber}:predecessor=${predecessor.blockNumber}`
+      );
+    }
+  }
 }
 
 function assertHash(label: string, blockNumber: bigint, expected: Hex, actual: Hex): void {

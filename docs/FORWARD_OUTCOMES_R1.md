@@ -40,12 +40,14 @@ Confirmations delay collection. They do not move the target timestamp.
 
 Every receipt records both `targetTimestampMs` and the actual canonical `observedTimestampMs` / block hash.
 
+The timestamp search is not accepted on trust after binary search. R1 captures the selected block's predecessor when one exists, requires that predecessor to remain strictly before the target timestamp, and rechecks both selected and predecessor block hashes/timestamps before persistence. A mixed-fork search therefore fails closed instead of storing a non-minimal horizon block.
+
 ## Executable valuation
 
 At the horizon block R1:
 
 1. verifies Ink chain and pinned Tsunami quoter/factory/pool identity;
-2. reads active pool liquidity;
+2. reads the pool's current active-liquidity scalar as raw evidence;
 3. quotes the entire persisted `$1` entry token amount back into its canonical base using Tsunami Quoter V2 at the exact horizon block;
 4. values the returned base at that same horizon block.
 
@@ -55,6 +57,8 @@ For WETH base, R1 quotes the returned WETH into USDT0 across Tsunami fee tiers `
 
 Provider/transport failures are not economic evidence and escape for retry. EVM quote reverts are executable-market evidence.
 
+The V3 active-liquidity scalar is **not** itself an executability verdict. A V3 swap can traverse an empty current range and reach initialized liquidity beyond it. R1 therefore always asks the executable quoter when a baseline position exists.
+
 ## Classification
 
 The existing candidate catastrophic threshold is frozen before forward data is collected:
@@ -63,11 +67,13 @@ The existing candidate catastrophic threshold is frozen before forward data is c
 
 R1 classification precedence is:
 
-1. `LIQUIDITY_COLLAPSE` — active pool liquidity is deterministically zero;
-2. `EXIT_FAILURE` — the persisted token amount cannot produce a positive executable base output;
+1. `LIQUIDITY_COLLAPSE` — the executable exit fails and the horizon active-liquidity scalar is zero;
+2. `EXIT_FAILURE` — the executable exit fails while current active liquidity is non-zero;
 3. `CATASTROPHIC_LOSS` — executable USD recovery is `<= 2,000 bps` of entry;
 4. `NORMAL_LOSS` — executable recovery is `> 2,000 bps` and `< 10,000 bps`;
 5. `NORMAL_WIN` — executable recovery is `>= 10,000 bps`.
+
+Zero current active liquidity **without** an exit failure does not classify as collapse.
 
 `FAT_TAIL_WIN` is deliberately **not emitted by R1**. A tail threshold must be preregistered in the later evaluation slice rather than chosen after seeing outcomes.
 
@@ -83,9 +89,10 @@ Before persistence R1 rechecks:
 
 - launch block hash against the canonical launch receipt;
 - baseline decision block hash against the persisted baseline receipt;
-- horizon observation block hash after all reads.
+- horizon observation block hash/timestamp after all reads;
+- the selected horizon block's predecessor hash/timestamp when a predecessor is inside the searchable range.
 
-Any movement fails the sync before persistence.
+Any movement or loss of the earliest-block boundary fails the sync before persistence.
 
 Outcome evidence is already rewound by its **own observation block** in the shared store. Therefore a launch and baseline can survive while a later reorged horizon receipt is deleted and rebuilt.
 
@@ -93,7 +100,15 @@ Outcome identity is deterministic from:
 
 `FORWARD_OUTCOMES_R1 + launch_id + baseline_id + horizon_ms`
 
-The full receipt is evidence-digested. Identical replay is idempotent; contradictory replay at the same `(launch, horizon)` fails with `OUTCOME_IDENTITY_CONFLICT`.
+The full receipt is evidence-digested. Identical R1 replay is idempotent; contradictory replay in the same policy slot fails with `OUTCOME_IDENTITY_CONFLICT`.
+
+## Legacy outcome coexistence
+
+Pre-R1 ledgers may already contain legacy `OutcomeReceipt` rows without a policy version. Those rows are evidence and are not deleted or silently promoted to R1.
+
+On SQLite upgrade, the outcomes table is migrated to add a nullable `policy_version` slot. Legacy rows remain `NULL`; `FORWARD_OUTCOMES_R1` rows use their explicit policy version. Uniqueness is enforced per `(launch, horizon, policy)` so a legacy row cannot block collection of the canonical R1 receipt.
+
+`CREATOR_OUTCOME_JOIN_V0` prefers an eligible `FORWARD_OUTCOMES_R1` receipt over a legacy receipt for the same launch/horizon, while retaining legacy behavior when no R1 receipt exists.
 
 ## Raw evidence retained
 
@@ -112,7 +127,7 @@ Each R1 receipt binds at least:
 - classification when resolved;
 - evidence digest.
 
-The Uniswap-V3-style liquidity scalar is retained raw as `poolActiveLiquidity`. R1 does **not** mislabel that scalar as USD liquidity.
+The Uniswap-V3-style liquidity scalar is retained raw as `poolActiveLiquidity`. R1 does **not** mislabel that scalar as USD liquidity or treat it alone as proof of non-executability.
 
 ## CLI
 
@@ -133,12 +148,15 @@ Environment variables:
 
 - all five frozen horizons are supported;
 - horizon selection uses canonical block timestamps, never wall-clock observation time;
+- selected horizon and predecessor are revalidated so mixed-fork binary search cannot persist a non-minimal block;
 - no observation occurs before the persisted baseline decision block;
 - the persisted `$1` token amount is used unchanged;
-- provider failure leaves the horizon pending;
-- quote revert / zero liquidity are economic evidence;
+- provider failure leaves the R1 horizon pending;
+- the executable quoter remains authoritative even when current active liquidity is zero;
+- quote failure plus zero active liquidity can label liquidity collapse; quote failure with active liquidity labels exit failure;
 - USD valuation gaps are UNVERIFIED rather than coerced into loss;
-- launch, baseline, and outcome blocks are hash-checked before persistence;
+- launch, baseline, outcome, and horizon-boundary blocks are hash-checked before persistence;
+- legacy receipts survive upgrade but do not satisfy or block R1 policy slots;
 - restart is idempotent;
 - own-block rewind removes horizon evidence without requiring launch deletion;
 - memory and SQLite behavior agree;

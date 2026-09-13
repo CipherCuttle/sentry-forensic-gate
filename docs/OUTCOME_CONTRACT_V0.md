@@ -19,11 +19,13 @@ The first live acquisition implementation is `FORWARD_OUTCOMES_R1`. It uses the 
 
 For `FORWARD_OUTCOMES_R1`, the resolved label vocabulary is applied with this precedence:
 
-1. `LIQUIDITY_COLLAPSE` — deterministic zero active liquidity;
-2. `EXIT_FAILURE` — no positive executable exit quote;
+1. `LIQUIDITY_COLLAPSE` — the executable exit fails and the current active-liquidity scalar is zero;
+2. `EXIT_FAILURE` — no positive executable exit quote while active liquidity is non-zero;
 3. `CATASTROPHIC_LOSS` — positive executable exit valued at `<= 20%` of the `$1` entry notional;
 4. `NORMAL_LOSS` — positive executable exit valued above `20%` but below entry;
 5. `NORMAL_WIN` — positive executable exit valued at or above entry.
+
+The current V3 active-liquidity scalar is retained as evidence but is not, by itself, proof of non-executability: an executable quote remains authoritative because swaps can traverse empty current ranges to later initialized liquidity.
 
 `FAT_TAIL_WIN` remains reserved and is not emitted by R1. Its threshold belongs to a later preregistered evaluation contract, not to post-hoc outcome acquisition.
 

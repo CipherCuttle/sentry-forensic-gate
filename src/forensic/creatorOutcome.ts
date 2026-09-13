@@ -2,6 +2,7 @@ import type { Hex } from '../domain.js';
 import { canonicalJson, sha256Hex } from '../evidence/canonical.js';
 import type { OutcomeReceipt } from '../evidence/receipts.js';
 import type { ProvenanceFact } from '../graph/provenance.js';
+import { FORWARD_OUTCOMES_R1 } from '../outcome/forwardTypes.js';
 import type { BaselineDecisionPoint } from '../shadow/baselineStore.js';
 
 export const CREATOR_OUTCOME_JOIN_V0 = 'CREATOR_OUTCOME_JOIN_V0' as const;
@@ -135,19 +136,30 @@ function selectEligibleOutcomes(
   priorLaunchIds: ReadonlySet<string>,
   decisionBlock: bigint
 ): OutcomeReceipt[] {
-  const byLaunch = new Map<string, OutcomeReceipt>();
+  const candidates = new Map<string, OutcomeReceipt[]>();
   for (const outcome of outcomes) {
     if (outcome.horizonMs !== CREATOR_OUTCOME_HORIZON_MS || !priorLaunchIds.has(outcome.launchId)) continue;
-    const existing = byLaunch.get(outcome.launchId);
-    if (existing) {
-      if (existing.outcomeId !== outcome.outcomeId || !sameOutcome(existing, outcome)) {
-        throw new Error(`CREATOR_OUTCOME_DUPLICATE_24H:${outcome.launchId}`);
-      }
-      continue;
-    }
-    if (outcome.observedBlock <= decisionBlock) byLaunch.set(outcome.launchId, outcome);
+    if (outcome.observedBlock > decisionBlock) continue;
+    const items = candidates.get(outcome.launchId) ?? [];
+    items.push(outcome);
+    candidates.set(outcome.launchId, items);
   }
-  return [...byLaunch.values()].sort((a, b) => a.launchId.localeCompare(b.launchId) || a.outcomeId.localeCompare(b.outcomeId));
+
+  const selected: OutcomeReceipt[] = [];
+  for (const [launchId, items] of candidates) {
+    const r1 = items.filter((outcome) => outcome.policyVersion === FORWARD_OUTCOMES_R1);
+    const pool = r1.length > 0 ? r1 : items.filter((outcome) => outcome.policyVersion === undefined);
+    if (pool.length === 0) continue;
+    const first = pool[0]!;
+    for (const other of pool.slice(1)) {
+      if (first.outcomeId !== other.outcomeId || !sameOutcome(first, other)) {
+        throw new Error(`CREATOR_OUTCOME_DUPLICATE_24H:${launchId}`);
+      }
+    }
+    selected.push(first);
+  }
+
+  return selected.sort((a, b) => a.launchId.localeCompare(b.launchId) || a.outcomeId.localeCompare(b.outcomeId));
 }
 
 function classify(outcomes: readonly OutcomeReceipt[], priorLaunchCount: number) {
