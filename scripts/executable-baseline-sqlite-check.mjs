@@ -12,7 +12,7 @@ const market = {
   fee: 10000, pool: '0xpool', positionLiquidity: 10n, activeLiquidity: 9n, sqrtPriceX96Before: 1n
 };
 class Source {
-  async getHeadBlockNumber(){ return 22n; }
+  async getHeadBlockNumber(){ return 24n; }
   async getBlockHash(block){ return block === 22n ? '0x22' : `0x${block}`; }
   async assertAuthority(){}
   async resolveMarket(){ return market; }
@@ -20,7 +20,7 @@ class Source {
   async quoteEntry({launch,decisionBlockHash,decisionBlock,notionalUsdMicros,amountIn}){ return {quoteId:`e-${notionalUsdMicros}`,launchId:launch.launchId,blockNumber:decisionBlock,blockHash:decisionBlockHash,observedAtMs:2,kind:'ENTRY',mode:'EXACT_INPUT',notionalUsdMicros,pool:market.pool,tokenIn:market.baseToken,tokenOut:market.launchedToken,fee:market.fee,amountIn,amountOut:amountIn*2n,executable:true}; }
   async quoteIndependentReverse({launch,decisionBlockHash,decisionBlock,notionalUsdMicros,amountIn}){ return {quoteId:`r-${notionalUsdMicros}`,launchId:launch.launchId,blockNumber:decisionBlock,blockHash:decisionBlockHash,observedAtMs:3,kind:'INDEPENDENT_REVERSE_EXIT',mode:'EXACT_INPUT',notionalUsdMicros,pool:market.pool,tokenIn:market.launchedToken,tokenOut:market.baseToken,fee:market.fee,amountIn,amountOut:amountIn/2n,executable:true}; }
 }
-const options={decisionDelayBlocks:2n,maxLaunchesPerSync:10,notionalsUsdMicros:[1_000_000n]};
+const options={decisionDelayBlocks:2n,confirmations:2n,maxLaunchesPerSync:10,notionalsUsdMicros:[1_000_000n]};
 const store=new SqliteStore(':memory:',57073);
 assert.equal(await store.putLaunch(launch),'INSERTED');
 assert.equal((await store.listLaunchesPendingBaseline(20n,10)).length,1);
