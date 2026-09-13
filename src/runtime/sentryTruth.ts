@@ -80,6 +80,13 @@ export async function syncSentryTruth(
 
   while (fromBlock <= targetBlock) {
     const toBlock = minBigInt(targetBlock, fromBlock + options.maxBatchBlocks - 1n);
+
+    // Historical catch-up must not cross an implementation epoch that has not been
+    // reviewed for this release. Checking both batch endpoints prevents a pre-upgrade
+    // range from being accepted merely because the current target uses the frozen impl.
+    await source.assertAuthority(fromBlock);
+    await source.assertAuthority(toBlock);
+
     const boundaryHashBefore = await source.getBlockHash(toBlock);
     const launches = await source.catchUp(fromBlock, toBlock);
     await assertLaunchBlocksStillCanonical(source, launches);

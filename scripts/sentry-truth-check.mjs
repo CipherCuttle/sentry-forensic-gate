@@ -114,6 +114,22 @@ await assert.rejects(syncSentryTruth(driftSource, driftStore, options), /SENTRY_
 assert.equal(driftStore.launchCount, 0);
 assert.equal(await driftStore.getCheckpoint(), null);
 
+// Historical catch-up may not cross an unreviewed implementation epoch even when
+// the current confirmed target itself still matches the frozen implementation.
+class HistoricalAuthorityDriftSource extends FakeSource {
+  async assertAuthority(block) {
+    if (block < 8n) throw new Error('SENTRY_PROXY_IMPLEMENTATION_DRIFT:HISTORICAL');
+  }
+}
+const historicalDriftSource = new HistoricalAuthorityDriftSource();
+const historicalDriftStore = new MemoryStore();
+await assert.rejects(
+  syncSentryTruth(historicalDriftSource, historicalDriftStore, options),
+  /SENTRY_PROXY_IMPLEMENTATION_DRIFT:HISTORICAL/
+);
+assert.equal(historicalDriftStore.launchCount, 0);
+assert.equal(await historicalDriftStore.getCheckpoint(), null);
+
 
 // A canonical duplicate may be observed at a different wall-clock time, but
 // contradictory chain-authority fields must fail closed instead of hiding under dedupe.

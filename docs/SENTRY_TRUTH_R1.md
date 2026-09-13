@@ -39,7 +39,7 @@ Each launch block hash is also re-read after `eth_getLogs`; a mismatch fails the
 ## Deliberate fail-closed choices
 
 - `SENTRY_START_BLOCK` is required; the CLI refuses to invent historical authority.
-- The canonical factory address, Ink chain ID, ERC-1967 implementation address, proxy code, and implementation code are checked at the confirmed target block. Any implementation drift halts before checkpoint advancement.
+- The canonical factory address, Ink chain ID, ERC-1967 implementation address, proxy code, and implementation code are checked at the confirmed target block and at both endpoints of every historical catch-up batch. Catch-up therefore cannot silently cross an unreviewed implementation epoch. Any implementation drift halts before checkpoint advancement.
 - Incomplete confirmed logs throw.
 - Contradictory duplicate deployment events throw.
 - Mutually inconsistent Sentry launch-type flags throw.
@@ -53,7 +53,7 @@ Each launch block hash is also re-read after `eth_getLogs`; a mismatch fails the
 - restart resumes after checkpoint;
 - duplicate launch insertion is idempotent only for matching authority data; contradictory duplicates fail closed;
 - checkpoint hash mismatch rewinds only while the persisted guard proves the reorg is within the configured horizon; deeper/unverifiable reorgs halt;
-- proxy implementation drift halts without advancing ingestion state;
+- proxy implementation drift at the target or either historical batch endpoint halts without advancing ingestion state;
 - commit-window reorg removes the just-written uncheckpointed batch;
 - SQLite persistence passes exactly-once/rewind smoke test;
 - CI build + selfcheck + truthcheck green.
