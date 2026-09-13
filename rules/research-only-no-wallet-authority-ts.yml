@@ -4,6 +4,10 @@ severity: error
 message: "Research-only boundary: wallet authority, signing, writes, deployment, and transaction broadcast identifiers are forbidden."
 note: "Use read-only public-client calls and shadow/counterfactual execution only."
 rule:
-  all:
-    - kind: identifier
-    - regex: '^(createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|deployContract|signTransaction|signMessage|signTypedData)$'
+  any:
+    - all:
+        - kind: identifier
+        - regex: '^(createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|deployContract|signTransaction|signMessage|signTypedData)$'
+    - all:
+        - kind: property_identifier
+        - regex: '^(createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|deployContract|signTransaction|signMessage|signTypedData)$'
