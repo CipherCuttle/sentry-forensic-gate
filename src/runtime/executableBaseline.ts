@@ -14,6 +14,7 @@ import type { ExecutableBaselineSource } from '../tsunami/ports.js';
 
 export interface ExecutableBaselineOptions {
   decisionDelayBlocks: bigint;
+  confirmations: bigint;
   maxLaunchesPerSync: number;
   notionalsUsdMicros?: readonly bigint[];
   pollIntervalMs?: number;
@@ -35,11 +36,12 @@ export async function syncExecutableBaseline(
 ): Promise<ExecutableBaselineReport> {
   validateOptions(options);
   const headBlock = await source.getHeadBlockNumber();
-  if (headBlock < options.decisionDelayBlocks) {
+  const maturityBlocks = options.decisionDelayBlocks + options.confirmations;
+  if (headBlock < maturityBlocks) {
     return { headBlock, eligibleThroughLaunchBlock: null, processed: 0, complete: 0, unverified: 0, duplicates: 0 };
   }
 
-  const maxLaunchBlock = headBlock - options.decisionDelayBlocks;
+  const maxLaunchBlock = headBlock - maturityBlocks;
   const launches = await store.listLaunchesPendingBaseline(maxLaunchBlock, options.maxLaunchesPerSync);
   const notionals = [...(options.notionalsUsdMicros ?? DEFAULT_BASELINE_NOTIONALS_USD_MICROS)];
   let processed = 0;
@@ -48,7 +50,7 @@ export async function syncExecutableBaseline(
   let duplicates = 0;
 
   for (const launch of launches) {
-    if (!isLaunchEligibleForDecision(launch, headBlock, options.decisionDelayBlocks)) continue;
+    if (!isLaunchEligibleForDecision(launch, headBlock, options.decisionDelayBlocks, options.confirmations)) continue;
     const batch = await buildBaselineBatch(source, launch, options.decisionDelayBlocks, notionals);
     const result = await store.putBaselineBatch(batch);
     processed += 1;
@@ -186,6 +188,7 @@ async function assertDecisionPointStable(source: ExecutableBaselineSource, block
 
 function validateOptions(options: ExecutableBaselineOptions): void {
   if (options.decisionDelayBlocks < 0n) throw new Error('decisionDelayBlocks must be >= 0');
+  if (options.confirmations < 0n) throw new Error('confirmations must be >= 0');
   if (!Number.isInteger(options.maxLaunchesPerSync) || options.maxLaunchesPerSync < 1 || options.maxLaunchesPerSync > 10_000) {
     throw new Error('maxLaunchesPerSync must be an integer in [1, 10000]');
   }
