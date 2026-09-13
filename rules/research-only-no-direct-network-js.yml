@@ -1,0 +1,16 @@
+id: research-only-no-direct-network-js
+language: JavaScript
+severity: error
+message: "Research-only boundary: direct network/RPC escape hatches are forbidden."
+note: "Use the reviewed read-only viem public-client adapters instead of direct network calls."
+rule:
+  any:
+    - all:
+        - kind: identifier
+        - regex: '^(f[e]tch|WebS[o]cket)$'
+    - all:
+        - kind: property_identifier
+        - regex: '^(f[e]tch|r[e]quest|WebS[o]cket)$'
+    - all:
+        - kind: string
+        - regex: '^[''\"](?:n[o]de:)?(?:h[t]tp|h[t]tps|n[e]t|t[l]s|child_pr[o]cess)[''\"]$'
