@@ -50,8 +50,24 @@ export interface FastVetShadowReceipt {
 }
 
 export async function evaluateFastVetShadow(rowsInput: readonly FastVetShadowRow[]): Promise<FastVetShadowReceipt> {
-  const rows = [...rowsInput].sort((a, b) => a.launchId.localeCompare(b.launchId));
+  const suppliedRows = [...rowsInput].sort((a, b) => a.launchId.localeCompare(b.launchId));
   const seen = new Set<string>();
+  for (const row of suppliedRows) {
+    if (seen.has(row.launchId)) throw new Error(`FAST_VET_SHADOW_DUPLICATE_LAUNCH:${row.launchId}`);
+    seen.add(row.launchId);
+    if (row.baseline && row.baseline.launchId !== row.launchId) {
+      throw new Error(`FAST_VET_SHADOW_BASELINE_BINDING_MISMATCH:${row.launchId}`);
+    }
+    if (row.creatorFeature && row.creatorFeature.launchId !== row.launchId) {
+      throw new Error(`FAST_VET_SHADOW_FEATURE_BINDING_MISMATCH:${row.launchId}`);
+    }
+  }
+
+  // Match the existing creator-signal control: buy every COMPLETE executable
+  // baseline. UNVERIFIED/missing baselines are outside the control cohort and
+  // must not depress retention or outcome-coverage denominators.
+  const rows = suppliedRows.filter((row) => row.baseline?.status === 'COMPLETE');
+
   let passCount = 0;
   let rejectCount = 0;
   let unknownCount = 0;
@@ -67,15 +83,6 @@ export async function evaluateFastVetShadow(rowsInput: readonly FastVetShadowRow
   const decisions: Array<{ launchId: string; decision: string; action: string; reasons: readonly string[] }> = [];
 
   for (const row of rows) {
-    if (seen.has(row.launchId)) throw new Error(`FAST_VET_SHADOW_DUPLICATE_LAUNCH:${row.launchId}`);
-    seen.add(row.launchId);
-    if (row.baseline && row.baseline.launchId !== row.launchId) {
-      throw new Error(`FAST_VET_SHADOW_BASELINE_BINDING_MISMATCH:${row.launchId}`);
-    }
-    if (row.creatorFeature && row.creatorFeature.launchId !== row.launchId) {
-      throw new Error(`FAST_VET_SHADOW_FEATURE_BINDING_MISMATCH:${row.launchId}`);
-    }
-
     const vet = evaluateFastVet({ baseline: row.baseline, creatorFeature: row.creatorFeature });
     decisions.push({ launchId: row.launchId, decision: vet.decision, action: vet.action, reasons: vet.reasons });
     if (vet.decision === 'PASS') passCount += 1;
