@@ -10,6 +10,7 @@ mkdirSync(dirname(dbPath), { recursive: true });
 
 const options: ExecutableBaselineOptions = {
   decisionDelayBlocks: envBigInt('BASELINE_DECISION_DELAY_BLOCKS', 2n),
+  confirmations: envBigInt('BASELINE_CONFIRMATIONS', 2n),
   maxLaunchesPerSync: envInt('BASELINE_MAX_LAUNCHES_PER_SYNC', 100),
   pollIntervalMs: envInt('BASELINE_POLL_INTERVAL_MS', 1500)
 };
