@@ -71,7 +71,7 @@ try {
     console.log(JSON.stringify(jsonSafe({
       runtimeVersion: 'RESEARCH_RUNTIME_ACTIVATION_R1',
       observedAtMs: Date.now(),
-      sentryAuthorityEpoch: {
+      authorityEpoch: {
         version: CURRENT_SENTRY_AUTHORITY_EPOCH.version,
         fromBlock: CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock,
         implementation: CURRENT_SENTRY_AUTHORITY_EPOCH.implementation,

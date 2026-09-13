@@ -62,7 +62,7 @@ console.log(JSON.stringify({
   chainId: INK_CHAIN_ID,
   factory: DEFAULT_SENTRY_LAUNCH_FACTORY,
   providerOrigin: providerOrigin(rpcUrl),
-  sentryAuthority: {
+  authority: {
     version: CURRENT_SENTRY_AUTHORITY_EPOCH.version,
     implementation: CURRENT_SENTRY_AUTHORITY_EPOCH.implementation,
     epochStartBlock: CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock.toString(),
