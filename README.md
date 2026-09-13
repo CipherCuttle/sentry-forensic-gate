@@ -34,7 +34,7 @@ pnpm start:truth
 
 ## Run executable baseline
 
-The baseline reads canonical launches already stored in the shared SQLite database. It evaluates each launch at a fixed point in time (`launch block + BASELINE_DECISION_DELAY_BLOCKS`, default `2`) and records `$0.25 / $0.50 / $1 / $2 / $5` read-only quote evidence.
+The baseline reads canonical launches already stored in the shared SQLite database. It evaluates each launch at a fixed point in time (`launch block + BASELINE_DECISION_DELAY_BLOCKS`, default `2`), waits `BASELINE_CONFIRMATIONS` (default `2`) before persistence, and records `$0.25 / $0.50 / $1 / $2 / $5` read-only quote evidence.
 
 ```bash
 set -a && . ./.env && set +a
