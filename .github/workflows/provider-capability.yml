@@ -8,6 +8,7 @@ on:
       - 'src/authority/**'
       - 'src/providerCapabilityCli.ts'
       - 'src/sentry/contracts.ts'
+      - 'src/sentry/viemSource.ts'
       - 'src/tsunami/viemBaselineSource.ts'
       - 'src/tsunami/contracts.ts'
 
