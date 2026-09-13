@@ -1,7 +1,7 @@
 import type { Hex } from '../domain.js';
+import type { ProvenanceEdge } from './provenance.js';
 
 export type EntityKind = 'TOKEN' | 'LAUNCH' | 'WALLET' | 'POOL' | 'FUNDING_SOURCE' | 'OUTCOME';
-export type EdgeKind = 'DEPLOYED_BY' | 'FUNDED_BY' | 'BOUGHT_BY' | 'TRANSFERRED_TO' | 'CREATED_POOL' | 'PREVIOUS_LAUNCH' | 'SHARED_FUNDER';
 
 export interface GraphNode {
   id: string;
@@ -9,13 +9,5 @@ export interface GraphNode {
   address?: Hex;
 }
 
-export interface GraphEdge {
-  id: string;
-  kind: EdgeKind;
-  from: string;
-  to: string;
-  observedBlock: bigint;
-  source: string;
-  confidence: number;
-  evidenceDigest: string;
-}
+/** @deprecated Use ProvenanceEdge. Kept as a source-compatible alias for forensic ports. */
+export type GraphEdge = ProvenanceEdge;

@@ -11,6 +11,7 @@ export * from './tsunami/contracts.js';
 export * from './tsunami/market.js';
 export * from './tsunami/ports.js';
 export * from './tsunami/viemBaselineSource.js';
+export * from './graph/provenance.js';
 export * from './graph/types.js';
 export * from './forensic/ports.js';
 export * from './shadow/ports.js';

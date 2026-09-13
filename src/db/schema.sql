@@ -22,6 +22,37 @@ CREATE TABLE IF NOT EXISTS launches (
 );
 CREATE INDEX IF NOT EXISTS idx_launches_block_number ON launches(chain_id, block_number);
 
+CREATE TABLE IF NOT EXISTS provenance_facts (
+  fact_id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  chain_id INTEGER NOT NULL,
+  launch_id TEXT NOT NULL UNIQUE REFERENCES launches(launch_id) ON DELETE CASCADE,
+  creator TEXT NOT NULL,
+  observed_block TEXT NOT NULL,
+  observed_block_hash TEXT NOT NULL,
+  log_index INTEGER NOT NULL,
+  source_event_id TEXT NOT NULL,
+  evidence_digest TEXT NOT NULL,
+  payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_provenance_facts_creator_order ON provenance_facts(chain_id, creator, observed_block, log_index);
+
+CREATE TABLE IF NOT EXISTS provenance_edges (
+  edge_id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  chain_id INTEGER NOT NULL,
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  evidence_class TEXT NOT NULL,
+  observed_block TEXT NOT NULL,
+  observed_block_hash TEXT NOT NULL,
+  source_fact_ids_json TEXT NOT NULL,
+  derivation_version TEXT NOT NULL,
+  evidence_digest TEXT NOT NULL,
+  payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_provenance_edges_order ON provenance_edges(chain_id, observed_block, edge_id);
+
 CREATE TABLE IF NOT EXISTS decisions (
   decision_id TEXT PRIMARY KEY,
   launch_id TEXT NOT NULL REFERENCES launches(launch_id) ON DELETE CASCADE,
@@ -89,17 +120,6 @@ CREATE TABLE IF NOT EXISTS baseline_quotes (
   UNIQUE(baseline_id, kind, notional_usd_micros)
 );
 CREATE INDEX IF NOT EXISTS idx_baseline_quotes_block ON baseline_quotes(block_number);
-
-CREATE TABLE IF NOT EXISTS graph_edges (
-  edge_id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL,
-  from_id TEXT NOT NULL,
-  to_id TEXT NOT NULL,
-  observed_block TEXT NOT NULL,
-  source TEXT NOT NULL,
-  confidence REAL NOT NULL,
-  evidence_digest TEXT NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS outcomes (
   outcome_id TEXT PRIMARY KEY,
