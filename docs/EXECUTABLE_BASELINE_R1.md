@@ -73,7 +73,7 @@ Database rewind also deletes evidence according to **its own observation block**
 
 A baseline batch and all quote rows are written in one SQLite transaction. `launch_id` is unique in `baseline_batches`; replays with the same authority digest are idempotent, while contradictory replay data throws `BASELINE_IDENTITY_CONFLICT`.
 
-EVM quote reverts are stored as non-executable economic evidence. Structural/provider evidence gaps become terminal `UNVERIFIED` for that frozen decision point. Authority drift and reorg ambiguity halt instead of being downgraded to ordinary missing evidence.
+EVM quote reverts are stored as non-executable economic evidence. Deterministic structural evidence gaps can become terminal `UNVERIFIED` for that frozen decision point. Provider/transport failures and other unclassified read failures halt the sync and leave the launch pending for retry rather than becoming market evidence. Authority drift and reorg ambiguity also halt instead of being downgraded to ordinary missing evidence.
 
 ## Safety boundary
 
