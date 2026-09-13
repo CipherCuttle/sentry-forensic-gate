@@ -41,8 +41,12 @@ const ink = defineChain({
 });
 
 const rpcUrl = process.env.INK_RPC_URL ?? DEFAULT_INK_RPC_URL;
-const maxBatchBlocks = envBigInt('INFRA_DISCOVERY_MAX_BATCH_BLOCKS', 100_000n);
+const maxBatchBlocks = envBigInt('INFRA_DISCOVERY_MAX_BATCH_BLOCKS', 10_000n);
+const batchDelayMs = envInt('INFRA_DISCOVERY_BATCH_DELAY_MS', 750);
+const maxRateLimitRetries = envInt('INFRA_DISCOVERY_RATE_LIMIT_RETRIES', 5);
 if (maxBatchBlocks < 1n) throw new Error('INFRA_DISCOVERY_MAX_BATCH_BLOCKS must be >= 1');
+if (batchDelayMs < 0) throw new Error('INFRA_DISCOVERY_BATCH_DELAY_MS must be >= 0');
+if (maxRateLimitRetries < 0) throw new Error('INFRA_DISCOVERY_RATE_LIMIT_RETRIES must be >= 0');
 
 const client = createPublicClient({ chain: ink, transport: http(rpcUrl) });
 const head = await client.getBlockNumber();
@@ -74,15 +78,11 @@ const updates: Array<{
   newNpm: Address;
 }> = [];
 
+let batchIndex = 0;
 for (let fromBlock = startBlock; fromBlock <= confirmedBlock; fromBlock += maxBatchBlocks) {
   const toBlock = minBigInt(confirmedBlock, fromBlock + maxBatchBlocks - 1n);
-  const logs = await client.getLogs({
-    address: DEFAULT_SENTRY_LAUNCH_FACTORY as Address,
-    event: npmUpdatedEvent,
-    fromBlock,
-    toBlock,
-    strict: true
-  });
+  if (batchIndex > 0 && batchDelayMs > 0) await sleep(batchDelayMs);
+  const logs = await readNpmUpdatedLogsWithRetry(fromBlock, toBlock);
 
   for (const log of logs) {
     if (log.blockNumber === null || log.blockHash === null || log.transactionHash === null || log.logIndex === null) {
@@ -101,6 +101,7 @@ for (let fromBlock = startBlock; fromBlock <= confirmedBlock; fromBlock += maxBa
       newNpm: args.newNPM
     });
   }
+  batchIndex += 1;
 }
 
 updates.sort((a, b) => {
@@ -152,6 +153,12 @@ console.log(JSON.stringify(jsonSafe({
   },
   head,
   confirmedBlock,
+  discovery: {
+    maxBatchBlocks,
+    batchDelayMs,
+    maxRateLimitRetries,
+    batchesScanned: batchIndex
+  },
   sentryInfrastructure: {
     npmAtAuthorityStart: startNpm,
     currentNpm,
@@ -172,6 +179,33 @@ console.log(JSON.stringify(jsonSafe({
   status: 'PASS'
 })));
 
+async function readNpmUpdatedLogsWithRetry(fromBlock: bigint, toBlock: bigint) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await client.getLogs({
+        address: DEFAULT_SENTRY_LAUNCH_FACTORY as Address,
+        event: npmUpdatedEvent,
+        fromBlock,
+        toBlock,
+        strict: true
+      });
+    } catch (error) {
+      if (!isRateLimitError(error) || attempt >= maxRateLimitRetries) throw error;
+      const delayMs = Math.min(30_000, 2_000 * (2 ** attempt));
+      console.error(JSON.stringify({
+        event: 'INFRA_DISCOVERY_RATE_LIMIT_RETRY',
+        fromBlock: fromBlock.toString(),
+        toBlock: toBlock.toString(),
+        attempt: attempt + 1,
+        delayMs
+      }));
+      await sleep(delayMs);
+      attempt += 1;
+    }
+  }
+}
+
 async function readSentryAddress(
   functionName: 'npm' | 'GEN1_NPM' | 'MIGRATION_NPM',
   blockNumber: bigint
@@ -189,6 +223,19 @@ function envBigInt(name: string, fallback: bigint): bigint {
   return raw ? BigInt(raw) : fallback;
 }
 
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value)) throw new Error(`${name} must be an integer`);
+  return value;
+}
+
+function isRateLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? `${error.name}:${error.message}` : String(error);
+  return /rate limit|too many requests|429|code.?-32016/i.test(message);
+}
+
 function requireAddress(label: string, actual: Address, expected: Address): void {
   if (!sameAddress(actual, expected)) throw new Error(`${label}_DRIFT:expected=${expected}:actual=${actual}`);
 }
@@ -204,6 +251,10 @@ function minBigInt(a: bigint, b: bigint): bigint {
 function providerOrigin(url: string): string {
   const parsed = new URL(url);
   return `${parsed.protocol}//${parsed.host}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function jsonSafe(value: unknown): unknown {
