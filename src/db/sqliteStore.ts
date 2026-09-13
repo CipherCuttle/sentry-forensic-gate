@@ -3,11 +3,13 @@ import type { Hex, LaunchObserved } from '../domain.js';
 import { canonicalJson } from '../evidence/canonical.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
+import { flattenBaselineQuotes, type ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
+import type { BaselineStore } from '../shadow/baselineStore.js';
 import type { ShadowEntry } from '../shadow/ports.js';
 import { SCHEMA_SQL } from './schema.js';
 import type { ChainCheckpoint, Store } from './store.js';
 
-export class SqliteStore implements Store {
+export class SqliteStore implements Store, BaselineStore {
   private readonly db: Database.Database;
 
   constructor(path: string, private readonly chainId: number) {
@@ -107,6 +109,85 @@ export class SqliteStore implements Store {
     return result.changes === 1 ? 'INSERTED' : 'DUPLICATE';
   }
 
+  async listLaunchesPendingBaseline(maxLaunchBlock: bigint, limit: number): Promise<LaunchObserved[]> {
+    const rows = this.db.prepare(`
+      SELECT l.*
+      FROM launches l
+      LEFT JOIN baseline_batches b ON b.launch_id = l.launch_id
+      WHERE l.chain_id = ?
+        AND b.launch_id IS NULL
+        AND CAST(l.block_number AS INTEGER) <= CAST(? AS INTEGER)
+      ORDER BY CAST(l.block_number AS INTEGER) ASC, l.log_index ASC
+      LIMIT ?
+    `).all(this.chainId, maxLaunchBlock.toString(), limit) as LaunchRow[];
+    return rows.map(fromLaunchRow);
+  }
+
+  async putBaselineBatch(batch: ExecutableBaselineBatch): Promise<'INSERTED' | 'DUPLICATE'> {
+    const tx = this.db.transaction((): 'INSERTED' | 'DUPLICATE' => {
+      const result = this.db.prepare(`
+        INSERT OR IGNORE INTO baseline_batches (
+          baseline_id, launch_id, policy_version, decision_block, decision_block_hash,
+          status, reason, authority_digest, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        batch.baselineId,
+        batch.launchId,
+        batch.policyVersion,
+        batch.decisionBlock.toString(),
+        batch.decisionBlockHash.toLowerCase(),
+        batch.status,
+        batch.reason ?? null,
+        batch.authorityDigest,
+        canonicalJson(batch)
+      );
+
+      if (result.changes === 0) {
+        const existing = this.db.prepare(`
+          SELECT baseline_id, authority_digest
+          FROM baseline_batches
+          WHERE baseline_id = ? OR launch_id = ?
+          LIMIT 1
+        `).get(batch.baselineId, batch.launchId) as { baseline_id: string; authority_digest: string } | undefined;
+        if (!existing || existing.baseline_id !== batch.baselineId || existing.authority_digest !== batch.authorityDigest) {
+          throw new Error(`BASELINE_IDENTITY_CONFLICT:${batch.launchId}`);
+        }
+        return 'DUPLICATE';
+      }
+
+      const insertQuote = this.db.prepare(`
+        INSERT INTO baseline_quotes (
+          quote_id, baseline_id, launch_id, block_number, block_hash, kind, mode,
+          notional_usd_micros, pool, token_in, token_out, fee, amount_in, amount_out,
+          executable, failure_reason, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const quote of flattenBaselineQuotes(batch)) {
+        insertQuote.run(
+          quote.quoteId,
+          batch.baselineId,
+          batch.launchId,
+          quote.blockNumber.toString(),
+          quote.blockHash.toLowerCase(),
+          quote.kind,
+          quote.mode,
+          quote.notionalUsdMicros.toString(),
+          quote.pool.toLowerCase(),
+          quote.tokenIn.toLowerCase(),
+          quote.tokenOut.toLowerCase(),
+          quote.fee,
+          quote.amountIn.toString(),
+          quote.amountOut.toString(),
+          quote.executable ? 1 : 0,
+          quote.failureReason ?? null,
+          canonicalJson(quote)
+        );
+      }
+      return 'INSERTED';
+    });
+    return tx();
+  }
+
   async getCheckpoint(): Promise<ChainCheckpoint | null> {
     const row = this.db.prepare(`
       SELECT block_number, block_hash, reorg_guard_block, reorg_guard_hash
@@ -146,6 +227,30 @@ export class SqliteStore implements Store {
 
   async rewindFromBlock(fromBlock: bigint): Promise<void> {
     const tx = this.db.transaction(() => {
+      // Invalidate evidence by the block at which the evidence itself was observed,
+      // even when the launch happened before the reorg boundary and remains canonical.
+      this.db.prepare(`
+        DELETE FROM baseline_batches
+        WHERE CAST(decision_block AS INTEGER) >= CAST(? AS INTEGER)
+      `).run(fromBlock.toString());
+      this.db.prepare(`
+        DELETE FROM decisions
+        WHERE CAST(decision_block AS INTEGER) >= CAST(? AS INTEGER)
+      `).run(fromBlock.toString());
+      this.db.prepare(`
+        DELETE FROM quote_observations
+        WHERE CAST(block_number AS INTEGER) >= CAST(? AS INTEGER)
+      `).run(fromBlock.toString());
+      this.db.prepare(`
+        DELETE FROM outcomes
+        WHERE CAST(observed_block AS INTEGER) >= CAST(? AS INTEGER)
+      `).run(fromBlock.toString());
+      this.db.prepare(`
+        DELETE FROM shadow_entries
+        WHERE CAST(json_extract(payload_json, '$.entry.blockNumber') AS INTEGER) >= CAST(? AS INTEGER)
+           OR CAST(json_extract(payload_json, '$.immediateExit.blockNumber') AS INTEGER) >= CAST(? AS INTEGER)
+      `).run(fromBlock.toString(), fromBlock.toString());
+
       this.db.prepare(`
         DELETE FROM launches WHERE chain_id = ? AND CAST(block_number AS INTEGER) >= CAST(? AS INTEGER)
       `).run(this.chainId, fromBlock.toString());
