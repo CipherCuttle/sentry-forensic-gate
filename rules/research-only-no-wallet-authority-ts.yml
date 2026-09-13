@@ -6,4 +6,4 @@ note: "Use read-only public-client calls and shadow/counterfactual execution onl
 rule:
   all:
     - kind: identifier
-    - regex: '^(createWalletClient|writeContract|sendTransaction|sendRawTransaction|deployContract|signTransaction|signMessage|signTypedData)$'
+    - regex: '^(createWalletClient|privateKeyToAccount|mnemonicToAccount|hdKeyToAccount|writeContract|sendTransaction|sendRawTransaction|deployContract|signTransaction|signMessage|signTypedData)$'
