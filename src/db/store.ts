@@ -14,6 +14,7 @@ export interface ChainCheckpoint {
 export interface Store {
   putLaunch(launch: LaunchObserved): Promise<'INSERTED' | 'DUPLICATE'>;
   getLaunch(launchId: string): Promise<LaunchObserved | null>;
+  listLaunchesMissingProvenance(): Promise<LaunchObserved[]>;
   putProvenanceFact(fact: ProvenanceFact): Promise<'INSERTED' | 'DUPLICATE'>;
   listProvenanceFacts(): Promise<ProvenanceFact[]>;
   replaceProvenanceEdges(edges: ProvenanceEdge[]): Promise<void>;
