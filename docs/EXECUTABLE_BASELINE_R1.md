@@ -8,7 +8,7 @@ For V1 the decision block is:
 
 `launch_block + BASELINE_DECISION_DELAY_BLOCKS`
 
-Default delay: **2 blocks**.
+Default delay: **2 blocks**. The worker then waits an additional **2 confirmations by default** before persisting that fixed decision block. Confirmations delay observation; they do not move the decision point.
 
 The baseline measures five target notionals: `$0.25`, `$0.50`, `$1`, `$2`, `$5`.
 
@@ -65,7 +65,7 @@ A later phase may add a true sequential state-transition simulator. V1 must not 
 
 ## Reorg semantics
 
-Baseline batches are keyed to their own decision block/hash. The block hash is checked before and after all reads. A moving decision block aborts without persistence.
+The worker does not persist a decision block until `head >= decision_block + BASELINE_CONFIRMATIONS`. Baseline batches are keyed to their own decision block/hash. The block hash is checked before and after all reads. A moving decision block aborts without persistence.
 
 Database rewind also deletes evidence according to **its own observation block**, not only when its parent launch is deleted. This fixes the case where a launch at block N survives while its baseline at block N+2 is reorged away.
 
