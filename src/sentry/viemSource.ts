@@ -149,7 +149,7 @@ export class ViemSentryLaunchSource {
 
     for (const event of events.slice(1)) {
       if (
-        event.blockNumber0!== first.blockNumber ||
+        event.blockNumber !== first.blockNumber ||
         event.blockHash.toLowerCase() !== first.blockHash.toLowerCase() ||
         event.transactionHash.toLowerCase() !== first.transactionHash.toLowerCase() ||
         event.token.toLowerCase() !== first.token.toLowerCase() ||
