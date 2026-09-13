@@ -23,7 +23,8 @@
     "start:creator-signal": "node dist/creatorSignalCli.js",
     "start:runtime": "node dist/researchRuntimeCli.js",
     "start:activation-receipt": "node dist/activationReceiptCli.js",
-    "start:provider-capability": "node dist/providerCapabilityCli.js"
+    "start:provider-capability": "node dist/providerCapabilityCli.js",
+    "start:infra-discovery": "node dist/executableInfraDiscoveryCli.js"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",
