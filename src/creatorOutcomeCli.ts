@@ -1,5 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH } from './authority/executableInfraAuthority.js';
+import { assertLedgerWithinAuthorizedEpoch } from './authority/ledgerEpochGuard.js';
 import { SqliteStore } from './db/sqliteStore.js';
 import {
   CREATOR_OUTCOME_HORIZON_MS,
@@ -10,6 +12,7 @@ import { INK_CHAIN_ID } from './sentry/contracts.js';
 
 const dbPath = resolve(process.env.DB_PATH ?? './data/sentry-forensic-gate.sqlite');
 mkdirSync(dirname(dbPath), { recursive: true });
+assertLedgerWithinAuthorizedEpoch(dbPath, INK_CHAIN_ID, CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock);
 const store = new SqliteStore(dbPath, INK_CHAIN_ID);
 
 try {
