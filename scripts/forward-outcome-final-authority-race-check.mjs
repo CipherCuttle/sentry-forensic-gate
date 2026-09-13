@@ -82,11 +82,11 @@ const batch = {
   reverseSemantics: 'INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL'
 };
 
-class FinalAuthorityRaceSource {
+class BaseRaceSource {
   authorityCalls = 0;
   reorged = false;
 
-  async getBlockPoint(blockNumber) {
+  point(blockNumber) {
     const timestampMs = 900_000 + Number(blockNumber) * 10_000;
     return {
       blockNumber,
@@ -95,29 +95,54 @@ class FinalAuthorityRaceSource {
     };
   }
 
-  async assertMarketAuthority() {
-    this.authorityCalls += 1;
-    // Simulate the shallow reorg landing during the *final* authority pass.
-    if (this.authorityCalls === 2) this.reorged = true;
-  }
-
+  async getBlockPoint(blockNumber) { return this.point(blockNumber); }
+  async assertMarketAuthority() { this.authorityCalls += 1; }
   async readMarketState() { return { activeLiquidity: 100n }; }
   async quoteTokenToBase() { return { executable: true, amountOut: 150_000n }; }
   async valueBaseAmountUsdMicros() { return 150_000n; }
 }
 
-const source = new FinalAuthorityRaceSource();
+class FinalAuthorityRaceSource extends BaseRaceSource {
+  async assertMarketAuthority() {
+    this.authorityCalls += 1;
+    // Simulate the shallow reorg landing during the *final* authority pass.
+    if (this.authorityCalls === 2) this.reorged = true;
+  }
+}
+
+class FinalValidationRaceSource extends BaseRaceSource {
+  async getBlockPoint(blockNumber) {
+    const point = this.point(blockNumber);
+    // Once the final authority pass has completed, let the predecessor read
+    // return from the old fork and then land the reorg. A correct implementation
+    // must read the selected horizon block after this and observe the new hash.
+    if (this.authorityCalls >= 2 && blockNumber === 15n && !this.reorged) {
+      this.reorged = true;
+    }
+    return point;
+  }
+}
+
 const confirmedHeadPoint = {
   blockNumber: 18n,
   blockHash: hash(18n),
   timestampMs: 1_080_000
 };
 
+const authorityRace = new FinalAuthorityRaceSource();
 await assert.rejects(
-  buildForwardOutcome(source, launch, batch, ONE_MINUTE, confirmedHeadPoint),
+  buildForwardOutcome(authorityRace, launch, batch, ONE_MINUTE, confirmedHeadPoint),
   /OUTCOME_REORG_DURING_READ/,
   'a fork change during the final authority read must be caught by the last canonicality check'
 );
-assert.equal(source.authorityCalls, 2);
+assert.equal(authorityRace.authorityCalls, 2);
+
+const validationRace = new FinalValidationRaceSource();
+await assert.rejects(
+  buildForwardOutcome(validationRace, launch, batch, ONE_MINUTE, confirmedHeadPoint),
+  /OUTCOME_REORG_DURING_READ/,
+  'the selected horizon hash must be re-read after predecessor validation'
+);
+assert.equal(validationRace.authorityCalls, 2);
 
 console.log('forward-outcome-final-authority-race-check: PASS');
