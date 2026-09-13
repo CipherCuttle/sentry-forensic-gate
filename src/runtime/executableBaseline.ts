@@ -154,9 +154,10 @@ export async function buildBaselineBatch(
     const authorityDigest = await deriveBaselineAuthorityDigest(withoutDigest);
     return { ...withoutDigest, authorityDigest };
   } catch (error) {
-    // Reorg and authority drift are not ordinary missing evidence. They invalidate the
-    // observation point itself and must escape without writing a terminal batch.
-    if (isAuthorityOrReorgError(error)) throw error;
+    // Only deterministic structural gaps may become terminal per-launch evidence.
+    // Authority/reorg failures and unclassified errors (including provider/transport
+    // failures) must escape so the launch remains pending for a later canonical retry.
+    if (isAuthorityOrReorgError(error) || !isTerminalEvidenceGap(error)) throw error;
 
     await assertDecisionPointStable(source, decisionBlock, decisionBlockHash);
     await source.assertAuthority(decisionBlock);
@@ -206,6 +207,11 @@ function stableErrorReason(error: unknown): string {
 function isAuthorityOrReorgError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /(?:_DRIFT|AUTHORITY_CODE_MISSING|SENTRY_PROXY_IMPLEMENTATION_MISSING|BASELINE_REORG_DURING_READ)/.test(message);
+}
+
+function isTerminalEvidenceGap(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /^(?:MARKET_TOKEN_POSITION_MISMATCH|UNSUPPORTED_SENTRY_BASE|EMPTY_SENTRY_POSITION|POOL_TOKEN_IDENTITY_MISMATCH|POOL_FEE_IDENTITY_MISMATCH|SENTRY_POOL_MISSING|SENTRY_POOL_CODE_MISSING|UNSUPPORTED_BASE_FOR_USD_CALIBRATION|USD_CALIBRATION_UNAVAILABLE|INVALID_TOKEN_DECIMALS|USD_NOTIONAL_ROUNDS_TO_ZERO)(?::|$)/.test(message);
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
