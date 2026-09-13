@@ -1,17 +1,21 @@
 import type { LaunchObserved } from '../domain.js';
 import type { DecisionReceipt, OutcomeReceipt } from '../evidence/receipts.js';
 import { normalizeLaunchHex, sameLaunchAuthority } from '../sentry/identity.js';
+import type { ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
+import type { BaselineStore } from '../shadow/baselineStore.js';
 import type { ShadowEntry } from '../shadow/ports.js';
 import type { ChainCheckpoint, Store } from './store.js';
 
-export class MemoryStore implements Store {
+export class MemoryStore implements Store, BaselineStore {
   private launches = new Map<string, LaunchObserved>();
   private decisions = new Map<string, DecisionReceipt>();
   private shadow = new Map<string, ShadowEntry>();
   private outcomes = new Map<string, OutcomeReceipt>();
+  private baselines = new Map<string, ExecutableBaselineBatch>();
   private checkpoint: ChainCheckpoint | null = null;
 
   get launchCount(): number { return this.launches.size; }
+  get baselineCount(): number { return this.baselines.size; }
 
   async putLaunch(v: LaunchObserved): Promise<'INSERTED' | 'DUPLICATE'> {
     const normalized = normalizeLaunchHex(v);
@@ -42,6 +46,26 @@ export class MemoryStore implements Store {
   }
   async putOutcome(v: OutcomeReceipt) { return this.insertMap(this.outcomes, v.outcomeId, v); }
 
+  async listLaunchesPendingBaseline(maxLaunchBlock: bigint, limit: number): Promise<LaunchObserved[]> {
+    return [...this.launches.values()]
+      .filter((launch) => launch.blockNumber <= maxLaunchBlock && !this.baselines.has(launch.launchId))
+      .sort((a, b) => a.blockNumber === b.blockNumber ? a.logIndex - b.logIndex : a.blockNumber < b.blockNumber ? -1 : 1)
+      .slice(0, limit);
+  }
+
+  async putBaselineBatch(batch: ExecutableBaselineBatch): Promise<'INSERTED' | 'DUPLICATE'> {
+    if (!this.launches.has(batch.launchId)) throw new Error(`BASELINE_LAUNCH_MISSING:${batch.launchId}`);
+    const existing = this.baselines.get(batch.launchId);
+    if (existing) {
+      if (existing.baselineId !== batch.baselineId || existing.authorityDigest !== batch.authorityDigest) {
+        throw new Error(`BASELINE_IDENTITY_CONFLICT:${batch.launchId}`);
+      }
+      return 'DUPLICATE';
+    }
+    this.baselines.set(batch.launchId, batch);
+    return 'INSERTED';
+  }
+
   async getCheckpoint(): Promise<ChainCheckpoint | null> {
     return this.checkpoint ? { ...this.checkpoint } : null;
   }
@@ -57,16 +81,30 @@ export class MemoryStore implements Store {
   }
 
   async rewindFromBlock(fromBlock: bigint): Promise<void> {
-    const removed = new Set<string>();
+    const removedLaunches = new Set<string>();
     for (const [id, launch] of this.launches) {
       if (launch.blockNumber >= fromBlock) {
-        removed.add(id);
+        removedLaunches.add(id);
         this.launches.delete(id);
       }
     }
-    for (const [id, receipt] of this.decisions) if (removed.has(receipt.launchId)) this.decisions.delete(id);
-    for (const [id, entry] of this.shadow) if (removed.has(entry.launchId)) this.shadow.delete(id);
-    for (const [id, receipt] of this.outcomes) if (removed.has(receipt.launchId)) this.outcomes.delete(id);
+
+    // Evidence is invalidated by its own observation block as well as by launch ancestry.
+    for (const [id, receipt] of this.decisions) {
+      if (removedLaunches.has(receipt.launchId) || receipt.decisionBlock >= fromBlock) this.decisions.delete(id);
+    }
+    for (const [id, entry] of this.shadow) {
+      if (removedLaunches.has(entry.launchId) || entry.entry.blockNumber >= fromBlock || entry.immediateExit.blockNumber >= fromBlock) {
+        this.shadow.delete(id);
+      }
+    }
+    for (const [id, receipt] of this.outcomes) {
+      if (removedLaunches.has(receipt.launchId) || receipt.observedBlock >= fromBlock) this.outcomes.delete(id);
+    }
+    for (const [launchId, batch] of this.baselines) {
+      if (removedLaunches.has(launchId) || batch.decisionBlock >= fromBlock) this.baselines.delete(launchId);
+    }
+
     if (this.checkpoint && this.checkpoint.blockNumber >= fromBlock) this.checkpoint = null;
   }
 
