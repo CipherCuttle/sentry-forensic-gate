@@ -37,7 +37,7 @@ console.log(JSON.stringify({
   receiptVersion: 'PROVIDER_CAPABILITY_R1',
   chainId: INK_CHAIN_ID,
   factory: DEFAULT_SENTRY_LAUNCH_FACTORY,
-  rpcUrl,
+  providerOrigin: providerOrigin(rpcUrl),
   authority: {
     version: CURRENT_SENTRY_AUTHORITY_EPOCH.version,
     implementation: CURRENT_SENTRY_AUTHORITY_EPOCH.implementation,
@@ -65,3 +65,8 @@ console.log(JSON.stringify({
   executableQuoteProbe: 'DEFERRED_TO_CANARY_LAUNCH',
   status: 'PASS'
 }));
+
+function providerOrigin(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.protocol}//${parsed.host}`;
+}
