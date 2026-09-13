@@ -2,9 +2,11 @@ id: research-only-no-wallet-authority-js
 valid:
   - "const createPublicClient = 1; const readContract = 2;"
   - "const hashEvidence = value => value;"
+  - "client.readContract();"
 invalid:
   - "const createWalletClient = 1;"
   - "const privateKeyToAccount = 1;"
   - "const writeContract = 1;"
   - "const sendRawTransaction = 1;"
   - "const signMessage = 1;"
+  - "client.__researchBoundaryForbiddenTestOnly();"
