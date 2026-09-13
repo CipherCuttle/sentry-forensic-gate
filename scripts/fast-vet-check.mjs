@@ -90,11 +90,11 @@ function feature(launchId, { coverage = 'NO_HISTORY', adverse = 0 } = {}) {
   };
 }
 
-function outcome(launchId, classification, valueUsdMicros) {
+function outcome(launchId, classification, valueUsdMicros, horizonMs = 86_400_000) {
   return {
-    outcomeId: `outcome-${launchId}`,
+    outcomeId: `outcome-${launchId}-${horizonMs}`,
     launchId,
-    horizonMs: 86_400_000,
+    horizonMs,
     observedBlock: 100n,
     sellable: !['EXIT_FAILURE', 'LIQUIDITY_COLLAPSE'].includes(classification),
     classification,
@@ -113,7 +113,7 @@ function outcome(launchId, classification, valueUsdMicros) {
     executableValueUsdMicros: valueUsdMicros,
     executableReturnBps: valueUsdMicros * 10_000n / 1_000_000n,
     poolActiveLiquidity: 1n,
-    evidenceDigest: `outcome-evidence-${launchId}`
+    evidenceDigest: `outcome-evidence-${launchId}-${horizonMs}`
   };
 }
 
@@ -151,5 +151,11 @@ assert.deepEqual(first.metrics, {
   retainedUpsideExcessUsdMicros: 2_000_000n,
   upsideCaptureBps: 6666
 });
+
+const wrongHorizon = await evaluateFastVetShadow([
+  { launchId: 'short', baseline: baseline('short'), creatorFeature: feature('short'), targetOutcome: outcome('short', 'CATASTROPHIC_LOSS', 0n, 300_000) }
+]);
+assert.equal(wrongHorizon.metrics.resolvedOutcomeCount, 0);
+assert.equal(wrongHorizon.metrics.controlAdverseCount, 0);
 
 console.log('fast-vet-check: PASS');
