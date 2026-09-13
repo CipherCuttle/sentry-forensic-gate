@@ -1,0 +1,15 @@
+{
+  "name": "sentry-forensic-gate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "selfcheck": "node scripts/selfcheck.mjs",
+    "test": "pnpm build && pnpm selfcheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
