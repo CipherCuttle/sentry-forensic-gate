@@ -57,6 +57,43 @@ CREATE TABLE IF NOT EXISTS shadow_entries (
   UNIQUE(launch_id, notional_usd_micros)
 );
 
+CREATE TABLE IF NOT EXISTS baseline_batches (
+  baseline_id TEXT PRIMARY KEY,
+  launch_id TEXT NOT NULL UNIQUE REFERENCES launches(launch_id) ON DELETE CASCADE,
+  policy_version TEXT NOT NULL,
+  decision_block TEXT NOT NULL,
+  decision_block_hash TEXT NOT NULL,
+  status TEXT NOT NULL,
+  reason TEXT,
+  authority_digest TEXT NOT NULL,
+  payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_baseline_batches_decision_block
+  ON baseline_batches(decision_block);
+
+CREATE TABLE IF NOT EXISTS baseline_quotes (
+  quote_id TEXT PRIMARY KEY,
+  baseline_id TEXT NOT NULL REFERENCES baseline_batches(baseline_id) ON DELETE CASCADE,
+  launch_id TEXT NOT NULL REFERENCES launches(launch_id) ON DELETE CASCADE,
+  block_number TEXT NOT NULL,
+  block_hash TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  notional_usd_micros TEXT NOT NULL,
+  pool TEXT NOT NULL,
+  token_in TEXT NOT NULL,
+  token_out TEXT NOT NULL,
+  fee INTEGER NOT NULL,
+  amount_in TEXT NOT NULL,
+  amount_out TEXT NOT NULL,
+  executable INTEGER NOT NULL,
+  failure_reason TEXT,
+  payload_json TEXT NOT NULL,
+  UNIQUE(baseline_id, kind, notional_usd_micros)
+);
+CREATE INDEX IF NOT EXISTS idx_baseline_quotes_block
+  ON baseline_quotes(block_number);
+
 CREATE TABLE IF NOT EXISTS graph_edges (
   edge_id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
