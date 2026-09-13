@@ -1,4 +1,4 @@
-import type { Hex } from '../domain.js';
+import type { Hex, LaunchObserved } from '../domain.js';
 import type { Store } from '../db/store.js';
 import type { OutcomeReceipt } from '../evidence/receipts.js';
 import { projectCreatorOutcomeFeatures } from '../forensic/creatorOutcome.js';
@@ -12,14 +12,14 @@ import {
   type MatureLaunchEvidence
 } from '../evaluation/creatorSignal.js';
 import { FORWARD_OUTCOMES_R1, type ForwardOutcomeReceipt } from '../outcome/forwardTypes.js';
-import type { ForwardOutcomeSource, OutcomeBlockPoint } from '../outcome/ports.js';
+import type { ForwardOutcomeSource } from '../outcome/ports.js';
 import { INK_CHAIN_ID } from '../sentry/contracts.js';
 import type { BaselineDecisionPoint, BaselineStore } from '../shadow/baselineStore.js';
 
 export type CreatorSignalSource = Pick<ForwardOutcomeSource, 'getHeadBlockNumber' | 'getBlockPoint'>;
 export type CreatorSignalStore = Pick<
   Store & BaselineStore,
-  'listProvenanceFacts' | 'listOutcomes' | 'listBaselineDecisionPoints'
+  'listLaunchesMissingProvenance' | 'listProvenanceFacts' | 'listOutcomes' | 'listBaselineDecisionPoints'
 >;
 
 export async function buildCreatorSignalEvaluation(
@@ -33,11 +33,24 @@ export async function buildCreatorSignalEvaluation(
   const asOfBlock = headBlock - CREATOR_SIGNAL_CONFIRMATIONS;
   const asOfStart = await source.getBlockPoint(asOfBlock);
 
-  const [factsRaw, baselinesRaw, outcomesRaw] = await Promise.all([
+  const [missingProvenanceRaw, factsRaw, baselinesRaw, outcomesRaw] = await Promise.all([
+    store.listLaunchesMissingProvenance(),
     store.listProvenanceFacts(),
     store.listBaselineDecisionPoints(),
     store.listOutcomes()
   ]);
+
+  const missingProvenance = [...missingProvenanceRaw].sort(compareLaunches);
+  for (const launch of missingProvenance) {
+    if (launch.chainId !== INK_CHAIN_ID) throw new Error(`CREATOR_SIGNAL_CHAIN_MISMATCH:${launch.launchId}`);
+    if (launch.blockNumber > asOfBlock) continue;
+    const point = await source.getBlockPoint(launch.blockNumber);
+    assertHash('CREATOR_SIGNAL_MISSING_PROVENANCE_REORG', launch.blockNumber, launch.blockHash, point.blockHash);
+    if (point.timestampMs + CREATOR_SIGNAL_HORIZON_MS <= asOfStart.timestampMs) {
+      throw new Error(`CREATOR_SIGNAL_MATURE_LAUNCH_MISSING_PROVENANCE:${launch.launchId}`);
+    }
+  }
+
   const facts = [...factsRaw].sort(compareFacts);
   for (const fact of facts) {
     if (fact.chainId !== INK_CHAIN_ID) throw new Error(`CREATOR_SIGNAL_CHAIN_MISMATCH:${fact.factId}`);
@@ -185,6 +198,12 @@ function assertHash(label: string, blockNumber: bigint, expected: Hex, actual: H
   if (expected.toLowerCase() !== actual.toLowerCase()) {
     throw new Error(`${label}:block=${blockNumber}:expected=${expected}:actual=${actual}`);
   }
+}
+
+function compareLaunches(a: LaunchObserved, b: LaunchObserved): number {
+  if (a.blockNumber !== b.blockNumber) return a.blockNumber < b.blockNumber ? -1 : 1;
+  if (a.logIndex !== b.logIndex) return a.logIndex - b.logIndex;
+  return a.launchId.localeCompare(b.launchId);
 }
 
 function compareFacts(a: ProvenanceFact, b: ProvenanceFact): number {
