@@ -1,5 +1,5 @@
 import { sha256Hex } from '../evidence/canonical.js';
-import type { CreatorOutcomeFeatureReceipt } from '../forensic/creatorOutcome.js';
+import { CREATOR_OUTCOME_HORIZON_MS, type CreatorOutcomeFeatureReceipt } from '../forensic/creatorOutcome.js';
 import {
   FORWARD_OUTCOMES_R1,
   PRIMARY_OUTCOME_NOTIONAL_USD_MICROS,
@@ -127,7 +127,8 @@ export async function evaluateFastVetShadow(rowsInput: readonly FastVetShadowRow
 
   const configurationDigest = await sha256Hex({
     fastVet: FAST_VET_R0_CONFIGURATION,
-    shadowSemantics: 'CONTROL_ALL_ROWS_CANDIDATE_PASS_ONLY_UNKNOWN_SKIPS'
+    outcomeHorizonMs: CREATOR_OUTCOME_HORIZON_MS,
+    shadowSemantics: 'CONTROL_COMPLETE_BASELINE_WITH_RESOLVED_24H_R1_CANDIDATE_PASS_ONLY_UNKNOWN_SKIPS'
   });
   const inputDigest = await sha256Hex({
     receiptVersion: FAST_VET_SHADOW_R0,
@@ -164,9 +165,11 @@ export async function evaluateFastVetShadow(rowsInput: readonly FastVetShadowRow
 function resolvedOutcome(row: FastVetShadowRow): ForwardOutcomeReceipt | null {
   const outcome = row.targetOutcome;
   if (!outcome || outcome.status !== 'COMPLETE') return null;
+  if (!row.baseline || row.baseline.status !== 'COMPLETE') return null;
   if (outcome.policyVersion !== FORWARD_OUTCOMES_R1) return null;
+  if (outcome.horizonMs !== CREATOR_OUTCOME_HORIZON_MS) return null;
   if (outcome.launchId !== row.launchId) throw new Error(`FAST_VET_SHADOW_OUTCOME_BINDING_MISMATCH:${row.launchId}`);
-  if (row.baseline && outcome.baselineId !== row.baseline.baselineId) {
+  if (outcome.baselineId !== row.baseline.baselineId) {
     throw new Error(`FAST_VET_SHADOW_OUTCOME_BASELINE_MISMATCH:${row.launchId}`);
   }
   if (
