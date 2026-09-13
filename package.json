@@ -1,15 +1,26 @@
 {
   "name": "sentry-forensic-gate",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "selfcheck": "node scripts/selfcheck.mjs",
-    "test": "pnpm build && pnpm selfcheck"
+    "truthcheck": "node scripts/sentry-truth-check.mjs",
+    "test": "pnpm build && pnpm selfcheck && pnpm truthcheck",
+    "start:truth": "node dist/cli.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "12.10.1",
+    "viem": "2.56.3"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "@types/better-sqlite3": "9.6.0",
+    "typescript": "5.8.3",
+    "@types/node": "20.19.43"
   }
 }

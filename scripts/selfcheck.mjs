@@ -37,12 +37,17 @@ const launch = {
   blockHash: '0x01',
   observedAtMs: 1,
   launchId: 'launch-1',
+  eventId: 'event-1',
   factory: '0x01',
   txHash: '0x02',
   logIndex: 0,
   token: '0x03',
   creator: '0x04',
-  launchType: 'STANDARD'
+  tokenId: 1n,
+  name: 'Test',
+  symbol: 'TEST',
+  launchType: 'STANDARD',
+  sourceEvent: 'TokenDeployed'
 };
 assert.equal(await store.putLaunch(launch), 'INSERTED');
 assert.equal(await store.putLaunch(launch), 'DUPLICATE');
