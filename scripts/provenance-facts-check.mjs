@@ -141,19 +141,32 @@ async function assertLegacyBackfill(store) {
     },
     catchUp: async () => { throw new Error('LEGACY_BACKFILL_MUST_NOT_CATCH_UP'); }
   };
-  const report = await syncSentryTruth(source, store, {
+  const options = {
     startBlock: 1n,
     confirmations: 2n,
     maxBatchBlocks: 100n,
     reorgLookbackBlocks: 2n,
     pollIntervalMs: 100
-  });
+  };
+  const report = await syncSentryTruth(source, store, options);
   assert.equal(report.startBlock, null, 'current checkpoint should still take the no-new-blocks path');
   assert.equal(report.batches, 0);
   assert.deepEqual((await store.listProvenanceFacts()).map((fact) => fact.launchId), ['a1', 'b1', 'a2', 'a3']);
   const backfilledEdges = await store.listProvenanceEdges();
   assert.equal(backfilledEdges.length, 6);
   assert.ok(backfilledEdges.some((edge) => edge.kind === 'PREVIOUS_LAUNCH' && edge.from === 'launch:57073:a3' && edge.to === 'launch:57073:a2'));
+
+  // Simulate a crash after all durable facts were written but before the derived
+  // projection was replaced. The next no-new-blocks sync must repair edges even
+  // though there are no missing facts left to backfill.
+  await store.replaceProvenanceEdges([]);
+  assert.equal((await store.listProvenanceEdges()).length, 0);
+  const repairReport = await syncSentryTruth(source, store, options);
+  assert.equal(repairReport.batches, 0);
+  assert.equal((await store.listProvenanceFacts()).length, 4);
+  const repairedEdges = await store.listProvenanceEdges();
+  assert.equal(repairedEdges.length, 6);
+  assert.ok(repairedEdges.some((edge) => edge.kind === 'PREVIOUS_LAUNCH' && edge.from === 'launch:57073:a3' && edge.to === 'launch:57073:a2'));
 }
 
 console.log('provenance-facts-check: PASS');
