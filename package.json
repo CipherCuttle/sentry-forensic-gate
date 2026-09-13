@@ -22,6 +22,7 @@
     "start:creator-outcome": "node dist/creatorOutcomeCli.js",
     "start:outcomes": "node dist/forwardOutcomeCli.js",
     "start:creator-signal": "node dist/creatorSignalCli.js",
+    "start:fast-vet-shadow": "node dist/fastVetShadowCli.js",
     "start:runtime": "node dist/researchRuntimeCli.js",
     "start:activation-receipt": "node dist/activationReceiptCli.js",
     "start:provider-capability": "node dist/providerCapabilityCli.js"
