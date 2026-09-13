@@ -1,5 +1,9 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import {
+  assertAuthorizedExecutableStartBlock,
+  CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH
+} from './authority/executableInfraAuthority.js';
 import { assertLedgerWithinAuthorizedEpoch } from './authority/ledgerEpochGuard.js';
 import { assertAuthorizedSentryStartBlock, CURRENT_SENTRY_AUTHORITY_EPOCH } from './authority/sentryAuthority.js';
 import { SqliteStore } from './db/sqliteStore.js';
@@ -20,13 +24,14 @@ const startBlockRaw = process.env.SENTRY_START_BLOCK;
 if (!startBlockRaw) throw new Error('SENTRY_START_BLOCK is required; refuse to guess historical authority');
 const startBlock = BigInt(startBlockRaw);
 assertAuthorizedSentryStartBlock(startBlock);
+assertAuthorizedExecutableStartBlock(startBlock);
 if (process.env.SHADOW_ONLY !== 'true') {
   throw new Error('RESEARCH_RUNTIME_REQUIRES_SHADOW_ONLY_TRUE');
 }
 
 const dbPath = resolve(process.env.DB_PATH ?? './data/sentry-forensic-gate.sqlite');
 mkdirSync(dirname(dbPath), { recursive: true });
-assertLedgerWithinAuthorizedEpoch(dbPath, INK_CHAIN_ID, CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock);
+assertLedgerWithinAuthorizedEpoch(dbPath, INK_CHAIN_ID, CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock);
 
 const rpcUrl = process.env.INK_RPC_URL ?? DEFAULT_INK_RPC_URL;
 const factory = (process.env.SENTRY_LAUNCH_FACTORY as Hex | undefined) ?? DEFAULT_SENTRY_LAUNCH_FACTORY;
@@ -66,11 +71,20 @@ try {
     console.log(JSON.stringify(jsonSafe({
       runtimeVersion: 'RESEARCH_RUNTIME_ACTIVATION_R1',
       observedAtMs: Date.now(),
-      authorityEpoch: {
+      sentryAuthorityEpoch: {
         version: CURRENT_SENTRY_AUTHORITY_EPOCH.version,
         fromBlock: CURRENT_SENTRY_AUTHORITY_EPOCH.fromBlock,
         implementation: CURRENT_SENTRY_AUTHORITY_EPOCH.implementation,
         upgradeTx: CURRENT_SENTRY_AUTHORITY_EPOCH.upgradeTx
+      },
+      executableInfraAuthorityEpoch: {
+        version: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.version,
+        fromBlock: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.fromBlock,
+        npm: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.npm,
+        factory: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.factory,
+        quoterV2: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.quoterV2,
+        activationBlock: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.activationBlock,
+        activationTx: CURRENT_EXECUTABLE_INFRA_AUTHORITY_EPOCH.activationTx
       },
       truth,
       baseline,
