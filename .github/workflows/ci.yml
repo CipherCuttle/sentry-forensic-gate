@@ -13,5 +13,11 @@ jobs:
         with:
           node-version: 20
       - run: corepack enable
+      - name: Enforce supported execution surfaces
+        run: node scripts/research-boundary-package-check.mjs
+      - name: Test research-only guardrails
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests
+      - name: Enforce research-only guardrails
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm test
