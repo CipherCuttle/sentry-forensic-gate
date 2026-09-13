@@ -181,8 +181,12 @@ export async function buildForwardOutcome(
     }
   }
 
-  await assertEvidenceStable(source, launch, batch, observed, predecessor, targetTimestampMs);
+  // Authority must still be pinned at the evidence block, but every authority
+  // read is by block number and can itself straddle a shallow reorg. Therefore
+  // the canonical hash/boundary revalidation below is deliberately the final
+  // RPC operation before the immutable receipt is assembled and returned.
   await source.assertMarketAuthority(batch.market, observed.blockNumber);
+  await assertEvidenceStable(source, launch, batch, observed, predecessor, targetTimestampMs);
 
   const withoutDigest: Omit<ForwardOutcomeReceipt, 'evidenceDigest'> = {
     outcomeId,
