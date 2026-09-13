@@ -247,8 +247,7 @@ const runtimeOutcomes = [
   runtimeOutcome('r2', 89n, 'NORMAL_WIN')
 ];
 const runtimeStore = {
-  async listLaunchesMissingProvenance() { return []; },
-  async listProvenanceFacts() { return runtimeFacts; },
+  async readLaunchProvenanceSnapshot() { return { missingProvenance: [], facts: runtimeFacts }; },
   async listBaselineDecisionPoints() { return runtimeBaselines; },
   async listOutcomes() { return runtimeOutcomes; }
 };
