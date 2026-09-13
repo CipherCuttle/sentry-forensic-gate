@@ -22,5 +22,10 @@
     "@types/better-sqlite3": "9.6.0",
     "typescript": "5.8.3",
     "@types/node": "20.19.43"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
