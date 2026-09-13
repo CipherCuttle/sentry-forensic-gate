@@ -1,0 +1,10 @@
+id: research-only-no-wallet-authority-ts
+valid:
+  - "const createPublicClient = 1; const readContract = 2;"
+  - "const hashEvidence = (value: string) => value;"
+invalid:
+  - "const createWalletClient = 1;"
+  - "const privateKeyToAccount = 1;"
+  - "const writeContract = 1;"
+  - "const sendTransaction = 1;"
+  - "const signTypedData = 1;"
