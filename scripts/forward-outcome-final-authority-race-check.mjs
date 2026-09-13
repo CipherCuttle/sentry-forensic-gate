@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { buildForwardOutcome, EXECUTABLE_BASELINE_R1 } from '../dist/index.js';
 
 const ONE_MINUTE = 60_000;
+const LAUNCH_BLOCK = 52_269_353n;
+const DECISION_BLOCK = LAUNCH_BLOCK + 2n;
+const PREDECESSOR_BLOCK = LAUNCH_BLOCK + 5n;
+const OBSERVED_BLOCK = LAUNCH_BLOCK + 6n;
+const CONFIRMED_HEAD_BLOCK = LAUNCH_BLOCK + 8n;
 const token = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const base = '0x0200c29006150606b650577bbe7b6248f58470c1';
 const pool = '0x1111111111111111111111111111111111111111';
@@ -12,8 +17,8 @@ function hash(block, suffix = '') {
 
 const launch = {
   chainId: 57073,
-  blockNumber: 10n,
-  blockHash: hash(10n),
+  blockNumber: LAUNCH_BLOCK,
+  blockHash: hash(LAUNCH_BLOCK),
   observedAtMs: 1,
   launchId: 'launch-final-authority-race',
   eventId: 'event-final-authority-race',
@@ -34,8 +39,8 @@ const batch = {
   authorityDigest: 'authority-final-authority-race',
   launchId: launch.launchId,
   policyVersion: EXECUTABLE_BASELINE_R1,
-  decisionBlock: 12n,
-  decisionBlockHash: hash(12n),
+  decisionBlock: DECISION_BLOCK,
+  decisionBlockHash: hash(DECISION_BLOCK),
   observedAtMs: 2,
   status: 'COMPLETE',
   market: {
@@ -62,8 +67,8 @@ const batch = {
     entry: {
       quoteId: 'entry-final-authority-race',
       launchId: launch.launchId,
-      blockNumber: 12n,
-      blockHash: hash(12n),
+      blockNumber: DECISION_BLOCK,
+      blockHash: hash(DECISION_BLOCK),
       observedAtMs: 2,
       kind: 'ENTRY',
       mode: 'EXACT_INPUT',
@@ -90,7 +95,7 @@ class BaseRaceSource {
     const timestampMs = 900_000 + Number(blockNumber) * 10_000;
     return {
       blockNumber,
-      blockHash: this.reorged && blockNumber === 16n ? hash(blockNumber, 'ff') : hash(blockNumber),
+      blockHash: this.reorged && blockNumber === OBSERVED_BLOCK ? hash(blockNumber, 'ff') : hash(blockNumber),
       timestampMs
     };
   }
@@ -116,7 +121,7 @@ class FinalValidationRaceSource extends BaseRaceSource {
     // Once the final authority pass has completed, let the predecessor read
     // return from the old fork and then land the reorg. A correct implementation
     // must read the selected horizon block after this and observe the new hash.
-    if (this.authorityCalls >= 2 && blockNumber === 15n && !this.reorged) {
+    if (this.authorityCalls >= 2 && blockNumber === PREDECESSOR_BLOCK && !this.reorged) {
       this.reorged = true;
     }
     return point;
@@ -124,9 +129,9 @@ class FinalValidationRaceSource extends BaseRaceSource {
 }
 
 const confirmedHeadPoint = {
-  blockNumber: 18n,
-  blockHash: hash(18n),
-  timestampMs: 1_080_000
+  blockNumber: CONFIRMED_HEAD_BLOCK,
+  blockHash: hash(CONFIRMED_HEAD_BLOCK),
+  timestampMs: 900_000 + Number(CONFIRMED_HEAD_BLOCK) * 10_000
 };
 
 const authorityRace = new FinalAuthorityRaceSource();
