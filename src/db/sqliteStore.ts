@@ -316,37 +316,45 @@ export class SqliteStore implements Store, BaselineStore, ForwardOutcomeStore {
 
   private ensureOutcomePolicyVersion(): void {
     const columns = this.db.pragma('table_info(outcomes)') as Array<{ name: string }>;
-    if (columns.some((column) => column.name === 'policy_version')) return;
+    if (!columns.some((column) => column.name === 'policy_version')) {
+      const migrate = this.db.transaction(() => {
+        this.db.exec('ALTER TABLE outcomes RENAME TO outcomes_legacy_r0');
+        this.db.exec(`
+          CREATE TABLE outcomes (
+            outcome_id TEXT PRIMARY KEY,
+            launch_id TEXT NOT NULL REFERENCES launches(launch_id) ON DELETE CASCADE,
+            horizon_ms INTEGER NOT NULL,
+            observed_block TEXT NOT NULL,
+            policy_version TEXT,
+            payload_json TEXT NOT NULL,
+            UNIQUE(launch_id, horizon_ms, policy_version)
+          )
+        `);
+        this.db.exec(`
+          INSERT INTO outcomes (
+            outcome_id, launch_id, horizon_ms, observed_block, policy_version, payload_json
+          )
+          SELECT
+            outcome_id,
+            launch_id,
+            horizon_ms,
+            observed_block,
+            json_extract(payload_json, '$.policyVersion'),
+            payload_json
+          FROM outcomes_legacy_r0
+        `);
+        this.db.exec('DROP TABLE outcomes_legacy_r0');
+      });
+      migrate();
+    }
 
-    const migrate = this.db.transaction(() => {
-      this.db.exec('ALTER TABLE outcomes RENAME TO outcomes_legacy_r0');
-      this.db.exec(`
-        CREATE TABLE outcomes (
-          outcome_id TEXT PRIMARY KEY,
-          launch_id TEXT NOT NULL REFERENCES launches(launch_id) ON DELETE CASCADE,
-          horizon_ms INTEGER NOT NULL,
-          observed_block TEXT NOT NULL,
-          policy_version TEXT,
-          payload_json TEXT NOT NULL,
-          UNIQUE(launch_id, horizon_ms, policy_version)
-        )
-      `);
-      this.db.exec(`
-        INSERT INTO outcomes (
-          outcome_id, launch_id, horizon_ms, observed_block, policy_version, payload_json
-        )
-        SELECT
-          outcome_id,
-          launch_id,
-          horizon_ms,
-          observed_block,
-          json_extract(payload_json, '$.policyVersion'),
-          payload_json
-        FROM outcomes_legacy_r0
-      `);
-      this.db.exec('DROP TABLE outcomes_legacy_r0');
-    });
-    migrate();
+    // SQLite UNIQUE constraints treat NULL values as distinct. The expression
+    // index gives all legacy (no policyVersion) receipts one actual policy slot
+    // while still allowing legacy and versioned R1 receipts to coexist.
+    this.db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_outcomes_policy_slot
+      ON outcomes(launch_id, horizon_ms, COALESCE(policy_version, '__LEGACY__'))
+    `);
   }
 }
 
