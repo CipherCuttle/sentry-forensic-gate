@@ -47,7 +47,7 @@ assert.throws(() => classifyLaunchMarket({
 }), /MARKET_TOKEN_POSITION_MISMATCH/);
 
 class FakeSource {
-  head = 12n;
+  head = 14n;
   hashes = new Map([[12n, '0x12']]);
   authorityBlocks = [];
   reverseInputs = [];
@@ -77,7 +77,12 @@ class FakeSource {
 const store = new MemoryStore();
 await store.putLaunch(launch);
 const source = new FakeSource();
-const options = { decisionDelayBlocks: 2n, maxLaunchesPerSync: 10, notionalsUsdMicros: [1_000_000n] };
+const options = { decisionDelayBlocks: 2n, confirmations: 2n, maxLaunchesPerSync: 10, notionalsUsdMicros: [1_000_000n] };
+const immatureSource = new FakeSource();
+immatureSource.head = 13n;
+const immatureStore = new MemoryStore();
+await immatureStore.putLaunch({ ...launch, launchId:'launch-immature', eventId:'event-immature', txHash:'0ximmature', token:'0xaaf' });
+assert.equal((await syncExecutableBaseline(immatureSource, immatureStore, options)).processed, 0, 'decision block must mature before persistence');
 const report = await syncExecutableBaseline(source, store, options);
 assert.equal(report.complete, 1);
 assert.equal(store.baselineCount, 1);
