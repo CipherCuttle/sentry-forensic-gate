@@ -318,10 +318,11 @@ function reviveOutcome(json: string): OutcomeReceipt {
     executableValueUsdMicros?: string;
     liquidityUsdMicros?: string;
   };
+  const { observedBlock, executableValueUsdMicros, liquidityUsdMicros, ...rest } = value;
   return {
-    ...value,
-    observedBlock: BigInt(value.observedBlock),
-    executableValueUsdMicros: value.executableValueUsdMicros === undefined ? undefined : BigInt(value.executableValueUsdMicros),
-    liquidityUsdMicros: value.liquidityUsdMicros === undefined ? undefined : BigInt(value.liquidityUsdMicros)
+    ...rest,
+    observedBlock: BigInt(observedBlock),
+    ...(executableValueUsdMicros === undefined ? {} : { executableValueUsdMicros: BigInt(executableValueUsdMicros) }),
+    ...(liquidityUsdMicros === undefined ? {} : { liquidityUsdMicros: BigInt(liquidityUsdMicros) })
   };
 }
