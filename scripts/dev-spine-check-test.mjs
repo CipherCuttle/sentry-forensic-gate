@@ -4,6 +4,8 @@ import { validatePacket } from './dev-spine-check.mjs';
 
 const packet = JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_OUTCOME_POLICY_R1.json', 'utf8'));
 validatePacket(packet);
+assert.equal(packet.state, 'HISTORICAL_OUTCOME_POLICY_PASS');
+assert.equal(packet.authority.historical_outcome_policy_status, 'PASS');
 
 for (const key of [
   'historical_compatibility_implementation',
@@ -49,5 +51,18 @@ assert.throws(() => validatePacket(replayAuthorized), /requires authorization\.f
 const weakenedR3 = structuredClone(packet);
 weakenedR3.authority.current_r3_behavior_must_remain_unchanged = false;
 assert.throws(() => validatePacket(weakenedR3), /current R3 default invariant/);
+
+const fakeOutcomePass = structuredClone(packet);
+fakeOutcomePass.implementation_result.outcomes_24h_complete = 8;
+fakeOutcomePass.implementation_result.outcomes_24h_unverified = 1;
+assert.throws(() => validatePacket(fakeOutcomePass), /closed outcome COMPLETE count must remain 9/);
+
+const reopenedImplementation = structuredClone(packet);
+reopenedImplementation.state = 'HISTORICAL_OUTCOME_POLICY_IMPLEMENTATION_AUTHORIZED';
+assert.throws(() => validatePacket(reopenedImplementation), /requires authorization\.historical_outcome_policy_implementation=true/);
+
+const replayNext = structuredClone(packet);
+replayNext.next_action = 'RUN_FULL_147_REPLAY';
+assert.throws(() => validatePacket(replayNext), /closed next action drift/);
 
 console.log('DEV_SPINE_CHECK_TEST=PASS');
