@@ -33,8 +33,11 @@ DEV_SPINE_TESTED_SHA="$head" DEV_SPINE_SOURCE_SHA="$head" DEV_SPINE_DIRTY="$dirt
 '''
 
 [tasks.spinecheck]
-description = "Validate Dev Spine metadata and fail-closed phase invariants"
-run = "node scripts/dev-spine-check.mjs"
+description = "Test and validate Dev Spine metadata and fail-closed phase invariants"
+run = [
+  "node scripts/dev-spine-check-test.mjs",
+  "node scripts/dev-spine-check.mjs",
+]
 
 [tasks.test]
 description = "Run Sentry Forensic Gate's repository-native test suite"
@@ -52,6 +55,7 @@ run = [
 [tasks.verify]
 description = "Run Dev Spine validation and the existing repository verification surface"
 run = [
+  "node scripts/dev-spine-check-test.mjs",
   "node scripts/dev-spine-check.mjs",
   "node scripts/research-boundary-package-check.mjs",
   "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests",
@@ -64,6 +68,7 @@ description = "Run the closest local equivalent of required CI"
 run = [
   "corepack enable",
   "pnpm install --no-frozen-lockfile --lockfile=false",
+  "node scripts/dev-spine-check-test.mjs",
   "node scripts/dev-spine-check.mjs",
   "node scripts/research-boundary-package-check.mjs",
   "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests",
