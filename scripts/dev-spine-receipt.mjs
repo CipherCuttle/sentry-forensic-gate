@@ -16,7 +16,8 @@ function trackedFile(path) {
 }
 
 const packet = JSON.parse(trackedFile(PACKET_PATH));
-const head = git(['rev-parse', 'HEAD']);
+const testedSha = git(['rev-parse', 'HEAD']);
+const sourceHeadSha = process.env.DEV_SPINE_SOURCE_SHA || testedSha;
 const status = execFileSync('git', ['status', '--porcelain=v1'], { encoding: 'utf8' });
 const ciStatus = String(process.env.DEV_SPINE_CI_STATUS ?? 'unknown').toLowerCase();
 const repositoryVerification = ciStatus === 'success' ? 'PASS' : ciStatus === 'failure' || ciStatus === 'cancelled' ? 'FAIL' : 'UNKNOWN';
@@ -25,7 +26,9 @@ const receipt = {
   schema: 'dev-spine-receipt/v1',
   repo: packet.repo,
   phase: packet.phase,
-  head_sha: head,
+  tested_sha: testedSha,
+  source_head_sha: sourceHeadSha,
+  source_matches_tested_sha: sourceHeadSha === testedSha,
   dirty_worktree_observed: status.length > 0,
   repository_verification: {
     ci_status: ciStatus,
@@ -52,4 +55,6 @@ const receipt = {
 mkdirSync('.dev-spine', { recursive: true });
 writeFileSync(OUTPUT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, 'utf8');
 console.log(`DEV_SPINE_RECEIPT=${OUTPUT_PATH}`);
+console.log(`TESTED_SHA=${testedSha}`);
+console.log(`SOURCE_HEAD_SHA=${sourceHeadSha}`);
 console.log(`VERDICT=${receipt.verdict}`);

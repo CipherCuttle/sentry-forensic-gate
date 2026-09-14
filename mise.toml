@@ -46,7 +46,7 @@ run = [
 description = "Run the closest local equivalent of required CI"
 run = [
   "corepack enable",
-  "pnpm install --no-frozen-lockfile",
+  "pnpm install --no-frozen-lockfile --lockfile=false",
   "node scripts/dev-spine-check.mjs",
   "node scripts/research-boundary-package-check.mjs",
   "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests",

@@ -21,12 +21,13 @@ jobs:
         run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests
       - name: Enforce research-only guardrails
         run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
       - run: pnpm test
       - name: Generate Dev Spine evidence
         if: always()
         env:
           DEV_SPINE_CI_STATUS: ${{ job.status }}
+          DEV_SPINE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           node scripts/dev-spine-pack.mjs
           node scripts/dev-spine-receipt.mjs
