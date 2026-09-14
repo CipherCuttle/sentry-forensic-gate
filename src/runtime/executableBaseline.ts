@@ -8,6 +8,7 @@ import {
   independentRecoveryBps,
   isLaunchEligibleForDecision,
   type BaselineLeg,
+  type BaselinePolicyVersion,
   type ExecutableBaselineBatch
 } from '../shadow/baselineTypes.js';
 import type { BaselineStore } from '../shadow/baselineStore.js';
@@ -86,7 +87,8 @@ export async function buildBaselineBatch(
   launch: LaunchObserved,
   decisionDelayBlocks: bigint,
   notionalsUsdMicros: readonly bigint[],
-  authorizeExecutableBlock: ExecutableBlockAuthorizer = resolveAuthorizedExecutableInfra
+  authorizeExecutableBlock: ExecutableBlockAuthorizer = resolveAuthorizedExecutableInfra,
+  policyVersion: BaselinePolicyVersion = EXECUTABLE_BASELINE_R1
 ): Promise<ExecutableBaselineBatch> {
   authorizeExecutableBlock(launch.blockNumber);
   const decisionBlock = launch.blockNumber + decisionDelayBlocks;
@@ -97,7 +99,7 @@ export async function buildBaselineBatch(
   // persist an UNVERIFIED row that would let the worker continue under new semantics.
   await source.assertAuthority(decisionBlock);
 
-  const baselineId = await deriveBaselineId({ launchId: launch.launchId, decisionBlock, decisionBlockHash });
+  const baselineId = await deriveBaselineId({ launchId: launch.launchId, decisionBlock, decisionBlockHash, policyVersion });
   const observedAtMs = Date.now();
 
   try {
@@ -148,7 +150,7 @@ export async function buildBaselineBatch(
     const withoutDigest = {
       baselineId,
       launchId: launch.launchId,
-      policyVersion: EXECUTABLE_BASELINE_R1 as typeof EXECUTABLE_BASELINE_R1,
+      policyVersion,
       decisionBlock,
       decisionBlockHash,
       observedAtMs,
@@ -171,7 +173,7 @@ export async function buildBaselineBatch(
     const withoutDigest = {
       baselineId,
       launchId: launch.launchId,
-      policyVersion: EXECUTABLE_BASELINE_R1 as typeof EXECUTABLE_BASELINE_R1,
+      policyVersion,
       decisionBlock,
       decisionBlockHash,
       observedAtMs,
