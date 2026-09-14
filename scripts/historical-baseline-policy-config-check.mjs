@@ -68,13 +68,26 @@ assert.equal(
 );
 
 const packet = JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json', 'utf8'));
-assert.equal(packet.state, 'HISTORICAL_BASELINE_POLICY_IMPLEMENTATION_AUTHORIZED');
-assert.equal(packet.authorization.historical_baseline_policy_implementation, true);
+assert.equal(packet.state, 'HISTORICAL_BASELINE_POLICY_PASS_OUTCOME_VALUATION_BLOCKED');
+assert.equal(packet.authority.historical_baseline_policy_status, 'PASS');
+assert.equal(packet.authority.historical_outcome_valuation_status, 'BLOCKED');
+assert.equal(packet.authorization.historical_baseline_policy_implementation, false);
+assert.equal(packet.authorization.historical_baseline_policy_discovery, false);
 assert.equal(packet.authorization.full_147_replay, false);
 assert.equal(packet.authorization.fast_vet, false);
 assert.equal(packet.authorization.canary, false);
 assert.equal(packet.authorization.merge, false);
 assert.equal(packet.historical_policy.policy_version, HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1);
 assert.equal(packet.historical_policy.weth_calibration_kind, 'WETH_REDSTONE_ETH_USD_ASOF_V1');
+assert.equal(packet.stage_c_result.baseline_attempted, 9);
+assert.equal(packet.stage_c_result.baseline_complete, 9);
+assert.equal(packet.stage_c_result.baseline_unverified, 0);
+assert.equal(packet.stage_c_result.baseline_verdict, 'PASS');
+assert.equal(packet.stage_c_result.outcomes_24h_attempted, 9);
+assert.equal(packet.stage_c_result.outcomes_24h_complete, 7);
+assert.equal(packet.stage_c_result.outcomes_24h_unverified, 2);
+assert.equal(packet.stage_c_result.outcome_probe_verdict, 'BLOCKED');
+assert.equal(packet.stage_c_result.outcome_blocking_reason_family, 'OUTCOME_USD_VALUATION_UNAVAILABLE');
+assert.equal(packet.next_action, 'OPEN_HISTORICAL_OUTCOME_VALUATION_POLICY_R1_SUCCESSOR');
 
 console.log('historical baseline policy config check: PASS');
