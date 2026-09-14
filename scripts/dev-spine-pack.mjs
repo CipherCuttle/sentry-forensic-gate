@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { join } from 'node:path';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_OUTCOME_POLICY_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.json';
 const OUTPUT_DIR = '.dev-spine';
 
 function fail(message) {
