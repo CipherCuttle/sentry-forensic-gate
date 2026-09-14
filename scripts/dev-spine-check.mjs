@@ -24,6 +24,13 @@ const STATE_AUTHORIZATION = {
     canary: false,
     merge: false,
   },
+  HISTORICAL_COMPATIBILITY_BLOCKED_FROZEN_BASELINE_SEMANTICS: {
+    historical_compatibility_implementation: false,
+    full_147_replay: false,
+    fast_vet: false,
+    canary: false,
+    merge: false,
+  },
 };
 
 function invariant(condition, message) {
@@ -75,6 +82,14 @@ export function validatePacket(packet) {
     cohort.implementation_cohorts.length === cohort.launch_producing_implementation_cohorts,
     'historical implementation cohort count does not close',
   );
+
+  if (packet.state === 'HISTORICAL_COMPATIBILITY_BLOCKED_FROZEN_BASELINE_SEMANTICS') {
+    invariant(packet.authority?.historical_compatibility_status === 'FAIL_FROZEN_BASELINE_SEMANTIC_INCOMPATIBILITY', 'blocked compatibility state requires explicit failure status');
+    invariant(packet.compatibility_result?.verdict === 'FAIL', 'blocked compatibility state requires FAIL live verdict');
+    invariant(packet.compatibility_result?.baseline_attempted === acceptance.representatives, 'blocked compatibility state requires all baseline representatives attempted');
+    invariant(packet.compatibility_result?.baseline_complete < acceptance.baseline_complete_required, 'blocked compatibility state must not claim baseline acceptance');
+    invariant(packet.next_action === 'STOP_DO_NOT_BROADEN_BASELINE_SEMANTICS_AWAIT_SUCCESSOR_DECISION', 'blocked compatibility state must STOP and await successor decision');
+  }
 }
 
 function main() {
