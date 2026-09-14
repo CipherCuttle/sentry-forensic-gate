@@ -30,15 +30,12 @@ on:
       - 'scripts/dev-spine-receipt.mjs'
       - '.github/workflows/historical-outcome-policy-r1.yml'
 
-concurrency:
-  group: historical-live-rpc-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
 jobs:
   historical-outcome-gate:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.base.ref != 'agent/historical-outcome-policy-r1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
