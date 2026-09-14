@@ -2,7 +2,7 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_COMPATIBILITY_R1",
-  "state": "HISTORICAL_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED",
+  "state": "HISTORICAL_COMPATIBILITY_BLOCKED_FROZEN_BASELINE_SEMANTICS",
   "discovery_base_sha": "392236cf162a298e40dcb0662eb3e524e58aeb6e",
   "objective": "Add an explicit dependency-injection seam for historical authority contexts while preserving current R3 behavior by default, then test the existing frozen baseline and forward-outcome pipeline on nine historical implementation representatives.",
   "authority": {
@@ -10,10 +10,10 @@
     "current_r3_behavior_must_remain_unchanged": true,
     "historical_authorization_granted": false,
     "historical_tuple_status": "PASS",
-    "historical_compatibility_status": "NOT_RUN"
+    "historical_compatibility_status": "FAIL_FROZEN_BASELINE_SEMANTIC_INCOMPATIBILITY"
   },
   "authorization": {
-    "historical_compatibility_implementation": true,
+    "historical_compatibility_implementation": false,
     "full_147_replay": false,
     "fast_vet": false,
     "canary": false,
@@ -29,6 +29,33 @@
     "outcomes_unverified_required": 0,
     "live_archive_rpc_required": true,
     "real_existing_pipeline_required": true
+  },
+  "compatibility_result": {
+    "verdict": "FAIL",
+    "source_mode": "LIVE_ARCHIVE_RPC_EXISTING_PIPELINE",
+    "source_head_sha": "c89d9781eb5b885737c96abb06f8d988fed11e9b",
+    "tested_merge_sha": "747b28d4ca3b9e23e5e5ecc90134a09517336f36",
+    "github_actions_run_id": 34852374047,
+    "representatives_attempted": 9,
+    "baseline_attempted": 9,
+    "baseline_complete": 1,
+    "baseline_unverified": 8,
+    "outcomes_24h_attempted": 1,
+    "outcomes_24h_complete": 1,
+    "outcomes_24h_unverified": 0,
+    "outcomes_24h_not_attempted": 8,
+    "blocking_reason_family": "USD_CALIBRATION_UNAVAILABLE",
+    "representative_results": [
+      {"implementation":"0xf6b81e4a431aa5c459b7502802bab306ce465146","blockNumber":"39943476","tokenId":"1","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=39943478:notional=250000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x3f01f1e0d8b76e0a7bf476335a9ebcb6755df536","blockNumber":"40032260","tokenId":"5","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=40032262:notional=250000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x6f269786695fcd8cc684ebf37604dd2fb1797fcc","blockNumber":"42060479","tokenId":"24","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=42060481:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x71b2296124ce438bf2d0fef01e0adbd14a020282","blockNumber":"44137983","tokenId":"49","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=44137985:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0xfab1d73e877947fabe2d0966f9832541b6f82750","blockNumber":"45634572","tokenId":"82","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=45634574:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0xbe0e8f5d351b6acb0ec5c4ce6d2ba6c602bbb80f","blockNumber":"45813860","tokenId":"86","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=45813862:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x28ed07daba4ca9025819b64e1abb98d6c15ba069","blockNumber":"46611372","tokenId":"108","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=46611374:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x3515ce96c5c6fb8e73ebe04756f2227d035d6334","blockNumber":"46637160","tokenId":"110","baseline":"COMPLETE","outcome24h":"COMPLETE","outcome24hObservedBlock":"46723560"},
+      {"implementation":"0xd5bced4c43eef627ee0524368cabafcb9f29cff0","blockNumber":"46667534","tokenId":"112","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=46667536:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"}
+    ]
   },
   "known_historical_state": {
     "launch_count": 147,
@@ -57,8 +84,9 @@
   },
   "prohibitions": [
     "Do not weaken current R3 authority or default behavior.",
-    "Do not authorize or run the full 147-launch replay in this phase.",
-    "Do not run FAST_VET meaningfully before historical replay is authorized and reconstructed.",
+    "Do not broaden or reinterpret the frozen baseline USD-calibration semantics to make historical compatibility pass.",
+    "Do not authorize or run the full 147-launch replay from this failed compatibility gate.",
+    "Do not run FAST_VET meaningfully before an explicitly authorized successor resolves the historical evidence contract.",
     "Do not authorize the canary.",
     "Do not add signing, approvals, swaps, transaction broadcast, or execution authority.",
     "Do not create a second independent baseline or outcome implementation.",
@@ -95,10 +123,11 @@
     "package.json",
     "mise.toml"
   ],
-  "next_action": "RUN_NINE_REPRESENTATIVE_LIVE_COMPATIBILITY_GATE",
+  "next_action": "STOP_DO_NOT_BROADEN_BASELINE_SEMANTICS_AWAIT_SUCCESSOR_DECISION",
   "notes": [
-    "The user explicitly authorized HISTORICAL_COMPATIBILITY_R1 implementation after PR #15 merged; this state does not authorize the full 147 replay, FAST_VET, canary, merge, signing, or execution.",
-    "The nine representatives are captured from the reviewed discovery artifact using the frozen first-real-launch-per-launch-producing-implementation-cohort rule.",
-    "A PASS from the nine-representative live gate is evidence for a later replay authorization decision; it does not self-authorize replay."
+    "HISTORICAL_COMPATIBILITY_R1 implementation was explicitly authorized, implemented, and exercised against live archive RPC using the existing frozen baseline/outcome pipeline.",
+    "The read-authority injection seam reached all nine reviewed representatives without changing current R3 defaults, but the frozen baseline contract produced eight deterministic USD_CALIBRATION_UNAVAILABLE results; acceptance therefore failed.",
+    "Only the representative at block 46637160/tokenId 110 produced a COMPLETE baseline and its exact 24h forward outcome was also COMPLETE.",
+    "This is a STOP result for HISTORICAL_COMPATIBILITY_R1. It does not authorize semantic broadening, full replay, FAST_VET, canary, merge, signing, or execution."
   ]
 }
