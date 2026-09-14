@@ -1,0 +1,119 @@
+{
+  "schema": "dev-spine-phase/v1",
+  "repo": "CipherCuttle/sentry-forensic-gate",
+  "phase": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1",
+  "state": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED",
+  "objective": "Run the same nine reviewed historical implementation representatives across all five frozen FORWARD_OUTCOMES_R1 horizons using only the already-reviewed historical baseline and historical RedStone-as-of outcome mechanics, requiring 45 COMPLETE / 0 UNVERIFIED before any full-replay authorization decision.",
+  "predecessor": {
+    "phase": "HISTORICAL_OUTCOME_POLICY_R1",
+    "pr": 19,
+    "closure_head": "cc53013075d9e450fe6c92c07269a577cbfaa7aa",
+    "verdict": "HISTORICAL_OUTCOME_POLICY_PASS",
+    "representative_24h_complete": 9,
+    "representative_24h_unverified": 0,
+    "hostile_review_closed": true,
+    "targeted_review_closed": true
+  },
+  "authority": {
+    "current_default": "R3",
+    "current_r3_behavior_must_remain_unchanged": true,
+    "historical_authorization_granted": false,
+    "historical_baseline_policy_status": "PASS",
+    "historical_outcome_policy_status": "PASS"
+  },
+  "authorization": {
+    "historical_compatibility_implementation": false,
+    "historical_baseline_policy_discovery": false,
+    "historical_baseline_policy_implementation": false,
+    "historical_outcome_policy_discovery": false,
+    "historical_outcome_policy_implementation": false,
+    "historical_all_horizon_compatibility_implementation": true,
+    "full_147_replay": false,
+    "fast_vet": false,
+    "canary": false,
+    "merge": false
+  },
+  "acceptance": {
+    "representatives": 9,
+    "horizons": [
+      {"label":"1m","ms":60000},
+      {"label":"5m","ms":300000},
+      {"label":"30m","ms":1800000},
+      {"label":"2h","ms":7200000},
+      {"label":"24h","ms":86400000}
+    ],
+    "expected_outcome_cells": 45,
+    "baseline_complete_required": 9,
+    "outcome_complete_required": 45,
+    "outcome_unverified_required": 0,
+    "live_archive_rpc_required": true,
+    "point_in_time_inputs_only": true,
+    "all_representatives_must_be_attempted": true,
+    "all_horizons_must_be_attempted": true,
+    "provider_or_transport_failure_is_not_market_evidence": true,
+    "ordinary_ci_must_be_green": true,
+    "research_only_guardrails_must_be_green": true,
+    "observed_blocks_preregistered": false
+  },
+  "frozen_policies": {
+    "baseline_policy_version": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
+    "outcome_policy_version": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
+    "weth_valuation_kind": "WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1",
+    "redstone_eth_usd_address": "0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF",
+    "required_oracle_decimals": 8,
+    "required_oracle_description": "RedStone Price Feed for ETH",
+    "required_oracle_version": 1,
+    "freshness_rejection_threshold_seconds": null,
+    "current_r1_default_must_remain_bit_for_bit_identity_compatible": true
+  },
+  "decision_rules": [
+    "Reconstruct the historical baseline once per representative and require COMPLETE before attempting its horizons.",
+    "Evaluate exactly the canonical frozen 1m, 5m, 30m, 2h, and 24h horizons using the existing buildForwardOutcome boundary algorithm.",
+    "Do not hard-code observed outcome blocks before live execution; record the actual canonical observed block/hash/timestamp produced by the existing algorithm.",
+    "If any horizon is historically non-portable, stop and classify the incompatibility instead of broadening policy post hoc.",
+    "A 45/45 PASS permits only a successor full-replay authorization decision; it does not self-authorize the 147 replay."
+  ],
+  "known_historical_state": {
+    "launch_count": 147,
+    "launch_producing_implementation_cohorts": 9,
+    "representative_fixture_status": "CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT",
+    "representative_fixture_path": "fixtures/historical-compatibility-r1.json"
+  },
+  "prohibitions": [
+    "Do not change current R3 authority, EXECUTABLE_BASELINE_R1, FORWARD_OUTCOMES_R1, or the already-reviewed historical baseline/outcome policy semantics.",
+    "Do not fit oracle freshness thresholds from representative observations.",
+    "Do not use future information or retrospective off-chain prices.",
+    "Do not silently shrink notionals or create another baseline/outcome algorithm.",
+    "Do not run or authorize the full 147-launch replay in this phase.",
+    "Do not run FAST_VET meaningfully.",
+    "Do not authorize canary, signing, execution, or transaction broadcast.",
+    "Do not merge without explicit user authority.",
+    "Do not reopen review cycles on HISTORICAL_BASELINE_POLICY_R1 or HISTORICAL_OUTCOME_POLICY_R1."
+  ],
+  "authority_docs": [
+    "AGENTS.md",
+    "docs/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.md",
+    "docs/HISTORICAL_OUTCOME_POLICY_R1.md",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "docs/FORWARD_OUTCOMES_R1.md"
+  ],
+  "context_files": [
+    "AGENTS.md",
+    "docs/agent-packets/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.json",
+    "docs/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.md",
+    "docs/HISTORICAL_OUTCOME_POLICY_R1.md",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "src/runtime/forwardOutcomes.ts",
+    "src/outcome/horizons.ts",
+    "src/outcome/historicalRedstoneOutcomeSource.ts",
+    "src/historicalOutcomePolicyCli.ts",
+    "fixtures/historical-compatibility-r1.json",
+    "mise.toml"
+  ],
+  "next_action": "IMPLEMENT_ALL_HORIZON_HARNESS_AND_RUN_45_CELL_LIVE_GATE",
+  "notes": [
+    "The exact predecessor head cc53013075d9e450fe6c92c07269a577cbfaa7aa was still unmerged and its three exact-head workflows were green when this successor was opened.",
+    "No existing HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1 branch or PR was present at successor creation.",
+    "Observed horizon blocks are intentionally outputs, not preregistered constants."
+  ]
+}
