@@ -44,15 +44,19 @@ const metadata = {
 const output = [
   '# Sentry Forensic Gate — SHA-bound Dev Spine Context Pack',
   '',
+  '```json',
   JSON.stringify(metadata, null, 2),
+  '```',
   '',
+  '```text',
   contextContent,
+  '```',
   '',
 ].join('\n');
 
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 const safePhase = packet.phase.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
-const outputPath = join(OUTPUT_DIR, `context-${safePhase}-${testedSha.slice(0, 12)}.txt`);
+const outputPath = join(OUTPUT_DIR, `context-${safePhase}-${testedSha.slice(0, 12)}.md`);
 fs.writeFileSync(outputPath, output, 'utf8');
 
 console.log(`DEV_SPINE_CONTEXT_PACK=${outputPath}`);
