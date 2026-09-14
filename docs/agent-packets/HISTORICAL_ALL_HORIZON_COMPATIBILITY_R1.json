@@ -103,17 +103,25 @@
     "docs/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.md",
     "docs/HISTORICAL_OUTCOME_POLICY_R1.md",
     "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "src/historicalAllHorizonCompatibilityCli.ts",
     "src/runtime/forwardOutcomes.ts",
+    "src/runtime/executableBaseline.ts",
     "src/outcome/horizons.ts",
     "src/outcome/historicalRedstoneOutcomeSource.ts",
-    "src/historicalOutcomePolicyCli.ts",
+    "src/outcome/viemSource.ts",
+    "src/outcome/ports.ts",
+    "src/outcome/forwardTypes.ts",
+    "src/shadow/baselineTypes.ts",
+    "src/tsunami/historicalRedstoneBaselineSource.ts",
     "fixtures/historical-compatibility-r1.json",
+    ".github/workflows/historical-all-horizon-compatibility-r1.yml",
     "mise.toml"
   ],
   "next_action": "IMPLEMENT_ALL_HORIZON_HARNESS_AND_RUN_45_CELL_LIVE_GATE",
   "notes": [
     "The exact predecessor head cc53013075d9e450fe6c92c07269a577cbfaa7aa was still unmerged and its three exact-head workflows were green when this successor was opened.",
     "No existing HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1 branch or PR was present at successor creation.",
-    "Observed horizon blocks are intentionally outputs, not preregistered constants."
+    "Observed horizon blocks are intentionally outputs, not preregistered constants.",
+    "The implementation harness and evidence workflow are context-only additions around the already-reviewed baseline/outcome mechanics; they do not create a new pricing, horizon, or authority algorithm."
   ]
 }
