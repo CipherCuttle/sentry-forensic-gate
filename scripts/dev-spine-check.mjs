@@ -9,6 +9,7 @@ const EXPECTED_HORIZONS = [
   { label: '2h', ms: 7200000 },
   { label: '24h', ms: 86400000 },
 ];
+const REDSTONE_ADDRESS = '0xe5867b1d421f0b52697f16e2ac437e87d66d5fbf';
 const SENSITIVE_AUTHORIZATION_KEYS = [
   'historical_compatibility_implementation',
   'historical_baseline_policy_discovery',
@@ -96,12 +97,23 @@ export function validatePacket(packet) {
   const policy = packet.historical_policy;
   invariant(policy?.baseline_policy_version === 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1', 'historical baseline policy version drift');
   invariant(policy?.outcome_policy_version === 'HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1', 'historical outcome policy version drift');
+  invariant(policy?.weth_valuation_kind === 'WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1', 'historical WETH valuation kind drift');
+  invariant(String(policy?.redstone_eth_usd_address).toLowerCase() === REDSTONE_ADDRESS, 'RedStone address drift');
+  invariant(policy?.required_oracle_decimals === 8, 'RedStone decimals must remain 8');
+  invariant(policy?.required_oracle_description === 'RedStone Price Feed for ETH', 'RedStone description drift');
+  invariant(policy?.required_oracle_version === 1, 'RedStone version drift');
+  invariant(policy?.usdt0_valuation === 'NOMINAL_STABLECOIN_VALUATION_UNCHANGED', 'USDT0 valuation semantics drift');
+  invariant(policy?.freshness_rejection_threshold_seconds === null, 'phase must not fit an age cutoff to representative data');
+  invariant(policy?.oracle_age_must_be_recorded_in_outcome_evidence === true, 'oracle age must remain digested evidence');
+  invariant(policy?.outcome_ids_must_be_policy_separated === true, 'historical outcome IDs must remain policy-separated');
   invariant(policy?.current_r1_default_must_remain_bit_for_bit_identity_compatible === true, 'current outcome R1 identity compatibility must remain explicit');
   invariant(policy?.historical_valuation_semantics_must_remain_unchanged === true, 'historical valuation semantics must remain unchanged');
 
   if (packet.state === 'HISTORICAL_OUTCOME_ALL_HORIZONS_R1_AUTHORIZED') {
+    invariant(packet.authority?.all_horizon_representative_gate_status === 'AUTHORIZED', 'authorized gate status drift');
     invariant(packet.next_action === 'RUN_9X5_ALL_HORIZON_REPRESENTATIVE_GATE', 'authorized next action drift');
   } else {
+    invariant(packet.authority?.all_horizon_representative_gate_status === 'PASS', 'closed gate status must be PASS');
     invariant(packet.next_action === 'STOP_AT_EVIDENCE_AWAIT_REPLAY_AUTHORITY', 'closed next action drift');
     const result = packet.implementation_result;
     invariant(result?.status === 'PASS', 'closed implementation result must be PASS');

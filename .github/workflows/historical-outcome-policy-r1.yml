@@ -30,6 +30,10 @@ on:
       - 'scripts/dev-spine-receipt.mjs'
       - '.github/workflows/historical-outcome-policy-r1.yml'
 
+concurrency:
+  group: historical-live-rpc-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 

@@ -7,6 +7,7 @@ validatePacket(packet);
 assert.equal(packet.state, 'HISTORICAL_OUTCOME_ALL_HORIZONS_R1_AUTHORIZED');
 assert.equal(packet.authorization.historical_outcome_all_horizons_gate, true);
 assert.equal(packet.authorization.full_147_replay, false);
+assert.equal(packet.authority.all_horizon_representative_gate_status, 'AUTHORIZED');
 
 for (const key of [
   'historical_compatibility_implementation',
@@ -49,6 +50,18 @@ const degradedPredecessor = structuredClone(packet);
 degradedPredecessor.predecessor_result.outcomes_24h_complete = 8;
 assert.throws(() => validatePacket(degradedPredecessor), /predecessor 24h COMPLETE must remain 9/);
 
+const changedOracle = structuredClone(packet);
+changedOracle.historical_policy.redstone_eth_usd_address = '0x0000000000000000000000000000000000000001';
+assert.throws(() => validatePacket(changedOracle), /RedStone address drift/);
+
+const fittedFreshness = structuredClone(packet);
+fittedFreshness.historical_policy.freshness_rejection_threshold_seconds = 21600;
+assert.throws(() => validatePacket(fittedFreshness), /must not fit an age cutoff/);
+
+const changedValuationKind = structuredClone(packet);
+changedValuationKind.historical_policy.weth_valuation_kind = 'OTHER';
+assert.throws(() => validatePacket(changedValuationKind), /historical WETH valuation kind drift/);
+
 const replayAuthorized = structuredClone(packet);
 replayAuthorized.authorization.full_147_replay = true;
 assert.throws(() => validatePacket(replayAuthorized), /requires authorization\.full_147_replay=false/);
@@ -56,6 +69,7 @@ assert.throws(() => validatePacket(replayAuthorized), /requires authorization\.f
 const closed = structuredClone(packet);
 closed.state = 'HISTORICAL_OUTCOME_ALL_HORIZONS_R1_PASS';
 closed.authorization.historical_outcome_all_horizons_gate = false;
+closed.authority.all_horizon_representative_gate_status = 'PASS';
 closed.next_action = 'STOP_AT_EVIDENCE_AWAIT_REPLAY_AUTHORITY';
 closed.implementation_result = {
   status: 'PASS',

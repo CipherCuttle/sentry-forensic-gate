@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - 'AGENTS.md'
-      - 'package.json'
       - 'docs/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.md'
       - 'docs/agent-packets/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.json'
       - 'fixtures/historical-compatibility-r1.json'
@@ -30,6 +29,10 @@ on:
       - 'scripts/dev-spine-pack.mjs'
       - 'scripts/dev-spine-receipt.mjs'
       - '.github/workflows/historical-outcome-all-horizons-r1.yml'
+
+concurrency:
+  group: historical-live-rpc-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read

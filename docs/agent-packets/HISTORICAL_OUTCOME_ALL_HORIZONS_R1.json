@@ -19,6 +19,7 @@
     "historical_authorization_granted": false,
     "historical_baseline_policy_status": "PASS",
     "historical_outcome_policy_status": "PASS",
+    "all_horizon_representative_gate_status": "AUTHORIZED",
     "full_147_replay_authorized": false
   },
   "authorization": {
@@ -68,6 +69,15 @@
   "historical_policy": {
     "baseline_policy_version": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
     "outcome_policy_version": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
+    "weth_valuation_kind": "WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1",
+    "redstone_eth_usd_address": "0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF",
+    "required_oracle_decimals": 8,
+    "required_oracle_description": "RedStone Price Feed for ETH",
+    "required_oracle_version": 1,
+    "usdt0_valuation": "NOMINAL_STABLECOIN_VALUATION_UNCHANGED",
+    "freshness_rejection_threshold_seconds": null,
+    "oracle_age_must_be_recorded_in_outcome_evidence": true,
+    "outcome_ids_must_be_policy_separated": true,
     "current_r1_default_must_remain_bit_for_bit_identity_compatible": true,
     "historical_valuation_semantics_must_remain_unchanged": true
   },
@@ -75,6 +85,7 @@
     "Build exactly one existing historical baseline per reviewed representative and require it to be COMPLETE before attempting outcomes.",
     "Iterate the frozen OUTCOME_HORIZONS exported by src/outcome/horizons.ts; do not hard-code shorter-horizon observed blocks.",
     "Use buildHistoricalForwardOutcome() for every representative/horizon combination; do not duplicate the outcome algorithm.",
+    "Keep the reviewed RedStone WETH valuation contract frozen: address, metadata, no fitted freshness cutoff, digested oracle age, and policy-separated outcome IDs.",
     "A provider or transport failure is not market evidence and must not be converted into COMPLETE or a market-loss classification.",
     "If any representative/horizon combination exposes a semantic incompatibility, stop and report it rather than broadening semantics to force 45/45.",
     "A 45/45 representative PASS does not authorize the full 147 replay, FAST_VET, canary, merge, signing, or execution."
