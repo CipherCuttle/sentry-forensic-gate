@@ -5,7 +5,7 @@ const allowedFileExtensions = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
   '.json', '.md', '.yml', '.yaml', '.sql', '.example'
 ]);
-const allowedExtensionlessFiles = new Set(['.gitignore']);
+const allowedExactFiles = new Set(['.gitignore', 'mise.toml']);
 const skippedDirs = new Set(['.git', 'node_modules', 'dist']);
 
 function assertSupportedSurfaces(dir) {
@@ -21,7 +21,7 @@ function assertSupportedSurfaces(dir) {
     }
     const relative = path.relative(process.cwd(), full);
     const extension = path.extname(entry.name).toLowerCase();
-    if (!allowedFileExtensions.has(extension) && !allowedExtensionlessFiles.has(relative)) {
+    if (!allowedFileExtensions.has(extension) && !allowedExactFiles.has(relative)) {
       throw new Error(`UNSUPPORTED_FILE_SURFACE:${relative}`);
     }
   }

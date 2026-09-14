@@ -13,11 +13,33 @@ jobs:
         with:
           node-version: 20
       - run: corepack enable
+      - name: Test Dev Spine fail-closed authorization
+        run: node scripts/dev-spine-check-test.mjs
+      - name: Validate Dev Spine metadata
+        run: node scripts/dev-spine-check.mjs
       - name: Enforce supported execution surfaces
         run: node scripts/research-boundary-package-check.mjs
       - name: Test research-only guardrails
         run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests
       - name: Enforce research-only guardrails
         run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
       - run: pnpm test
+      - name: Generate Dev Spine evidence
+        if: always()
+        env:
+          DEV_SPINE_CI_STATUS: ${{ job.status }}
+          DEV_SPINE_TESTED_SHA: ${{ github.sha }}
+          DEV_SPINE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -n "$(git status --porcelain=v1)" ]; then export DEV_SPINE_DIRTY=true; else export DEV_SPINE_DIRTY=false; fi
+          node scripts/dev-spine-pack.mjs
+          node scripts/dev-spine-receipt.mjs
+      - name: Upload Dev Spine evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-spine-${{ github.sha }}
+          path: .dev-spine/
+          if-no-files-found: error
+          include-hidden-files: true
