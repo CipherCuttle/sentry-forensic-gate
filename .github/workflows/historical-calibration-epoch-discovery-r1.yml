@@ -1,0 +1,34 @@
+name: historical-calibration-epoch-discovery-r1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/historical-calibration-epoch-discovery-r1.yml'
+      - 'scripts/historical-calibration-epoch-discovery-r1.mjs'
+      - 'docs/HISTORICAL_CALIBRATION_EPOCH_DISCOVERY_R1.md'
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - name: Scan all 147 historical launch decision points
+        env:
+          OUTPUT_PATH: historical-calibration-epoch-discovery-r1.json
+        run: node scripts/historical-calibration-epoch-discovery-r1.mjs
+      - name: Upload discovery receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-calibration-epoch-discovery-r1
+          path: historical-calibration-epoch-discovery-r1.json
+          if-no-files-found: error
