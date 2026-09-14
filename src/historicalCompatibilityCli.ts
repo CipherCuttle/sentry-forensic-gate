@@ -35,10 +35,13 @@ if (headBlock < OUTCOME_CONFIRMATIONS) throw new Error(`HISTORICAL_COMPATIBILITY
 const confirmedHeadPoint = await headProbe.getBlockPoint(headBlock - OUTCOME_CONFIRMATIONS);
 
 const rows: Array<Record<string, unknown>> = [];
+let baselineAttempted = 0;
 let baselineComplete = 0;
 let baselineUnverified = 0;
+let outcomesAttempted = 0;
 let outcomesComplete = 0;
 let outcomesUnverified = 0;
+let outcomesNotAttempted = 0;
 
 for (const representative of fixture.representatives) {
   const launchBlock = BigInt(representative.blockNumber);
@@ -68,6 +71,7 @@ for (const representative of fixture.representatives) {
   }
   const launch = matches[0]!;
 
+  baselineAttempted += 1;
   const baseline = await buildBaselineBatch(
     baselineSource,
     launch,
@@ -75,15 +79,28 @@ for (const representative of fixture.representatives) {
     DEFAULT_BASELINE_NOTIONALS_USD_MICROS,
     authorizeExecutableBlock
   );
-  if (baseline.status === 'COMPLETE') {
-    baselineComplete += 1;
-  } else {
+
+  const row: Record<string, unknown> = {
+    implementation: representative.implementation,
+    launchBlock,
+    tokenId,
+    launchId: launch.launchId,
+    token: launch.token,
+    decisionBlock: baseline.decisionBlock,
+    baselineStatus: baseline.status,
+    ...(baseline.status === 'UNVERIFIED' ? { baselineReason: baseline.reason } : {})
+  };
+
+  if (baseline.status !== 'COMPLETE') {
     baselineUnverified += 1;
-    throw new Error(
-      `HISTORICAL_COMPATIBILITY_BASELINE_UNVERIFIED:block=${launchBlock}:tokenId=${tokenId}:reason=${baseline.reason ?? 'UNKNOWN'}`
-    );
+    outcomesNotAttempted += 1;
+    row.outcome24hStatus = 'NOT_ATTEMPTED_BASELINE_UNVERIFIED';
+    rows.push(row);
+    continue;
   }
 
+  baselineComplete += 1;
+  outcomesAttempted += 1;
   const outcomeSource = new ViemForwardOutcomeSource({ rpcUrl, authority });
   const outcome = await buildForwardOutcome(
     outcomeSource,
@@ -93,30 +110,31 @@ for (const representative of fixture.representatives) {
     confirmedHeadPoint,
     authorizeExecutableBlock
   );
+
   if (!outcome) {
-    throw new Error(`HISTORICAL_COMPATIBILITY_OUTCOME_UNEXPECTED_NULL:${launch.launchId}`);
+    outcomesUnverified += 1;
+    row.outcome24hStatus = 'UNVERIFIED';
+    row.outcome24hReason = 'UNEXPECTED_NULL';
+    rows.push(row);
+    continue;
   }
+
+  row.outcome24hStatus = outcome.status;
+  row.outcome24hObservedBlock = outcome.observedBlock;
+  if (outcome.reason) row.outcome24hReason = outcome.reason;
   if (outcome.status === 'COMPLETE') outcomesComplete += 1;
   else outcomesUnverified += 1;
-
-  rows.push({
-    implementation: representative.implementation,
-    launchBlock,
-    tokenId,
-    launchId: launch.launchId,
-    token: launch.token,
-    decisionBlock: baseline.decisionBlock,
-    baselineStatus: baseline.status,
-    outcome24hStatus: outcome.status,
-    outcome24hObservedBlock: outcome.observedBlock
-  });
+  rows.push(row);
 }
 
 const pass =
+  baselineAttempted === EXPECTED_REPRESENTATIVES &&
   baselineComplete === EXPECTED_REPRESENTATIVES &&
   baselineUnverified === 0 &&
+  outcomesAttempted === EXPECTED_REPRESENTATIVES &&
   outcomesComplete === EXPECTED_REPRESENTATIVES &&
-  outcomesUnverified === 0;
+  outcomesUnverified === 0 &&
+  outcomesNotAttempted === 0;
 
 const receipt = {
   schema: 'historical-compatibility-r1-live-receipt/v1',
@@ -127,10 +145,13 @@ const receipt = {
   representativesAttempted: fixture.representatives.length,
   decisionDelayBlocks: DECISION_DELAY_BLOCKS,
   outcomeHorizonMs: OUTCOME_HORIZON_MS,
+  baselineAttempted,
   baselineComplete,
   baselineUnverified,
+  outcomes24hAttempted: outcomesAttempted,
   outcomes24hComplete: outcomesComplete,
   outcomes24hUnverified: outcomesUnverified,
+  outcomes24hNotAttempted: outcomesNotAttempted,
   rows,
   verdict: pass ? 'PASS' : 'FAIL'
 };
