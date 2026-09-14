@@ -1,13 +1,6 @@
-import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 
 const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
-
-function trackedFile(path) {
-  return execFileSync('git', ['show', `HEAD:${path}`], {
-    encoding: 'utf8',
-    maxBuffer: 20 * 1024 * 1024,
-  });
-}
 
 function fail(message) {
   console.error(`DEV_SPINE_CHECK=FAIL ${message}`);
@@ -16,7 +9,7 @@ function fail(message) {
 
 let packet;
 try {
-  packet = JSON.parse(trackedFile(PACKET_PATH));
+  packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
 } catch (error) {
   fail(`cannot parse ${PACKET_PATH}: ${error.message}`);
 }
@@ -28,11 +21,7 @@ if (!Array.isArray(packet.authority_docs) || packet.authority_docs.length === 0)
 if (!Array.isArray(packet.context_files) || packet.context_files.length === 0) fail('context_files must be non-empty');
 
 for (const path of new Set([...packet.authority_docs, ...packet.context_files])) {
-  try {
-    trackedFile(path);
-  } catch {
-    fail(`tracked authority/context file missing at HEAD: ${path}`);
-  }
+  if (!fs.existsSync(path) || !fs.statSync(path).isFile()) fail(`authority/context file missing: ${path}`);
 }
 
 const auth = packet.authorization;

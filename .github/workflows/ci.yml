@@ -27,8 +27,10 @@ jobs:
         if: always()
         env:
           DEV_SPINE_CI_STATUS: ${{ job.status }}
+          DEV_SPINE_TESTED_SHA: ${{ github.sha }}
           DEV_SPINE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
+          if [ -n "$(git status --porcelain=v1)" ]; then export DEV_SPINE_DIRTY=true; else export DEV_SPINE_DIRTY=false; fi
           node scripts/dev-spine-pack.mjs
           node scripts/dev-spine-receipt.mjs
       - name: Upload Dev Spine evidence

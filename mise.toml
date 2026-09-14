@@ -5,15 +5,32 @@
 
 [tasks.context]
 description = "Show exact Git state, active phase packet, authority, and next action"
-run = "node scripts/dev-spine-context.mjs"
+run = '''
+set -eu
+head="$(git rev-parse HEAD)"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [ -n "$(git status --porcelain=v1)" ]; then dirty=true; else dirty=false; fi
+DEV_SPINE_TESTED_SHA="$head" DEV_SPINE_SOURCE_SHA="$head" DEV_SPINE_BRANCH="$branch" DEV_SPINE_DIRTY="$dirty" node scripts/dev-spine-context.mjs
+'''
 
 [tasks.context-json]
 description = "Emit the same Dev Spine context as machine-readable JSON"
-run = "node scripts/dev-spine-context.mjs --json"
+run = '''
+set -eu
+head="$(git rev-parse HEAD)"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [ -n "$(git status --porcelain=v1)" ]; then dirty=true; else dirty=false; fi
+DEV_SPINE_TESTED_SHA="$head" DEV_SPINE_SOURCE_SHA="$head" DEV_SPINE_BRANCH="$branch" DEV_SPINE_DIRTY="$dirty" node scripts/dev-spine-context.mjs --json
+'''
 
 [tasks.pack]
-description = "Generate a SHA-bound phase context pack from tracked HEAD content"
-run = "node scripts/dev-spine-pack.mjs"
+description = "Generate a SHA-bound phase context pack from a clean checkout"
+run = '''
+set -eu
+head="$(git rev-parse HEAD)"
+if [ -n "$(git status --porcelain=v1)" ]; then dirty=true; else dirty=false; fi
+DEV_SPINE_TESTED_SHA="$head" DEV_SPINE_SOURCE_SHA="$head" DEV_SPINE_DIRTY="$dirty" node scripts/dev-spine-pack.mjs
+'''
 
 [tasks.spinecheck]
 description = "Validate Dev Spine metadata and fail-closed phase invariants"

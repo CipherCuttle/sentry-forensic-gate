@@ -1,24 +1,21 @@
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import fs from 'node:fs';
 
 const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
 const OUTPUT_PATH = '.dev-spine/receipt.json';
 
-function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim();
+function fail(message) {
+  console.error(`DEV_SPINE_RECEIPT=FAIL ${message}`);
+  process.exit(1);
 }
 
-function trackedFile(path) {
-  return execFileSync('git', ['show', `HEAD:${path}`], {
-    encoding: 'utf8',
-    maxBuffer: 20 * 1024 * 1024,
-  });
-}
+const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
+const testedSha = process.env.DEV_SPINE_TESTED_SHA;
+const sourceHeadSha = process.env.DEV_SPINE_SOURCE_SHA ?? testedSha;
+const dirtyRaw = process.env.DEV_SPINE_DIRTY;
+if (!testedSha || !sourceHeadSha) fail('tested/source SHA must be supplied by the Spine adapter');
+if (dirtyRaw !== 'true' && dirtyRaw !== 'false') fail('dirty state must be explicitly supplied by the Spine adapter');
+const dirty = dirtyRaw === 'true';
 
-const packet = JSON.parse(trackedFile(PACKET_PATH));
-const testedSha = git(['rev-parse', 'HEAD']);
-const sourceHeadSha = process.env.DEV_SPINE_SOURCE_SHA || testedSha;
-const status = execFileSync('git', ['status', '--porcelain=v1'], { encoding: 'utf8' });
 const ciStatus = String(process.env.DEV_SPINE_CI_STATUS ?? 'unknown').toLowerCase();
 const repositoryVerification = ciStatus === 'success' ? 'PASS' : ciStatus === 'failure' || ciStatus === 'cancelled' ? 'FAIL' : 'UNKNOWN';
 
@@ -29,7 +26,7 @@ const receipt = {
   tested_sha: testedSha,
   source_head_sha: sourceHeadSha,
   source_matches_tested_sha: sourceHeadSha === testedSha,
-  dirty_worktree_observed: status.length > 0,
+  dirty_worktree_observed: dirty,
   repository_verification: {
     ci_status: ciStatus,
     verdict: repositoryVerification,
@@ -45,16 +42,17 @@ const receipt = {
   phase_state: packet.state,
   next_action: packet.next_action,
   verdict:
-    repositoryVerification === 'PASS'
+    repositoryVerification === 'PASS' && !dirty
       ? 'REPO_VERIFICATION_PASS_PHASE_NOT_EVALUATED'
       : repositoryVerification === 'FAIL'
         ? 'REPO_VERIFICATION_FAIL_PHASE_NOT_EVALUATED'
         : 'REPO_VERIFICATION_UNKNOWN_PHASE_NOT_EVALUATED',
 };
 
-mkdirSync('.dev-spine', { recursive: true });
-writeFileSync(OUTPUT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, 'utf8');
+fs.mkdirSync('.dev-spine', { recursive: true });
+fs.writeFileSync(OUTPUT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, 'utf8');
 console.log(`DEV_SPINE_RECEIPT=${OUTPUT_PATH}`);
 console.log(`TESTED_SHA=${testedSha}`);
 console.log(`SOURCE_HEAD_SHA=${sourceHeadSha}`);
+console.log(`DIRTY_WORKTREE_OBSERVED=${dirty}`);
 console.log(`VERDICT=${receipt.verdict}`);

@@ -1,29 +1,18 @@
-import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 
 const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
 
-function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim();
-}
-
-function trackedFile(path) {
-  return execFileSync('git', ['show', `HEAD:${path}`], {
-    encoding: 'utf8',
-    maxBuffer: 20 * 1024 * 1024,
-  });
-}
-
-const packet = JSON.parse(trackedFile(PACKET_PATH));
-const head = git(['rev-parse', 'HEAD']);
-const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
-const status = execFileSync('git', ['status', '--porcelain=v1'], { encoding: 'utf8' });
+const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
+const dirtyRaw = process.env.DEV_SPINE_DIRTY;
+const dirty = dirtyRaw === 'true' ? true : dirtyRaw === 'false' ? false : null;
 
 const context = {
   schema: 'dev-spine-context/v1',
   repo: packet.repo,
-  head,
-  branch,
-  dirty: status.length > 0,
+  head: process.env.DEV_SPINE_TESTED_SHA ?? 'UNKNOWN',
+  source_head: process.env.DEV_SPINE_SOURCE_SHA ?? process.env.DEV_SPINE_TESTED_SHA ?? 'UNKNOWN',
+  branch: process.env.DEV_SPINE_BRANCH ?? 'UNKNOWN',
+  dirty,
   phase: packet.phase,
   phase_state: packet.state,
   objective: packet.objective,
@@ -41,8 +30,9 @@ if (process.argv.includes('--json')) {
 
 console.log(`REPO=${context.repo}`);
 console.log(`HEAD=${context.head}`);
+console.log(`SOURCE_HEAD=${context.source_head}`);
 console.log(`BRANCH=${context.branch}`);
-console.log(`DIRTY=${context.dirty}`);
+console.log(`DIRTY=${context.dirty ?? 'UNKNOWN'}`);
 console.log('');
 console.log(`ACTIVE_PHASE=${context.phase}`);
 console.log(`PHASE_STATE=${context.phase_state}`);

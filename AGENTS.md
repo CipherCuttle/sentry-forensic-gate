@@ -6,7 +6,7 @@ This repository is point-in-time adverse-selection research for newly launched S
 
 Use `PLAN -> CHANGESET -> VERIFY -> VERDICT`. Prefer the smallest coherent diff. Rehydrate from the exact Git state and relevant PR stack rather than chat memory.
 
-Universal Dev Spine entrypoint: run `mise run context` first when `mise` is available. The machine-readable active state packet is `docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json`. It is a navigation/state artifact only and must not broaden repository authority. If it says `NEXT_AWAITING_IMPLEMENTATION_PROMPT`, do not implement that phase until the separate implementation prompt is supplied. Use `mise run pack` for a SHA-bound context pack generated from tracked `HEAD` content.
+Universal Dev Spine entrypoint: run `mise run context` first when `mise` is available. The machine-readable active state packet is `docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json`. It is a navigation/state artifact only and must not broaden repository authority. If it says `NEXT_AWAITING_IMPLEMENTATION_PROMPT`, do not implement that phase until the separate implementation prompt is supplied. Use `mise run pack` only from a clean worktree; it emits a SHA-bound context pack from the checked-out files and fails closed when local changes are present.
 
 For remote GitHub work, group related multi-file edits into one coherent commit when possible, keep unrelated work unchanged, and record the exact commit SHA plus verification result in the PR.
 
