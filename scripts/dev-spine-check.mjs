@@ -16,28 +16,28 @@ const SENSITIVE_AUTHORIZATION_KEYS = [
   'canary',
   'merge',
 ];
+const ALL_FALSE_AUTHORIZATION = {
+  historical_compatibility_implementation: false,
+  historical_baseline_policy_discovery: false,
+  historical_baseline_policy_implementation: false,
+  historical_outcome_policy_discovery: false,
+  historical_outcome_policy_implementation: false,
+  full_147_replay: false,
+  fast_vet: false,
+  canary: false,
+  merge: false,
+};
 const STATE_AUTHORIZATION = {
   HISTORICAL_OUTCOME_POLICY_DISCOVERY_AUTHORIZED: {
-    historical_compatibility_implementation: false,
-    historical_baseline_policy_discovery: false,
-    historical_baseline_policy_implementation: false,
+    ...ALL_FALSE_AUTHORIZATION,
     historical_outcome_policy_discovery: true,
-    historical_outcome_policy_implementation: false,
-    full_147_replay: false,
-    fast_vet: false,
-    canary: false,
-    merge: false,
   },
   HISTORICAL_OUTCOME_POLICY_IMPLEMENTATION_AUTHORIZED: {
-    historical_compatibility_implementation: false,
-    historical_baseline_policy_discovery: false,
-    historical_baseline_policy_implementation: false,
-    historical_outcome_policy_discovery: false,
+    ...ALL_FALSE_AUTHORIZATION,
     historical_outcome_policy_implementation: true,
-    full_147_replay: false,
-    fast_vet: false,
-    canary: false,
-    merge: false,
+  },
+  HISTORICAL_OUTCOME_POLICY_PASS: {
+    ...ALL_FALSE_AUTHORIZATION,
   },
 };
 
@@ -85,14 +85,14 @@ export function validatePacket(packet) {
   invariant(predecessor?.outcomes_24h_unverified === 2, 'predecessor outcomes UNVERIFIED must remain 2');
 
   const discovery = packet.oracle_discovery_result;
-  if (packet.state === 'HISTORICAL_OUTCOME_POLICY_IMPLEMENTATION_AUTHORIZED') {
-    invariant(packet.authority?.historical_outcome_policy_status === 'IMPLEMENTATION_AUTHORIZED', 'outcome policy status must match implementation state');
-    invariant(discovery?.status === 'DISCOVERY_COMPLETE', 'oracle discovery must be complete before implementation');
+  const implementationOrClosed =
+    packet.state === 'HISTORICAL_OUTCOME_POLICY_IMPLEMENTATION_AUTHORIZED' ||
+    packet.state === 'HISTORICAL_OUTCOME_POLICY_PASS';
+  if (implementationOrClosed) {
+    invariant(discovery?.status === 'DISCOVERY_COMPLETE', 'oracle discovery must be complete before implementation/closure');
     invariant(discovery?.representatives_attempted === 9, 'oracle discovery attempted count must remain 9');
     invariant(discovery?.code_present === 9, 'oracle discovery code coverage must remain 9/9');
     invariant(discovery?.structurally_point_in_time_usable === 9, 'oracle discovery usability must remain 9/9');
-  } else {
-    invariant(packet.authority?.historical_outcome_policy_status === 'DISCOVERY_NOT_RUN', 'outcome policy status must remain discovery-not-run before evidence');
   }
 
   const policy = packet.historical_policy ?? packet.candidate_oracle;
@@ -102,7 +102,7 @@ export function validatePacket(packet) {
   invariant((policy?.required_oracle_version ?? policy?.required_version) === 1, 'RedStone version drift');
   invariant(policy?.freshness_rejection_threshold_seconds === null, 'phase must not fit an age cutoff to representative data');
 
-  if (packet.state === 'HISTORICAL_OUTCOME_POLICY_IMPLEMENTATION_AUTHORIZED') {
+  if (implementationOrClosed) {
     invariant(policy?.policy_version === HISTORICAL_OUTCOME_POLICY, 'historical outcome policy version drift');
     invariant(policy?.weth_valuation_kind === 'WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1', 'historical WETH valuation kind drift');
     invariant(policy?.oracle_age_must_be_recorded_in_outcome_evidence === true, 'oracle age must remain digested evidence');
@@ -111,9 +111,26 @@ export function validatePacket(packet) {
     invariant(acceptance?.baseline_complete_required === 9, 'historical baseline COMPLETE requirement must remain 9');
     invariant(acceptance?.outcome_complete_required === 9, 'historical outcome COMPLETE requirement must remain 9');
     invariant(acceptance?.outcome_unverified_required === 0, 'historical outcome UNVERIFIED requirement must remain 0');
+  }
+
+  if (packet.state === 'HISTORICAL_OUTCOME_POLICY_DISCOVERY_AUTHORIZED') {
+    invariant(packet.authority?.historical_outcome_policy_status === 'DISCOVERY_NOT_RUN', 'outcome policy status must remain discovery-not-run before evidence');
+    invariant(packet.next_action === 'RUN_POINT_IN_TIME_REDSTONE_AT_EXACT_24H_BLOCKS', 'discovery next action drift');
+  } else if (packet.state === 'HISTORICAL_OUTCOME_POLICY_IMPLEMENTATION_AUTHORIZED') {
+    invariant(packet.authority?.historical_outcome_policy_status === 'IMPLEMENTATION_AUTHORIZED', 'outcome policy status must match implementation state');
     invariant(packet.next_action === 'IMPLEMENT_SEPARATELY_VERSIONED_REDSTONE_ASOF_HISTORICAL_OUTCOME_AND_RUN_NINE_REPRESENTATIVES', 'implementation next action drift');
   } else {
-    invariant(packet.next_action === 'RUN_POINT_IN_TIME_REDSTONE_AT_EXACT_24H_BLOCKS', 'discovery next action drift');
+    invariant(packet.authority?.historical_outcome_policy_status === 'PASS', 'closed outcome policy status must be PASS');
+    invariant(packet.next_action === 'ONE_HOSTILE_REVIEW_THEN_ALL_HORIZON_REPRESENTATIVE_GATE', 'closed next action drift');
+    const result = packet.implementation_result;
+    invariant(result?.status === 'PASS', 'closed implementation result must remain PASS');
+    invariant(result?.representatives_attempted === 9, 'closed implementation attempted count must remain 9');
+    invariant(result?.baseline_complete === 9 && result?.baseline_unverified === 0, 'closed baseline result must remain 9 COMPLETE / 0 UNVERIFIED');
+    invariant(result?.outcomes_24h_attempted === 9, 'closed outcome attempted count must remain 9');
+    invariant(result?.outcomes_24h_complete === 9, 'closed outcome COMPLETE count must remain 9');
+    invariant(result?.outcomes_24h_unverified === 0, 'closed outcome UNVERIFIED count must remain 0');
+    invariant(result?.verdict === 'HISTORICAL_OUTCOME_POLICY_PASS', 'closed implementation verdict drift');
+    invariant(auth.full_147_replay === false, 'representative PASS must not self-authorize full replay');
   }
 
   const historical = packet.known_historical_state;
