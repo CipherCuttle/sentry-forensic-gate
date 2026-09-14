@@ -4,11 +4,16 @@
 
 **Stage A calibration-surface discovery: COMPLETE.**  
 **Stage B point-in-time oracle discovery: COMPLETE.**  
-**Stage C separately versioned historical baseline implementation: AUTHORIZED.**
+**Stage C separately versioned historical baseline implementation: PASS.**  
+**Unchanged exact-24h outcome probe: BLOCKED_BY_HISTORICAL_USD_VALUATION.**
+
+Held state:
+
+`HISTORICAL_BASELINE_POLICY_PASS_OUTCOME_VALUATION_BLOCKED`
 
 No full historical replay, FAST_VET, canary, merge, signing, or execution is authorized.
 
-## Why a separate policy is required
+## Why a separate baseline policy was required
 
 `EXECUTABLE_BASELINE_R1` remains the frozen current-R3 policy. Its decision point is launch block + 2 blocks and its five notionals remain exactly $0.25, $0.50, $1, $2, and $5.
 
@@ -18,17 +23,17 @@ Historical discovery established that the R1 WETH -> USDT0 exact-output sizing r
 - the later six WETH representatives have a 3000-fee route that handles $0.25/$0.50/$1 but reverts at $2/$5;
 - the sole representative with all five R1 notionals is USDT0-base and therefore uses nominal stablecoin sizing.
 
-That is market/infrastructure history, not an adapter defect. We therefore do not shrink the frozen notionals or rewrite `EXECUTABLE_BASELINE_R1`.
+This is market/infrastructure history, not an adapter defect. R1 notionals were not shrunk and current `EXECUTABLE_BASELINE_R1` was not rewritten.
 
 ## Point-in-time oracle discovery
 
-Before selecting a replacement, two Ink-documented ETH/USD contracts were frozen and queried at all nine historical decision blocks.
+Two preregistered Ink ETH/USD candidates were queried at all nine historical decision blocks.
 
 ### eOracle
 
 `0xdFc720E1ef024bfc768ed9E6F0e7Fc80E28f8CFA`
 
-Code and metadata existed at all nine decision blocks, but `latestRoundData()` reverted at every representative. It is not selected.
+Code and metadata existed at all nine decision blocks, but `latestRoundData()` reverted at every representative. It was not selected.
 
 ### RedStone
 
@@ -47,9 +52,9 @@ Observed ages in seconds were:
 
 `2483, 97, 398, 13044, 1995, 10723, 103, 18055, 14689`
 
-No feed-specific Ink heartbeat was independently established before policy selection. A rejection threshold is therefore **not** fitted to these observed ages.
+No feed-specific Ink heartbeat was independently established before policy selection, so no rejection threshold was fitted to these observed ages.
 
-## Frozen Stage C policy
+## Frozen historical baseline policy
 
 Policy version:
 
@@ -72,7 +77,7 @@ Unchanged from R1:
 
 ### USDT0 base
 
-Use the existing `USDT0_NOMINAL_PEG_V0` calibration unchanged.
+Use existing `USDT0_NOMINAL_PEG_V0` unchanged.
 
 ### WETH base
 
@@ -82,62 +87,78 @@ At the exact historical decision block:
 2. require `decimals() == 8`;
 3. require `description() == "RedStone Price Feed for ETH"`;
 4. require `version() == 1`;
-5. read `latestRoundData()` at that same block;
+5. read `latestRoundData()` at that block;
 6. require `answer > 0`;
 7. require `updatedAt > 0`;
 8. require `updatedAt <= decisionBlock.timestamp`;
-9. record the oracle answer, decimals, update timestamp, decision-block timestamp, and `ageSeconds` in calibration authority evidence;
-10. size WETH using ceiling division:
+9. record answer, decimals, update timestamp, decision-block timestamp, and `ageSeconds` in calibration authority evidence;
+10. size WETH with ceiling division:
 
 `ceil(notionalUsdMicros * 10^wethDecimals * 10^oracleDecimals / (1_000_000 * oracleAnswer))`
 
-Ceiling division prevents the requested USD notional from being silently undershot by integer truncation.
+Ceiling division prevents integer truncation from silently undershooting the requested USD notional.
 
-### Freshness semantics
+No arbitrary age cutoff is introduced. This policy reconstructs the last provider-published on-chain ETH/USD state available as of the decision block; it is not a production trading-freshness policy.
 
-This policy reconstructs the **last provider-published on-chain ETH/USD state available as of the decision block**. It does not claim that every such value would satisfy a live trading risk freshness standard.
+## Identity and implementation separation
 
-No arbitrary age cutoff is introduced in R1 of the historical policy. Oracle age is retained as evidence so later analysis can stratify or sensitivity-test historical results without changing which information was available at the decision point.
+The historical policy does not masquerade as current R1:
 
-This is a historical reconstruction policy, not production execution authority.
+- historical baseline IDs use the historical policy version;
+- historical quote IDs are policy-separated;
+- batch `policyVersion` is the historical version;
+- RedStone evidence is included in the authority digest;
+- existing callers without an explicit historical override retain current R1 IDs and semantics unchanged.
 
-## Identity separation
+Implementation reuses the existing `buildBaselineBatch()` algorithm and `ExecutableBaselineSource` port. The historical source replaces only WETH USD calibration and policy-scoped quote identity while delegating market resolution, entry quoting, reverse quoting, authority checks, and reorg checks to the reviewed pipeline. There is no second baseline algorithm.
 
-The historical policy MUST NOT masquerade as current `EXECUTABLE_BASELINE_R1`.
+## Stage C live representative evidence
 
-- baseline IDs must be derived under the historical policy version;
-- quote IDs must be policy-separated;
-- batch `policyVersion` must be the historical version;
-- RedStone calibration evidence must be included in the authority digest;
-- existing callers without an explicit historical override must retain current R1 IDs and semantics unchanged.
+Source head:
 
-## Implementation boundary
+`b15dcb24dc73cf583039c0f9e95e4c706556d1a1`
 
-Use the existing `buildBaselineBatch()` algorithm and the existing `ExecutableBaselineSource` port. The historical source may replace only `calibrateUsd()` and policy-scoped quote identity while delegating market resolution, entry quoting, reverse quoting, authority checks, and reorg checks to the reviewed pipeline.
+GitHub Actions run:
 
-Do not create a second baseline algorithm.
+`34856771194`
 
-## Representative gate
+Uploaded receipt artifact:
 
-Run the same nine historical representatives through the real existing baseline pipeline using the new historical policy.
+`10352059780`
 
-Baseline acceptance:
+Baseline result:
 
-- 9 attempted
-- 9 COMPLETE
-- 0 UNVERIFIED
+- representatives attempted: **9/9**
+- baseline COMPLETE: **9/9**
+- baseline UNVERIFIED: **0/9**
+- verdict: **PASS**
 
-After each COMPLETE baseline, probe the existing exact-24h outcome path unchanged. If the outcome path is historically non-portable, report and stop that as a separate successor problem; do not repair outcome semantics inside this baseline-policy gate.
+This satisfies the preregistered Stage C baseline acceptance contract.
 
-## Authority boundary
+## Exact-24h outcome diagnostic
 
-Even a 9/9 baseline PASS does not authorize:
+The existing exact-24h outcome path was then probed unchanged, as preregistered.
 
-- the 147-launch replay;
-- FAST_VET;
-- canary trading;
-- signing;
-- approvals;
-- swap construction;
-- transaction broadcast;
-- merge.
+Result:
+
+- outcomes attempted: **9/9**
+- outcomes COMPLETE: **7/9**
+- outcomes UNVERIFIED: **2/9**
+- blocker family: `OUTCOME_USD_VALUATION_UNAVAILABLE`
+
+Blocked representatives:
+
+1. launch block `39943476`, tokenId `1`, observed block `40029876` — `OUTCOME_USD_VALUATION_UNAVAILABLE:block=40029876:baseAmount=49475793190238`
+2. launch block `40032260`, tokenId `5`, observed block `40118660` — `OUTCOME_USD_VALUATION_UNAVAILABLE:block=40118660:baseAmount=19726984103325`
+
+The outcome implementation values WETH through the historical Tsunami WETH -> USDT0 DEX route. The same early-market portability problem therefore survives at these two 24h outcome blocks.
+
+Per the frozen Stage C decision rule, this outcome problem is **not repaired in this phase**. It becomes a separately versioned successor problem.
+
+## Closure verdict
+
+`BASELINE_POLICY_PASS / OUTCOME_VALUATION_BLOCKED / FULL_147_REPLAY_NOT_AUTHORIZED / FAST_VET_NOT_AUTHORIZED / CANARY_NOT_AUTHORIZED / MERGE_NOT_AUTHORIZED`
+
+Next action:
+
+`OPEN_HISTORICAL_OUTCOME_VALUATION_POLICY_R1_SUCCESSOR`
