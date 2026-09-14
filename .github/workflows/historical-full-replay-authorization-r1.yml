@@ -31,6 +31,7 @@ jobs:
           node scripts/dev-spine-check.mjs
       - name: Discover and verify frozen 147-launch scope
         env:
+          INK_RPC_URL: https://rpc-qnd.inkonchain.com
           OUTPUT_PATH: historical-full-replay-scope-r1-live.json
           EXPECTED_SCOPE_PATH: fixtures/historical-full-replay-scope-r1.json
         run: node scripts/historical-full-replay-scope-r1.mjs
