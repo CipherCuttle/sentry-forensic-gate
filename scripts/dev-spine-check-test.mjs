@@ -4,9 +4,14 @@ import { validatePacket } from './dev-spine-check.mjs';
 
 const packet = JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.json', 'utf8'));
 validatePacket(packet);
-assert.equal(packet.state, 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED');
-assert.equal(packet.authorization.historical_all_horizon_compatibility_implementation, true);
+assert.equal(packet.state, 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS');
+assert.equal(packet.authorization.historical_all_horizon_compatibility_implementation, false);
 assert.equal(packet.authorization.full_147_replay, false);
+assert.equal(packet.next_action, 'OPEN_HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1_DECISION');
+assert.equal(packet.implementation_result.status, 'PASS');
+assert.equal(packet.implementation_result.baseline_complete, 9);
+assert.equal(packet.implementation_result.outcomes_complete, 45);
+assert.equal(packet.implementation_result.outcomes_unverified, 0);
 
 for (const key of [
   'historical_compatibility_implementation',
@@ -58,7 +63,14 @@ const replayAuthorized = structuredClone(packet);
 replayAuthorized.authorization.full_147_replay = true;
 assert.throws(() => validatePacket(replayAuthorized), /requires authorization\.full_147_replay=false/);
 
-const fakePass = structuredClone(packet);
+const implementationPacket = structuredClone(packet);
+implementationPacket.state = 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED';
+implementationPacket.authorization.historical_all_horizon_compatibility_implementation = true;
+implementationPacket.next_action = 'IMPLEMENT_ALL_HORIZON_HARNESS_AND_RUN_45_CELL_LIVE_GATE';
+delete implementationPacket.implementation_result;
+validatePacket(implementationPacket);
+
+const fakePass = structuredClone(implementationPacket);
 fakePass.state = 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS';
 fakePass.authorization.historical_all_horizon_compatibility_implementation = false;
 fakePass.next_action = 'OPEN_HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1_DECISION';
@@ -66,6 +78,6 @@ assert.throws(() => validatePacket(fakePass), /closed all-horizon result must be
 
 const replayNext = structuredClone(packet);
 replayNext.next_action = 'RUN_FULL_147_REPLAY';
-assert.throws(() => validatePacket(replayNext), /implementation next action drift/);
+assert.throws(() => validatePacket(replayNext), /closed next action drift/);
 
 console.log('DEV_SPINE_CHECK_TEST=PASS');
