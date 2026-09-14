@@ -16,6 +16,8 @@ export * from './graph/types.js';
 export * from './forensic/ports.js';
 export * from './forensic/creatorOutcome.js';
 export * from './evaluation/creatorSignal.js';
+export * from './evaluation/fastVet.js';
+export * from './evaluation/fastVetShadow.js';
 export * from './shadow/ports.js';
 export * from './shadow/baselineTypes.js';
 export * from './shadow/baselineStore.js';
