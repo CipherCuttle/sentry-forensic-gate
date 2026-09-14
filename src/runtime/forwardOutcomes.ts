@@ -14,6 +14,7 @@ import {
   type ForwardOutcomeReceipt
 } from '../outcome/forwardTypes.js';
 import type { ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
+import type { ExecutableBlockAuthorizer } from './executableBaseline.js';
 
 export interface ForwardOutcomeOptions {
   confirmations: bigint;
@@ -106,11 +107,12 @@ export async function buildForwardOutcome(
   launch: LaunchObserved,
   batch: ExecutableBaselineBatch,
   horizonMs: number,
-  confirmedHeadPoint: OutcomeBlockPoint
+  confirmedHeadPoint: OutcomeBlockPoint,
+  authorizeExecutableBlock: ExecutableBlockAuthorizer = resolveAuthorizedExecutableInfra
 ): Promise<ForwardOutcomeReceipt | null> {
   if (batch.launchId !== launch.launchId) throw new Error(`OUTCOME_BASELINE_LAUNCH_MISMATCH:${launch.launchId}`);
-  resolveAuthorizedExecutableInfra(launch.blockNumber);
-  resolveAuthorizedExecutableInfra(batch.decisionBlock);
+  authorizeExecutableBlock(launch.blockNumber);
+  authorizeExecutableBlock(batch.decisionBlock);
   if (batch.status !== 'COMPLETE' || !batch.market) return null;
   if (!Number.isInteger(horizonMs) || horizonMs <= 0) throw new Error(`INVALID_OUTCOME_HORIZON:${horizonMs}`);
 
@@ -184,11 +186,6 @@ export async function buildForwardOutcome(
     }
   }
 
-  // Authority reads are still required, but they are by block number and can
-  // themselves straddle a shallow reorg. The canonicality anchor therefore
-  // runs after the final authority pass, with the selected horizon block read
-  // strictly last so any suffix reorg affecting earlier validated evidence
-  // also changes that final selected-block hash.
   await source.assertMarketAuthority(batch.market, observed.blockNumber);
   await assertEvidenceStable(source, launch, batch, observed, predecessor, targetTimestampMs);
 
@@ -297,9 +294,6 @@ async function assertEvidenceStable(
     }
   }
 
-  // This selected-block read is intentionally the final RPC operation before
-  // receipt assembly. Any reorg affecting launch/decision/predecessor evidence
-  // necessarily changes this suffix block as well and therefore fails closed.
   const observedAgain = await source.getBlockPoint(observed.blockNumber);
   assertHash('OUTCOME_REORG_DURING_READ', observed.blockNumber, observed.blockHash, observedAgain.blockHash);
   if (observedAgain.timestampMs < targetTimestampMs) {

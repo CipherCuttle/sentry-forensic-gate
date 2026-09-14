@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
-const CURRENT_STATE = 'NEXT_AWAITING_IMPLEMENTATION_PROMPT';
 const SENSITIVE_AUTHORIZATION_KEYS = [
   'historical_compatibility_implementation',
   'full_147_replay',
@@ -10,6 +9,29 @@ const SENSITIVE_AUTHORIZATION_KEYS = [
   'canary',
   'merge',
 ];
+const STATE_AUTHORIZATION = {
+  NEXT_AWAITING_IMPLEMENTATION_PROMPT: {
+    historical_compatibility_implementation: false,
+    full_147_replay: false,
+    fast_vet: false,
+    canary: false,
+    merge: false,
+  },
+  HISTORICAL_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED: {
+    historical_compatibility_implementation: true,
+    full_147_replay: false,
+    fast_vet: false,
+    canary: false,
+    merge: false,
+  },
+  HISTORICAL_COMPATIBILITY_BLOCKED_FROZEN_BASELINE_SEMANTICS: {
+    historical_compatibility_implementation: false,
+    full_147_replay: false,
+    fast_vet: false,
+    canary: false,
+    merge: false,
+  },
+};
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -31,11 +53,13 @@ export function validatePacket(packet) {
     invariant(typeof auth?.[key] === 'boolean', `authorization.${key} must be boolean`);
   }
 
-  // Fail closed: this validator recognizes only the current pre-implementation state.
-  // Any future authority-bearing state must deliberately update this code and its tests.
-  invariant(packet.state === CURRENT_STATE, `unsupported phase state: ${packet.state}`);
+  const expectedAuthorization = STATE_AUTHORIZATION[packet.state];
+  invariant(expectedAuthorization, `unsupported phase state: ${packet.state}`);
   for (const key of SENSITIVE_AUTHORIZATION_KEYS) {
-    invariant(auth[key] === false, `state ${CURRENT_STATE} cannot authorize ${key}`);
+    invariant(
+      auth[key] === expectedAuthorization[key],
+      `state ${packet.state} requires authorization.${key}=${expectedAuthorization[key]}`,
+    );
   }
 
   if (auth.full_147_replay) {
@@ -58,6 +82,14 @@ export function validatePacket(packet) {
     cohort.implementation_cohorts.length === cohort.launch_producing_implementation_cohorts,
     'historical implementation cohort count does not close',
   );
+
+  if (packet.state === 'HISTORICAL_COMPATIBILITY_BLOCKED_FROZEN_BASELINE_SEMANTICS') {
+    invariant(packet.authority?.historical_compatibility_status === 'FAIL_FROZEN_BASELINE_SEMANTIC_INCOMPATIBILITY', 'blocked compatibility state requires explicit failure status');
+    invariant(packet.compatibility_result?.verdict === 'FAIL', 'blocked compatibility state requires FAIL live verdict');
+    invariant(packet.compatibility_result?.baseline_attempted === acceptance.representatives, 'blocked compatibility state requires all baseline representatives attempted');
+    invariant(packet.compatibility_result?.baseline_complete < acceptance.baseline_complete_required, 'blocked compatibility state must not claim baseline acceptance');
+    invariant(packet.next_action === 'STOP_DO_NOT_BROADEN_BASELINE_SEMANTICS_AWAIT_SUCCESSOR_DECISION', 'blocked compatibility state must STOP and await successor decision');
+  }
 }
 
 function main() {

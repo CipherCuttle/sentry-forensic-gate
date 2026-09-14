@@ -8,19 +8,17 @@ import {
   type PublicClient
 } from 'viem';
 import type { Hex } from '../domain.js';
+import { CURRENT_READ_AUTHORITY_CONTEXT, type ReadAuthorityContext } from '../authority/readAuthorityContext.js';
 import type { ForwardOutcomeSource, OutcomeBlockPoint, OutcomeExitQuote, OutcomeMarketState } from './ports.js';
 import type { LaunchMarket } from '../shadow/baselineTypes.js';
 import { DEFAULT_INK_RPC_URL, INK_CHAIN_ID } from '../sentry/contracts.js';
 import {
   erc20DecimalsAbi,
   TSUNAMI_FEE_TIERS,
-  TSUNAMI_QUOTER_V2,
-  TSUNAMI_V3_FACTORY,
   tsunamiFactoryReadAbi,
   tsunamiPoolReadAbi,
   tsunamiQuoterV2Abi,
   USDT0,
-  WETH9,
   ZERO_ADDRESS
 } from '../tsunami/contracts.js';
 
@@ -35,16 +33,19 @@ const ink = defineChain({
 export interface ViemForwardOutcomeSourceOptions {
   rpcUrl?: string;
   client?: PublicClient;
+  authority?: Readonly<ReadAuthorityContext>;
 }
 
 export class ViemForwardOutcomeSource implements ForwardOutcomeSource {
   private readonly client: PublicClient;
+  private readonly authority: Readonly<ReadAuthorityContext>;
 
   constructor(options: ViemForwardOutcomeSourceOptions = {}) {
     this.client = options.client ?? createPublicClient({
       chain: ink,
       transport: http(options.rpcUrl ?? DEFAULT_INK_RPC_URL)
     });
+    this.authority = options.authority ?? CURRENT_READ_AUTHORITY_CONTEXT;
   }
 
   async getHeadBlockNumber(): Promise<bigint> {
@@ -64,25 +65,25 @@ export class ViemForwardOutcomeSource implements ForwardOutcomeSource {
     if (chainId !== INK_CHAIN_ID) throw new Error(`INK_CHAIN_ID_DRIFT:expected=${INK_CHAIN_ID}:actual=${chainId}`);
 
     const [quoterFactory, quoterWeth, poolToken0, poolToken1, poolFee, factoryCode, quoterCode, poolCode] = await Promise.all([
-      this.client.readContract({ address: TSUNAMI_QUOTER_V2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'factory', blockNumber }),
-      this.client.readContract({ address: TSUNAMI_QUOTER_V2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'WETH9', blockNumber }),
+      this.client.readContract({ address: this.authority.quoterV2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'factory', blockNumber }),
+      this.client.readContract({ address: this.authority.quoterV2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'WETH9', blockNumber }),
       this.client.readContract({ address: market.pool as Address, abi: tsunamiPoolReadAbi, functionName: 'token0', blockNumber }),
       this.client.readContract({ address: market.pool as Address, abi: tsunamiPoolReadAbi, functionName: 'token1', blockNumber }),
       this.client.readContract({ address: market.pool as Address, abi: tsunamiPoolReadAbi, functionName: 'fee', blockNumber }),
-      this.client.getBytecode({ address: TSUNAMI_V3_FACTORY as Address, blockNumber }),
-      this.client.getBytecode({ address: TSUNAMI_QUOTER_V2 as Address, blockNumber }),
+      this.client.getBytecode({ address: this.authority.factory as Address, blockNumber }),
+      this.client.getBytecode({ address: this.authority.quoterV2 as Address, blockNumber }),
       this.client.getBytecode({ address: market.pool as Address, blockNumber })
     ]);
 
-    requireAddress('OUTCOME_QUOTER_FACTORY_DRIFT', quoterFactory as Address, TSUNAMI_V3_FACTORY);
-    requireAddress('OUTCOME_QUOTER_WETH_DRIFT', quoterWeth as Address, WETH9);
+    requireAddress('OUTCOME_QUOTER_FACTORY_DRIFT', quoterFactory as Address, this.authority.factory);
+    requireAddress('OUTCOME_QUOTER_WETH_DRIFT', quoterWeth as Address, this.authority.weth);
     requireAddress('OUTCOME_POOL_TOKEN0_DRIFT', poolToken0 as Address, market.token0);
     requireAddress('OUTCOME_POOL_TOKEN1_DRIFT', poolToken1 as Address, market.token1);
     if (Number(poolFee) !== market.fee) {
       throw new Error(`OUTCOME_POOL_FEE_DRIFT:expected=${market.fee}:actual=${Number(poolFee)}:block=${blockNumber}`);
     }
-    if (!factoryCode || factoryCode === '0x') throw new Error(`OUTCOME_AUTHORITY_CODE_MISSING:${TSUNAMI_V3_FACTORY}:block=${blockNumber}`);
-    if (!quoterCode || quoterCode === '0x') throw new Error(`OUTCOME_AUTHORITY_CODE_MISSING:${TSUNAMI_QUOTER_V2}:block=${blockNumber}`);
+    if (!factoryCode || factoryCode === '0x') throw new Error(`OUTCOME_AUTHORITY_CODE_MISSING:${this.authority.factory}:block=${blockNumber}`);
+    if (!quoterCode || quoterCode === '0x') throw new Error(`OUTCOME_AUTHORITY_CODE_MISSING:${this.authority.quoterV2}:block=${blockNumber}`);
     if (!poolCode || poolCode === '0x') throw new Error(`OUTCOME_POOL_CODE_MISSING:${market.pool}:block=${blockNumber}`);
   }
 
@@ -134,7 +135,7 @@ export class ViemForwardOutcomeSource implements ForwardOutcomeSource {
       return tokenUnitsToUsdMicros(params.baseAmount, decimals);
     }
 
-    if (base !== norm(WETH9)) {
+    if (base !== norm(this.authority.weth)) {
       throw new Error(`OUTCOME_USD_VALUATION_UNAVAILABLE:UNSUPPORTED_BASE:${params.baseToken}`);
     }
 
@@ -148,15 +149,15 @@ export class ViemForwardOutcomeSource implements ForwardOutcomeSource {
     let bestOut = 0n;
     for (const fee of TSUNAMI_FEE_TIERS) {
       const pool = await this.client.readContract({
-        address: TSUNAMI_V3_FACTORY as Address,
+        address: this.authority.factory as Address,
         abi: tsunamiFactoryReadAbi,
         functionName: 'getPool',
-        args: [WETH9 as Address, USDT0 as Address, fee],
+        args: [this.authority.weth as Address, USDT0 as Address, fee],
         blockNumber: params.blockNumber
       }) as Address;
       if (norm(pool) === norm(ZERO_ADDRESS)) continue;
       const quote = await this.callExactInput({
-        tokenIn: WETH9,
+        tokenIn: this.authority.weth,
         tokenOut: USDT0,
         amountIn: params.baseAmount,
         fee,
@@ -191,7 +192,7 @@ export class ViemForwardOutcomeSource implements ForwardOutcomeSource {
     });
     try {
       const result = await this.client.call({
-        to: TSUNAMI_QUOTER_V2 as Address,
+        to: this.authority.quoterV2 as Address,
         data,
         blockNumber: params.blockNumber
       });

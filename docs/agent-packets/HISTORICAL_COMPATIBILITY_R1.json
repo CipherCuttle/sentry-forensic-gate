@@ -2,7 +2,7 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_COMPATIBILITY_R1",
-  "state": "NEXT_AWAITING_IMPLEMENTATION_PROMPT",
+  "state": "HISTORICAL_COMPATIBILITY_BLOCKED_FROZEN_BASELINE_SEMANTICS",
   "discovery_base_sha": "392236cf162a298e40dcb0662eb3e524e58aeb6e",
   "objective": "Add an explicit dependency-injection seam for historical authority contexts while preserving current R3 behavior by default, then test the existing frozen baseline and forward-outcome pipeline on nine historical implementation representatives.",
   "authority": {
@@ -10,7 +10,7 @@
     "current_r3_behavior_must_remain_unchanged": true,
     "historical_authorization_granted": false,
     "historical_tuple_status": "PASS",
-    "historical_compatibility_status": "NOT_RUN"
+    "historical_compatibility_status": "FAIL_FROZEN_BASELINE_SEMANTIC_INCOMPATIBILITY"
   },
   "authorization": {
     "historical_compatibility_implementation": false,
@@ -29,6 +29,33 @@
     "outcomes_unverified_required": 0,
     "live_archive_rpc_required": true,
     "real_existing_pipeline_required": true
+  },
+  "compatibility_result": {
+    "verdict": "FAIL",
+    "source_mode": "LIVE_ARCHIVE_RPC_EXISTING_PIPELINE",
+    "source_head_sha": "c89d9781eb5b885737c96abb06f8d988fed11e9b",
+    "tested_merge_sha": "747b28d4ca3b9e23e5e5ecc90134a09517336f36",
+    "github_actions_run_id": 34852374047,
+    "representatives_attempted": 9,
+    "baseline_attempted": 9,
+    "baseline_complete": 1,
+    "baseline_unverified": 8,
+    "outcomes_24h_attempted": 1,
+    "outcomes_24h_complete": 1,
+    "outcomes_24h_unverified": 0,
+    "outcomes_24h_not_attempted": 8,
+    "blocking_reason_family": "USD_CALIBRATION_UNAVAILABLE",
+    "representative_results": [
+      {"implementation":"0xf6b81e4a431aa5c459b7502802bab306ce465146","blockNumber":"39943476","tokenId":"1","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=39943478:notional=250000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x3f01f1e0d8b76e0a7bf476335a9ebcb6755df536","blockNumber":"40032260","tokenId":"5","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=40032262:notional=250000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x6f269786695fcd8cc684ebf37604dd2fb1797fcc","blockNumber":"42060479","tokenId":"24","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=42060481:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x71b2296124ce438bf2d0fef01e0adbd14a020282","blockNumber":"44137983","tokenId":"49","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=44137985:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0xfab1d73e877947fabe2d0966f9832541b6f82750","blockNumber":"45634572","tokenId":"82","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=45634574:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0xbe0e8f5d351b6acb0ec5c4ce6d2ba6c602bbb80f","blockNumber":"45813860","tokenId":"86","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=45813862:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x28ed07daba4ca9025819b64e1abb98d6c15ba069","blockNumber":"46611372","tokenId":"108","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=46611374:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"},
+      {"implementation":"0x3515ce96c5c6fb8e73ebe04756f2227d035d6334","blockNumber":"46637160","tokenId":"110","baseline":"COMPLETE","outcome24h":"COMPLETE","outcome24hObservedBlock":"46723560"},
+      {"implementation":"0xd5bced4c43eef627ee0524368cabafcb9f29cff0","blockNumber":"46667534","tokenId":"112","baseline":"UNVERIFIED","reason":"USD_CALIBRATION_UNAVAILABLE:block=46667536:notional=2000000","outcome24h":"NOT_ATTEMPTED_BASELINE_UNVERIFIED"}
+    ]
   },
   "known_historical_state": {
     "launch_count": 147,
@@ -52,12 +79,14 @@
       {"implementation": "0x3515ce96c5c6fb8e73ebe04756f2227d035d6334", "launches": 2},
       {"implementation": "0xd5bced4c43eef627ee0524368cabafcb9f29cff0", "launches": 59}
     ],
-    "representative_fixture_status": "NOT_CAPTURED_IN_REPO_DO_NOT_INVENT"
+    "representative_fixture_status": "CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT",
+    "representative_fixture_path": "fixtures/historical-compatibility-r1.json"
   },
   "prohibitions": [
     "Do not weaken current R3 authority or default behavior.",
-    "Do not authorize or run the full 147-launch replay in this phase.",
-    "Do not run FAST_VET meaningfully before historical replay is authorized and reconstructed.",
+    "Do not broaden or reinterpret the frozen baseline USD-calibration semantics to make historical compatibility pass.",
+    "Do not authorize or run the full 147-launch replay from this failed compatibility gate.",
+    "Do not run FAST_VET meaningfully before an explicitly authorized successor resolves the historical evidence contract.",
     "Do not authorize the canary.",
     "Do not add signing, approvals, swaps, transaction broadcast, or execution authority.",
     "Do not create a second independent baseline or outcome implementation.",
@@ -75,6 +104,7 @@
   "context_files": [
     "AGENTS.md",
     "docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json",
+    "fixtures/historical-compatibility-r1.json",
     "docs/SENTRY_TRUTH_R1.md",
     "docs/EXECUTABLE_BASELINE_R1.md",
     "docs/FORWARD_OUTCOMES_R1.md",
@@ -83,19 +113,21 @@
     "authority/ink-57073-sentry-v1.json",
     "src/authority/executableInfraAuthority.ts",
     "src/authority/sentryAuthority.ts",
+    "src/authority/readAuthorityContext.ts",
     "src/runtime/executableBaseline.ts",
     "src/runtime/forwardOutcomes.ts",
     "src/tsunami/viemBaselineSource.ts",
     "src/outcome/viemSource.ts",
-    "scripts/executable-baseline-check.mjs",
-    "scripts/forward-outcomes-check.mjs",
-    "scripts/forward-outcome-final-authority-race-check.mjs",
+    "src/historicalCompatibilityCli.ts",
+    "scripts/historical-compatibility-config-check.mjs",
     "package.json",
     "mise.toml"
   ],
-  "next_action": "WAIT_FOR_SEPARATE_HISTORICAL_COMPATIBILITY_R1_IMPLEMENTATION_PROMPT",
+  "next_action": "STOP_DO_NOT_BROADEN_BASELINE_SEMANTICS_AWAIT_SUCCESSOR_DECISION",
   "notes": [
-    "This packet is a machine-readable state/navigation artifact. It does not itself grant implementation, replay, merge, FAST_VET, or canary authority.",
-    "The exact nine representative launches were established during discovery but are not encoded in the repository yet. Do not fabricate them; capture them from the reviewed discovery artifact or the separate implementation prompt before live compatibility execution."
+    "HISTORICAL_COMPATIBILITY_R1 implementation was explicitly authorized, implemented, and exercised against live archive RPC using the existing frozen baseline/outcome pipeline.",
+    "The read-authority injection seam reached all nine reviewed representatives without changing current R3 defaults, but the frozen baseline contract produced eight deterministic USD_CALIBRATION_UNAVAILABLE results; acceptance therefore failed.",
+    "Only the representative at block 46637160/tokenId 110 produced a COMPLETE baseline and its exact 24h forward outcome was also COMPLETE.",
+    "This is a STOP result for HISTORICAL_COMPATIBILITY_R1. It does not authorize semantic broadening, full replay, FAST_VET, canary, merge, signing, or execution."
   ]
 }

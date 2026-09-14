@@ -15,13 +15,26 @@ for (const key of [
   'merge',
 ]) {
   const mutated = structuredClone(packet);
-  mutated.authorization[key] = true;
+  mutated.authorization[key] = !mutated.authorization[key];
   assert.throws(
     () => validatePacket(mutated),
-    new RegExp(`cannot authorize ${key}`),
-    `${key}=true must fail closed in the current phase state`,
+    new RegExp(`requires authorization\\.${key}=`),
+    `${key} drift must fail closed in the current phase state`,
   );
 }
+
+const preImplementation = structuredClone(packet);
+preImplementation.state = 'NEXT_AWAITING_IMPLEMENTATION_PROMPT';
+preImplementation.authorization.historical_compatibility_implementation = false;
+validatePacket(preImplementation);
+
+const unauthorizedPreImplementation = structuredClone(preImplementation);
+unauthorizedPreImplementation.authorization.historical_compatibility_implementation = true;
+assert.throws(
+  () => validatePacket(unauthorizedPreImplementation),
+  /requires authorization\.historical_compatibility_implementation=false/,
+  'pre-implementation state must reject implementation authority',
+);
 
 const unknownState = structuredClone(packet);
 unknownState.state = 'FUTURE_UNREVIEWED_STATE';

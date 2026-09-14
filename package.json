@@ -15,7 +15,8 @@
     "creatoroutcomecheck": "node scripts/creator-outcome-check.mjs",
     "forwardoutcomecheck": "node scripts/forward-outcomes-check.mjs && node scripts/forward-outcome-final-authority-race-check.mjs",
     "creatorsignalcheck": "node scripts/creator-signal-eval-check.mjs && node scripts/creator-signal-missing-provenance-check.mjs",
-    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck",
+    "historicalcompatibilitycheck": "node scripts/historical-compatibility-config-check.mjs",
+    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck",
     "start:truth": "node dist/cli.js",
     "start:baseline": "node dist/baselineCli.js",
     "start:creator-outcome": "node dist/creatorOutcomeCli.js",
@@ -24,7 +25,8 @@
     "start:runtime": "node dist/researchRuntimeCli.js",
     "start:activation-receipt": "node dist/activationReceiptCli.js",
     "start:provider-capability": "node dist/providerCapabilityCli.js",
-    "start:infra-discovery": "node dist/executableInfraDiscoveryCli.js"
+    "start:infra-discovery": "node dist/executableInfraDiscoveryCli.js",
+    "start:historical-compatibility": "node dist/historicalCompatibilityCli.js"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",

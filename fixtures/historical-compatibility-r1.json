@@ -1,0 +1,22 @@
+{
+  "schema": "historical-compatibility-r1-fixtures/v1",
+  "selection_rule": "FIRST_REAL_LAUNCH_PER_LAUNCH_PRODUCING_IMPLEMENTATION_COHORT",
+  "selection_evidence": "Recovered from the reviewed HISTORICAL_EXECUTABLE_TUPLE discovery artifact; representatives are the first launch assigned to each implementation cohort by block/transaction-ordered proxy upgrade history.",
+  "historical_executable_tuple": {
+    "npm": "0x98b6267DA27c5A21Bd6e3edfBC2DA6b0428Fa9F7",
+    "factory": "0xD8B0826150B7686D1F56d6F10E31E58e1BCF1193",
+    "quoterV2": "0x547D43a6F83A28720908537Aa25179ff8c6A6411",
+    "weth": "0x4200000000000000000000000000000000000006"
+  },
+  "representatives": [
+    {"implementation":"0xf6b81e4a431aa5c459b7502802bab306ce465146","blockNumber":"39943476","tokenId":"1"},
+    {"implementation":"0x3f01f1e0d8b76e0a7bf476335a9ebcb6755df536","blockNumber":"40032260","tokenId":"5"},
+    {"implementation":"0x6f269786695fcd8cc684ebf37604dd2fb1797fcc","blockNumber":"42060479","tokenId":"24"},
+    {"implementation":"0x71b2296124ce438bf2d0fef01e0adbd14a020282","blockNumber":"44137983","tokenId":"49"},
+    {"implementation":"0xfab1d73e877947fabe2d0966f9832541b6f82750","blockNumber":"45634572","tokenId":"82"},
+    {"implementation":"0xbe0e8f5d351b6acb0ec5c4ce6d2ba6c602bbb80f","blockNumber":"45813860","tokenId":"86"},
+    {"implementation":"0x28ed07daba4ca9025819b64e1abb98d6c15ba069","blockNumber":"46611372","tokenId":"108"},
+    {"implementation":"0x3515ce96c5c6fb8e73ebe04756f2227d035d6334","blockNumber":"46637160","tokenId":"110"},
+    {"implementation":"0xd5bced4c43eef627ee0524368cabafcb9f29cff0","blockNumber":"46667534","tokenId":"112"}
+  ]
+}

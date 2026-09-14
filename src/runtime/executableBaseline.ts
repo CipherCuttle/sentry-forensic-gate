@@ -13,6 +13,8 @@ import {
 import type { BaselineStore } from '../shadow/baselineStore.js';
 import type { ExecutableBaselineSource } from '../tsunami/ports.js';
 
+export type ExecutableBlockAuthorizer = (blockNumber: bigint) => unknown;
+
 export interface ExecutableBaselineOptions {
   decisionDelayBlocks: bigint;
   confirmations: bigint;
@@ -83,11 +85,12 @@ export async function buildBaselineBatch(
   source: ExecutableBaselineSource,
   launch: LaunchObserved,
   decisionDelayBlocks: bigint,
-  notionalsUsdMicros: readonly bigint[]
+  notionalsUsdMicros: readonly bigint[],
+  authorizeExecutableBlock: ExecutableBlockAuthorizer = resolveAuthorizedExecutableInfra
 ): Promise<ExecutableBaselineBatch> {
-  resolveAuthorizedExecutableInfra(launch.blockNumber);
+  authorizeExecutableBlock(launch.blockNumber);
   const decisionBlock = launch.blockNumber + decisionDelayBlocks;
-  resolveAuthorizedExecutableInfra(decisionBlock);
+  authorizeExecutableBlock(decisionBlock);
   const decisionBlockHash = await source.getBlockHash(decisionBlock);
 
   // Authority drift is global, not a per-launch data gap. Fail closed and do not
