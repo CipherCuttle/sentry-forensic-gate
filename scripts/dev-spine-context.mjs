@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_OUTCOME_POLICY_R1.json';
 
 const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
 const dirtyRaw = process.env.DEV_SPINE_DIRTY;
@@ -36,9 +36,7 @@ console.log(`DIRTY=${context.dirty ?? 'UNKNOWN'}`);
 console.log('');
 console.log(`ACTIVE_PHASE=${context.phase}`);
 console.log(`PHASE_STATE=${context.phase_state}`);
-for (const [key, value] of Object.entries(context.authorization)) {
-  console.log(`AUTH_${key.toUpperCase()}=${value}`);
-}
+for (const [key, value] of Object.entries(context.authorization)) console.log(`AUTH_${key.toUpperCase()}=${value}`);
 console.log(`REPRESENTATIVE_FIXTURES=${context.representative_fixture_status}`);
 console.log('');
 console.log('AUTHORITY_ENTRY_POINTS:');
