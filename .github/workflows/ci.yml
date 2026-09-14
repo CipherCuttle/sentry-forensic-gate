@@ -13,6 +13,8 @@ jobs:
         with:
           node-version: 20
       - run: corepack enable
+      - name: Test Dev Spine fail-closed authorization
+        run: node scripts/dev-spine-check-test.mjs
       - name: Validate Dev Spine metadata
         run: node scripts/dev-spine-check.mjs
       - name: Enforce supported execution surfaces
