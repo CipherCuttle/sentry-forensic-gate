@@ -77,7 +77,10 @@ export class HistoricalRedstoneOutcomeSource implements ForwardOutcomeSource {
   constructor(options: HistoricalRedstoneOutcomeSourceOptions) {
     this.authority = options.authority;
     this.client = options.client ?? createPublicClient({ chain: ink, transport: http(options.rpcUrl ?? DEFAULT_INK_RPC_URL) });
-    this.delegate = options.delegate ?? new ViemForwardOutcomeSource({ rpcUrl: options.rpcUrl, authority: options.authority });
+    this.delegate = options.delegate ?? new ViemForwardOutcomeSource({
+      ...(options.rpcUrl !== undefined ? { rpcUrl: options.rpcUrl } : {}),
+      authority: options.authority
+    });
   }
 
   getHeadBlockNumber(): Promise<bigint> { return this.delegate.getHeadBlockNumber(); }
