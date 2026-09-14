@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json';
+const PREDECESSOR_HEAD = '28e598d738c633b0211bae914b8f92450ae61f90';
+const BASELINE_POLICY = 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1';
+const OUTCOME_POLICY = 'HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1';
 const EXPECTED_HORIZONS = [
   { label: '1m', ms: 60_000 },
   { label: '5m', ms: 300_000 },
@@ -9,9 +12,6 @@ const EXPECTED_HORIZONS = [
   { label: '2h', ms: 7_200_000 },
   { label: '24h', ms: 86_400_000 },
 ];
-const REDSTONE_ADDRESS = '0xe5867b1d421f0b52697f16e2ac437e87d66d5fbf';
-const HISTORICAL_BASELINE_POLICY = 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1';
-const HISTORICAL_OUTCOME_POLICY = 'HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1';
 const SENSITIVE_AUTHORIZATION_KEYS = [
   'historical_compatibility_implementation',
   'historical_baseline_policy_discovery',
@@ -26,11 +26,14 @@ const SENSITIVE_AUTHORIZATION_KEYS = [
 ];
 const ALL_FALSE_AUTHORIZATION = Object.fromEntries(SENSITIVE_AUTHORIZATION_KEYS.map((key) => [key, false]));
 const STATE_AUTHORIZATION = {
-  HISTORICAL_ALL_HORIZON_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED: {
+  HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN: {
     ...ALL_FALSE_AUTHORIZATION,
-    historical_all_horizon_compatibility_implementation: true,
   },
-  HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS: {
+  HISTORICAL_FULL_REPLAY_AUTHORIZED: {
+    ...ALL_FALSE_AUTHORIZATION,
+    full_147_replay: true,
+  },
+  HISTORICAL_FULL_REPLAY_AUTHORIZATION_REJECTED: {
     ...ALL_FALSE_AUTHORIZATION,
   },
 };
@@ -42,7 +45,7 @@ function invariant(condition, message) {
 export function validatePacket(packet) {
   invariant(packet.schema === 'dev-spine-phase/v1', 'unexpected phase packet schema');
   invariant(packet.repo === 'CipherCuttle/sentry-forensic-gate', 'unexpected repository identity');
-  invariant(packet.phase === 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1', 'unexpected active phase');
+  invariant(packet.phase === 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1', 'unexpected active phase');
   invariant(packet.phase && packet.state && packet.next_action, 'phase, state, and next_action are required');
   invariant(Array.isArray(packet.authority_docs) && packet.authority_docs.length > 0, 'authority_docs must be non-empty');
   invariant(Array.isArray(packet.context_files) && packet.context_files.length > 0, 'context_files must be non-empty');
@@ -51,53 +54,58 @@ export function validatePacket(packet) {
   }
 
   const auth = packet.authorization;
-  for (const key of SENSITIVE_AUTHORIZATION_KEYS) invariant(typeof auth?.[key] === 'boolean', `authorization.${key} must be boolean`);
   const expectedAuthorization = STATE_AUTHORIZATION[packet.state];
   invariant(expectedAuthorization, `unsupported phase state: ${packet.state}`);
   for (const key of SENSITIVE_AUTHORIZATION_KEYS) {
+    invariant(typeof auth?.[key] === 'boolean', `authorization.${key} must be boolean`);
     invariant(auth[key] === expectedAuthorization[key], `state ${packet.state} requires authorization.${key}=${expectedAuthorization[key]}`);
   }
 
+  const authorized = packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZED';
   invariant(packet.authority?.current_r3_behavior_must_remain_unchanged === true, 'current R3 default invariant must remain explicit');
-  invariant(packet.authority?.historical_authorization_granted === false, 'historical replay authorization must remain false');
-  invariant(packet.authority?.historical_baseline_policy_status === 'PASS', 'historical baseline predecessor must remain PASS');
-  invariant(packet.authority?.historical_outcome_policy_status === 'PASS', 'historical outcome predecessor must remain PASS');
+  invariant(packet.authority?.historical_authorization_granted === authorized, `state ${packet.state} requires authority.historical_authorization_granted=${authorized}`);
+  invariant(packet.authority?.historical_baseline_policy_status === 'PASS', 'historical baseline policy status drift');
+  invariant(packet.authority?.historical_outcome_policy_status === 'PASS', 'historical outcome policy status drift');
+  invariant(packet.authority?.historical_all_horizon_compatibility_status === 'PASS', 'all-horizon compatibility status drift');
 
   const predecessor = packet.predecessor;
-  invariant(predecessor?.phase === 'HISTORICAL_OUTCOME_POLICY_R1', 'unexpected predecessor phase');
-  invariant(predecessor?.closure_head === 'cc53013075d9e450fe6c92c07269a577cbfaa7aa', 'predecessor closure head drift');
-  invariant(predecessor?.verdict === 'HISTORICAL_OUTCOME_POLICY_PASS', 'predecessor verdict must remain PASS');
-  invariant(predecessor?.representative_24h_complete === 9 && predecessor?.representative_24h_unverified === 0, 'predecessor 24h result must remain 9 COMPLETE / 0 UNVERIFIED');
-  invariant(predecessor?.hostile_review_closed === true, 'predecessor hostile review must remain closed');
-  invariant(predecessor?.targeted_review_closed === true, 'predecessor targeted review must remain closed');
+  invariant(predecessor?.phase === 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1', 'unexpected predecessor phase');
+  invariant(predecessor?.closure_head === PREDECESSOR_HEAD, 'predecessor closure head drift');
+  invariant(predecessor?.verdict === 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS', 'predecessor verdict drift');
+  invariant(predecessor?.representatives_attempted === 9, 'predecessor representative count drift');
+  invariant(predecessor?.baseline_complete === 9 && predecessor?.baseline_unverified === 0, 'predecessor baseline result must remain 9 COMPLETE / 0 UNVERIFIED');
+  invariant(predecessor?.outcomes_attempted === 45 && predecessor?.outcomes_complete === 45 && predecessor?.outcomes_unverified === 0, 'predecessor outcome result must remain 45 COMPLETE / 0 UNVERIFIED');
+  for (const [name, expectedId] of Object.entries({
+    ci: 34908787242,
+    historical_baseline_policy: 34908787280,
+    historical_outcome_policy: 34908787225,
+    historical_all_horizon_compatibility: 34908787293,
+  })) {
+    invariant(predecessor?.exact_head_runs?.[name]?.id === expectedId, `predecessor exact-head run id drift: ${name}`);
+    invariant(predecessor?.exact_head_runs?.[name]?.status === 'SUCCESS', `predecessor exact-head run status drift: ${name}`);
+  }
 
   const acceptance = packet.acceptance;
-  invariant(acceptance?.representatives === 9, 'acceptance.representatives must equal 9');
-  invariant(JSON.stringify(acceptance?.horizons) === JSON.stringify(EXPECTED_HORIZONS), 'frozen horizon set drift');
-  invariant(acceptance?.expected_outcome_cells === 45, 'expected outcome cell count must equal 45');
-  invariant(acceptance?.baseline_complete_required === 9, 'historical baseline COMPLETE requirement must remain 9');
-  invariant(acceptance?.outcome_complete_required === 45, 'historical outcome COMPLETE requirement must remain 45');
-  invariant(acceptance?.outcome_unverified_required === 0, 'historical outcome UNVERIFIED requirement must remain 0');
-  invariant(acceptance?.live_archive_rpc_required === true, 'live archive RPC requirement must remain explicit');
+  invariant(acceptance?.frozen_historical_launch_count === 147, 'frozen historical launch count must remain 147');
+  invariant(acceptance?.launch_producing_implementation_cohorts === 9, 'historical implementation cohort count must remain 9');
+  invariant(acceptance?.representative_cohorts_covered === 9, 'representative cohort coverage must remain 9/9');
+  invariant(acceptance?.representative_baseline_complete === 9 && acceptance?.representative_baseline_unverified === 0, 'representative baseline prerequisite drift');
+  invariant(acceptance?.representative_outcomes_complete === 45 && acceptance?.representative_outcomes_unverified === 0, 'representative outcome prerequisite drift');
+  invariant(acceptance?.predecessor_exact_head_verified === true, 'predecessor exact-head verification must remain true');
   invariant(acceptance?.point_in_time_inputs_only === true, 'point-in-time input requirement must remain explicit');
-  invariant(acceptance?.all_representatives_must_be_attempted === true, 'all representatives must remain required');
-  invariant(acceptance?.all_horizons_must_be_attempted === true, 'all horizons must remain required');
+  invariant(acceptance?.research_only === true, 'full replay authorization must remain research-only');
   invariant(acceptance?.provider_or_transport_failure_is_not_market_evidence === true, 'provider failure must not become market evidence');
-  invariant(acceptance?.ordinary_ci_must_be_green === true, 'ordinary CI requirement must remain explicit');
-  invariant(acceptance?.research_only_guardrails_must_be_green === true, 'research-only guardrail requirement must remain explicit');
-  invariant(acceptance?.observed_blocks_preregistered === false, 'observed horizon blocks must remain live outputs, not preregistered constants');
-  invariant(!Object.prototype.hasOwnProperty.call(acceptance, 'observed_blocks'), 'observed_blocks must not be hard-coded in all-horizon preregistration');
+  invariant(acceptance?.current_r3_must_remain_unchanged === true, 'current R3 must remain unchanged');
+  invariant(acceptance?.full_replay_scope_must_equal_frozen_147 === true, 'full replay scope must remain frozen at 147');
+  invariant(acceptance?.unverified_must_remain_explicit === true, 'UNVERIFIED results must remain explicit');
+  invariant(acceptance?.per_launch_per_horizon_receipts_required === true, 'per-launch/per-horizon receipts must remain required');
 
   const policy = packet.frozen_policies;
-  invariant(policy?.baseline_policy_version === HISTORICAL_BASELINE_POLICY, 'historical baseline policy version drift');
-  invariant(policy?.outcome_policy_version === HISTORICAL_OUTCOME_POLICY, 'historical outcome policy version drift');
+  invariant(policy?.baseline_policy_version === BASELINE_POLICY, 'historical baseline policy version drift');
+  invariant(policy?.outcome_policy_version === OUTCOME_POLICY, 'historical outcome policy version drift');
+  invariant(JSON.stringify(policy?.horizons) === JSON.stringify(EXPECTED_HORIZONS), 'frozen horizon set drift');
   invariant(policy?.weth_valuation_kind === 'WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1', 'historical WETH valuation kind drift');
-  invariant(String(policy?.redstone_eth_usd_address).toLowerCase() === REDSTONE_ADDRESS, 'RedStone address drift');
-  invariant(policy?.required_oracle_decimals === 8, 'RedStone decimals must remain 8');
-  invariant(policy?.required_oracle_description === 'RedStone Price Feed for ETH', 'RedStone description drift');
-  invariant(policy?.required_oracle_version === 1, 'RedStone version drift');
-  invariant(policy?.freshness_rejection_threshold_seconds === null, 'phase must not fit an age cutoff to representative data');
-  invariant(policy?.current_r1_default_must_remain_bit_for_bit_identity_compatible === true, 'current outcome R1 identity compatibility must remain explicit');
+  invariant(policy?.freshness_rejection_threshold_seconds === null, 'authorization phase must not fit an age cutoff');
 
   const historical = packet.known_historical_state;
   invariant(historical?.launch_count === 147, 'historical launch count must remain 147');
@@ -105,20 +113,19 @@ export function validatePacket(packet) {
   invariant(historical?.representative_fixture_status === 'CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT', 'representative fixture status must remain reviewed');
   invariant(fs.existsSync(historical?.representative_fixture_path), 'representative fixture path must exist');
 
-  if (packet.state === 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED') {
-    invariant(packet.next_action === 'IMPLEMENT_ALL_HORIZON_HARNESS_AND_RUN_45_CELL_LIVE_GATE', 'implementation next action drift');
-    invariant(!packet.implementation_result, 'implementation result must not be predeclared before live gate');
+  if (packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN') {
+    invariant(packet.next_action === 'DECIDE_FULL_147_REPLAY_AUTHORIZATION', 'open decision next action drift');
+    invariant(!packet.decision_result, 'decision result must not be predeclared while decision is open');
+  } else if (packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZED') {
+    invariant(packet.next_action === 'OPEN_HISTORICAL_FULL_REPLAY_R1_IMPLEMENTATION', 'authorized next action drift');
+    invariant(packet.decision_result?.status === 'AUTHORIZE', 'authorized state requires AUTHORIZE decision result');
+    invariant(packet.decision_result?.basis_predecessor_head === PREDECESSOR_HEAD, 'authorized decision predecessor basis drift');
+    invariant(typeof packet.decision_result?.rationale === 'string' && packet.decision_result.rationale.length > 0, 'authorized decision rationale required');
   } else {
-    invariant(packet.next_action === 'OPEN_HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1_DECISION', 'closed next action drift');
-    const result = packet.implementation_result;
-    invariant(result?.status === 'PASS', 'closed all-horizon result must be PASS');
-    invariant(result?.representatives_attempted === 9, 'closed representative attempted count must remain 9');
-    invariant(result?.baseline_complete === 9 && result?.baseline_unverified === 0, 'closed baseline result must remain 9 COMPLETE / 0 UNVERIFIED');
-    invariant(result?.outcomes_attempted === 45, 'closed outcome attempted count must remain 45');
-    invariant(result?.outcomes_complete === 45, 'closed outcome COMPLETE count must remain 45');
-    invariant(result?.outcomes_unverified === 0, 'closed outcome UNVERIFIED count must remain 0');
-    invariant(result?.verdict === 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS', 'closed all-horizon verdict drift');
-    invariant(auth.full_147_replay === false, 'all-horizon PASS must not self-authorize full replay');
+    invariant(packet.next_action === 'STOP_FULL_147_REPLAY', 'rejected next action drift');
+    invariant(packet.decision_result?.status === 'REJECT', 'rejected state requires REJECT decision result');
+    invariant(packet.decision_result?.basis_predecessor_head === PREDECESSOR_HEAD, 'rejected decision predecessor basis drift');
+    invariant(typeof packet.decision_result?.rationale === 'string' && packet.decision_result.rationale.length > 0, 'rejected decision rationale required');
   }
 }
 

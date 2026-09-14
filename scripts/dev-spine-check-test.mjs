@@ -2,16 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { validatePacket } from './dev-spine-check.mjs';
 
-const packet = JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.json', 'utf8'));
+const packet = JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json', 'utf8'));
 validatePacket(packet);
-assert.equal(packet.state, 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS');
-assert.equal(packet.authorization.historical_all_horizon_compatibility_implementation, false);
+assert.equal(packet.state, 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN');
 assert.equal(packet.authorization.full_147_replay, false);
-assert.equal(packet.next_action, 'OPEN_HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1_DECISION');
-assert.equal(packet.implementation_result.status, 'PASS');
-assert.equal(packet.implementation_result.baseline_complete, 9);
-assert.equal(packet.implementation_result.outcomes_complete, 45);
-assert.equal(packet.implementation_result.outcomes_unverified, 0);
+assert.equal(packet.authority.historical_authorization_granted, false);
+assert.equal(packet.next_action, 'DECIDE_FULL_147_REPLAY_AUTHORIZATION');
 
 for (const key of [
   'historical_compatibility_implementation',
@@ -30,54 +26,58 @@ for (const key of [
   assert.throws(() => validatePacket(mutated), new RegExp(`requires authorization\\.${key}=`));
 }
 
+const changedHead = structuredClone(packet);
+changedHead.predecessor.closure_head = '0000000000000000000000000000000000000000';
+assert.throws(() => validatePacket(changedHead), /predecessor closure head drift/);
+
+const weakenedEvidence = structuredClone(packet);
+weakenedEvidence.predecessor.outcomes_complete = 44;
+weakenedEvidence.predecessor.outcomes_unverified = 1;
+assert.throws(() => validatePacket(weakenedEvidence), /45 COMPLETE \/ 0 UNVERIFIED/);
+
+const changedScope = structuredClone(packet);
+changedScope.acceptance.frozen_historical_launch_count = 146;
+assert.throws(() => validatePacket(changedScope), /must remain 147/);
+
 const changedHorizon = structuredClone(packet);
-changedHorizon.acceptance.horizons[0].ms += 1;
+changedHorizon.frozen_policies.horizons[0].ms += 1;
 assert.throws(() => validatePacket(changedHorizon), /frozen horizon set drift/);
-
-const changedCells = structuredClone(packet);
-changedCells.acceptance.expected_outcome_cells = 44;
-assert.throws(() => validatePacket(changedCells), /expected outcome cell count must equal 45/);
-
-const hardCodedBlocks = structuredClone(packet);
-hardCodedBlocks.acceptance.observed_blocks = [40029876];
-assert.throws(() => validatePacket(hardCodedBlocks), /must not be hard-coded/);
 
 const fittedFreshness = structuredClone(packet);
 fittedFreshness.frozen_policies.freshness_rejection_threshold_seconds = 21600;
 assert.throws(() => validatePacket(fittedFreshness), /must not fit an age cutoff/);
 
-const changedOracle = structuredClone(packet);
-changedOracle.frozen_policies.redstone_eth_usd_address = '0x0000000000000000000000000000000000000001';
-assert.throws(() => validatePacket(changedOracle), /RedStone address drift/);
+const fakeAuthorized = structuredClone(packet);
+fakeAuthorized.state = 'HISTORICAL_FULL_REPLAY_AUTHORIZED';
+fakeAuthorized.authorization.full_147_replay = true;
+fakeAuthorized.authority.historical_authorization_granted = true;
+fakeAuthorized.next_action = 'OPEN_HISTORICAL_FULL_REPLAY_R1_IMPLEMENTATION';
+assert.throws(() => validatePacket(fakeAuthorized), /AUTHORIZE decision result/);
 
-const changedOutcomePolicy = structuredClone(packet);
-changedOutcomePolicy.frozen_policies.outcome_policy_version = 'FORWARD_OUTCOMES_R1';
-assert.throws(() => validatePacket(changedOutcomePolicy), /historical outcome policy version drift/);
+const validAuthorized = structuredClone(fakeAuthorized);
+validAuthorized.decision_result = {
+  status: 'AUTHORIZE',
+  basis_predecessor_head: '28e598d738c633b0211bae914b8f92450ae61f90',
+  rationale: 'Frozen predecessor evidence satisfies the preregistered authorization criteria.',
+};
+validatePacket(validAuthorized);
 
-const weakenedPredecessor = structuredClone(packet);
-weakenedPredecessor.predecessor.representative_24h_complete = 8;
-weakenedPredecessor.predecessor.representative_24h_unverified = 1;
-assert.throws(() => validatePacket(weakenedPredecessor), /predecessor 24h result must remain 9 COMPLETE/);
+const widenedAuthority = structuredClone(validAuthorized);
+widenedAuthority.authorization.canary = true;
+assert.throws(() => validatePacket(widenedAuthority), /requires authorization\.canary=false/);
 
-const replayAuthorized = structuredClone(packet);
-replayAuthorized.authorization.full_147_replay = true;
-assert.throws(() => validatePacket(replayAuthorized), /requires authorization\.full_147_replay=false/);
+const validRejected = structuredClone(packet);
+validRejected.state = 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_REJECTED';
+validRejected.next_action = 'STOP_FULL_147_REPLAY';
+validRejected.decision_result = {
+  status: 'REJECT',
+  basis_predecessor_head: '28e598d738c633b0211bae914b8f92450ae61f90',
+  rationale: 'A frozen prerequisite failed.',
+};
+validatePacket(validRejected);
 
-const implementationPacket = structuredClone(packet);
-implementationPacket.state = 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED';
-implementationPacket.authorization.historical_all_horizon_compatibility_implementation = true;
-implementationPacket.next_action = 'IMPLEMENT_ALL_HORIZON_HARNESS_AND_RUN_45_CELL_LIVE_GATE';
-delete implementationPacket.implementation_result;
-validatePacket(implementationPacket);
-
-const fakePass = structuredClone(implementationPacket);
-fakePass.state = 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS';
-fakePass.authorization.historical_all_horizon_compatibility_implementation = false;
-fakePass.next_action = 'OPEN_HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1_DECISION';
-assert.throws(() => validatePacket(fakePass), /closed all-horizon result must be PASS/);
-
-const replayNext = structuredClone(packet);
-replayNext.next_action = 'RUN_FULL_147_REPLAY';
-assert.throws(() => validatePacket(replayNext), /closed next action drift/);
+const runWhileOpen = structuredClone(packet);
+runWhileOpen.next_action = 'RUN_FULL_147_REPLAY';
+assert.throws(() => validatePacket(runWhileOpen), /open decision next action drift/);
 
 console.log('DEV_SPINE_CHECK_TEST=PASS');

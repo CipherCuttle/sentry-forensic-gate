@@ -1,0 +1,129 @@
+{
+  "schema": "dev-spine-phase/v1",
+  "repo": "CipherCuttle/sentry-forensic-gate",
+  "phase": "HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1",
+  "state": "HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN",
+  "objective": "Decide whether a separate research-only phase may replay the frozen 147 historical launches under the already-reviewed historical baseline and outcome policies, without changing current R3/default semantics or widening live execution authority.",
+  "predecessor": {
+    "phase": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1",
+    "pr": 21,
+    "closure_head": "28e598d738c633b0211bae914b8f92450ae61f90",
+    "verdict": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS",
+    "representatives_attempted": 9,
+    "baseline_complete": 9,
+    "baseline_unverified": 0,
+    "outcomes_attempted": 45,
+    "outcomes_complete": 45,
+    "outcomes_unverified": 0,
+    "exact_head_runs": {
+      "ci": {"id":34908787242,"status":"SUCCESS"},
+      "historical_baseline_policy": {"id":34908787280,"status":"SUCCESS"},
+      "historical_outcome_policy": {"id":34908787225,"status":"SUCCESS"},
+      "historical_all_horizon_compatibility": {"id":34908787293,"status":"SUCCESS"}
+    }
+  },
+  "authority": {
+    "current_default": "R3",
+    "current_r3_behavior_must_remain_unchanged": true,
+    "historical_authorization_granted": false,
+    "historical_baseline_policy_status": "PASS",
+    "historical_outcome_policy_status": "PASS",
+    "historical_all_horizon_compatibility_status": "PASS"
+  },
+  "authorization": {
+    "historical_compatibility_implementation": false,
+    "historical_baseline_policy_discovery": false,
+    "historical_baseline_policy_implementation": false,
+    "historical_outcome_policy_discovery": false,
+    "historical_outcome_policy_implementation": false,
+    "historical_all_horizon_compatibility_implementation": false,
+    "full_147_replay": false,
+    "fast_vet": false,
+    "canary": false,
+    "merge": false
+  },
+  "acceptance": {
+    "frozen_historical_launch_count": 147,
+    "launch_producing_implementation_cohorts": 9,
+    "representative_cohorts_covered": 9,
+    "representative_baseline_complete": 9,
+    "representative_baseline_unverified": 0,
+    "representative_outcomes_complete": 45,
+    "representative_outcomes_unverified": 0,
+    "predecessor_exact_head_verified": true,
+    "point_in_time_inputs_only": true,
+    "research_only": true,
+    "provider_or_transport_failure_is_not_market_evidence": true,
+    "current_r3_must_remain_unchanged": true,
+    "full_replay_scope_must_equal_frozen_147": true,
+    "unverified_must_remain_explicit": true,
+    "per_launch_per_horizon_receipts_required": true
+  },
+  "frozen_policies": {
+    "baseline_policy_version": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
+    "outcome_policy_version": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
+    "horizons": [
+      {"label":"1m","ms":60000},
+      {"label":"5m","ms":300000},
+      {"label":"30m","ms":1800000},
+      {"label":"2h","ms":7200000},
+      {"label":"24h","ms":86400000}
+    ],
+    "weth_valuation_kind": "WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1",
+    "freshness_rejection_threshold_seconds": null
+  },
+  "decision_rules": [
+    "AUTHORIZE only if the exact predecessor closure evidence remains internally consistent and all four exact-head predecessor workflows are SUCCESS.",
+    "Authorization scope, if granted, is exactly the frozen 147 historical launches and the frozen five horizons under the existing historical baseline/outcome policies.",
+    "Do not infer that the full replay will be 147/147 COMPLETE from representative 45/45 compatibility; full-cohort failures remain valid results.",
+    "Do not change historical pricing, valuation, horizon, authority, notional, or failure semantics to improve replay completion.",
+    "Any provider/transport limitation remains explicit and is never economic evidence.",
+    "An AUTHORIZE decision may enable only a separate HISTORICAL_FULL_REPLAY_R1 implementation phase; FAST_VET, canary, signing/execution, and merge stay unauthorized."
+  ],
+  "known_historical_state": {
+    "launch_count": 147,
+    "launch_producing_implementation_cohorts": 9,
+    "representative_fixture_status": "CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT",
+    "representative_fixture_path": "fixtures/historical-compatibility-r1.json"
+  },
+  "prohibitions": [
+    "Do not run the 147-launch replay while this decision is open.",
+    "Do not change current R3 authority, EXECUTABLE_BASELINE_R1, FORWARD_OUTCOMES_R1, or reviewed historical baseline/outcome semantics.",
+    "Do not fit oracle freshness thresholds or use retrospective off-chain prices.",
+    "Do not silently shrink notionals or create alternate baseline/outcome algorithms.",
+    "Do not run FAST_VET meaningfully.",
+    "Do not authorize canary, signing, execution, or transaction broadcast.",
+    "Do not merge without explicit user authority.",
+    "Do not reopen closed predecessor review cycles unless their evidence is invalidated."
+  ],
+  "authority_docs": [
+    "AGENTS.md",
+    "docs/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.md",
+    "docs/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.md",
+    "docs/HISTORICAL_OUTCOME_POLICY_R1.md",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "docs/FORWARD_OUTCOMES_R1.md"
+  ],
+  "context_files": [
+    "AGENTS.md",
+    "docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json",
+    "docs/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.md",
+    "docs/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.md",
+    "docs/HISTORICAL_OUTCOME_POLICY_R1.md",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "docs/FORWARD_OUTCOMES_R1.md",
+    "fixtures/historical-compatibility-r1.json",
+    "src/runtime/forwardOutcomes.ts",
+    "src/runtime/executableBaseline.ts",
+    "src/outcome/horizons.ts",
+    "src/outcome/historicalRedstoneOutcomeSource.ts",
+    "src/tsunami/historicalRedstoneBaselineSource.ts",
+    "mise.toml"
+  ],
+  "next_action": "DECIDE_FULL_147_REPLAY_AUTHORIZATION",
+  "notes": [
+    "The predecessor phase is closed PASS on exact head 28e598d738c633b0211bae914b8f92450ae61f90 with all four exact-head verification workflows green.",
+    "Representative 45/45 compatibility supports portability across the nine known historical implementation cohorts but does not predeclare full-cohort replay completeness.",
+    "This initial decision packet grants no replay authority."
+  ]
+}
