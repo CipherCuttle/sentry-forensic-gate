@@ -7,7 +7,8 @@ validatePacket(packet);
 assert.equal(packet.state, 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN');
 assert.equal(packet.authorization.full_147_replay, false);
 assert.equal(packet.authority.historical_authorization_granted, false);
-assert.equal(packet.next_action, 'DECIDE_FULL_147_REPLAY_AUTHORIZATION');
+assert.equal(packet.next_action, 'FREEZE_FULL_147_REPLAY_SCOPE_THEN_DECIDE');
+assert.equal(packet.acceptance.full_replay_scope_manifest.status, 'DISCOVERY_PENDING');
 
 for (const key of [
   'historical_compatibility_implementation',
@@ -39,6 +40,10 @@ const changedScope = structuredClone(packet);
 changedScope.acceptance.frozen_historical_launch_count = 146;
 assert.throws(() => validatePacket(changedScope), /must remain 147/);
 
+const predeclaredScope = structuredClone(packet);
+predeclaredScope.acceptance.full_replay_scope_manifest.launch_identity_sha256 = 'a'.repeat(64);
+assert.throws(() => validatePacket(predeclaredScope), /pending scope manifest must not predeclare digest/);
+
 const changedHorizon = structuredClone(packet);
 changedHorizon.frozen_policies.horizons[0].ms += 1;
 assert.throws(() => validatePacket(changedHorizon), /frozen horizon set drift/);
@@ -52,19 +57,7 @@ fakeAuthorized.state = 'HISTORICAL_FULL_REPLAY_AUTHORIZED';
 fakeAuthorized.authorization.full_147_replay = true;
 fakeAuthorized.authority.historical_authorization_granted = true;
 fakeAuthorized.next_action = 'OPEN_HISTORICAL_FULL_REPLAY_R1_IMPLEMENTATION';
-assert.throws(() => validatePacket(fakeAuthorized), /AUTHORIZE decision result/);
-
-const validAuthorized = structuredClone(fakeAuthorized);
-validAuthorized.decision_result = {
-  status: 'AUTHORIZE',
-  basis_predecessor_head: '28e598d738c633b0211bae914b8f92450ae61f90',
-  rationale: 'Frozen predecessor evidence satisfies the preregistered authorization criteria.',
-};
-validatePacket(validAuthorized);
-
-const widenedAuthority = structuredClone(validAuthorized);
-widenedAuthority.authorization.canary = true;
-assert.throws(() => validatePacket(widenedAuthority), /requires authorization\.canary=false/);
+assert.throws(() => validatePacket(fakeAuthorized), /requires FROZEN scope manifest/);
 
 const validRejected = structuredClone(packet);
 validRejected.state = 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_REJECTED';

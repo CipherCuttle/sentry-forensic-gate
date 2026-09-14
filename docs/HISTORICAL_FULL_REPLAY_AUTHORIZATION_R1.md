@@ -2,7 +2,7 @@
 
 ## Status
 
-`DECISION OPEN / FULL 147 REPLAY NOT AUTHORIZED`
+`DECISION OPEN / 147-LAUNCH SCOPE MANIFEST DISCOVERY PENDING / FULL REPLAY NOT AUTHORIZED`
 
 This is a governance-only successor to the closed `HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1` phase. It decides whether the bounded historical replay of all 147 recorded launches may be opened as a separate implementation phase.
 
@@ -10,17 +10,11 @@ This phase does **not** run the replay.
 
 ## Decision question
 
-May the repository open a separate research-only implementation phase that replays the frozen 147 historical launches using only the already-reviewed historical baseline and historical outcome mechanics?
+May the repository open a separate research-only implementation phase that replays a cryptographically frozen manifest of the 147 historical launches using only the already-reviewed historical baseline and historical outcome mechanics?
 
 ## Frozen predecessor evidence
 
-The decision is based on exact predecessor closure head:
-
-`28e598d738c633b0211bae914b8f92450ae61f90`
-
-Predecessor verdict:
-
-`HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS`
+The decision is based on exact predecessor closure head `28e598d738c633b0211bae914b8f92450ae61f90`, verdict `HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS`.
 
 Exact-head verification at closure:
 
@@ -32,13 +26,32 @@ Exact-head verification at closure:
 - representative horizon outcomes: `45/45 COMPLETE`
 - representative horizon outcomes UNVERIFIED: `0`
 - launch-producing implementation cohorts represented: `9/9`
-- frozen historical launch count: `147`
+- historical launch count: `147`
+
+## Full-cohort scope prerequisite
+
+A count of 147 and the nine representative fixtures are **not sufficient** to authorize the full replay. The replay population itself must be frozen before authority can be granted.
+
+The authorization phase therefore reconstructs only the canonical deployment-event identities over the previously reviewed historical range `39943476..49271598`. It records, for each launch, its ordinal, event kind, block number/hash, transaction hash, log index, token id, token address, and creator. Those identities are hashed into one canonical SHA-256 scope digest.
+
+This is scope discovery only. It performs no baseline construction, no outcome calculation, no economic classification, and grants no replay authority.
+
+Before `AUTHORIZE` is a legal state:
+
+- exactly `147` unique canonical launch identities must be recovered;
+- first launch block must be `39943476`;
+- final launch block must be `49271598`;
+- the full manifest must be committed as `fixtures/historical-full-replay-scope-r1.json`;
+- a fresh live discovery must match the committed fixture byte-for-identity and digest;
+- the decision packet must pin the manifest digest.
+
+The superseded PR #18 does not satisfy this requirement: it attempted 147-point calibration discovery but its live run failed on public-RPC rate limiting and produced no scientific evidence artifact.
 
 ## Frozen replay contract if authorized
 
 Authorization may cover only a later, separate `HISTORICAL_FULL_REPLAY_R1` implementation using:
 
-- the frozen 147-launch historical set already identified by reviewed discovery;
+- the committed 147-launch scope manifest, exactly;
 - `HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1` without semantic modification;
 - `HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1` without semantic modification;
 - the canonical frozen horizons `1m / 5m / 30m / 2h / 24h`;
@@ -58,7 +71,8 @@ The decision may be `AUTHORIZE` only if all of the following remain true:
 - all four predecessor exact-head verification workflows are green;
 - the representative gate remains `9/9 baseline COMPLETE` and `45/45 outcome COMPLETE / 0 UNVERIFIED`;
 - all nine historical launch-producing implementation cohorts are represented by the reviewed fixture;
-- the full replay scope is exactly the frozen 147 historical launches, not a revised post-hoc cohort;
+- the full 147-launch scope manifest is committed, digest-pinned, and independently reverified from canonical chain logs;
+- the replay scope is exactly that frozen manifest, not a revised post-hoc cohort;
 - the replay is research-only and point-in-time;
 - replay implementation may not alter current R3/default behavior;
 - any launch/horizon that cannot be reconstructed under the frozen policy must be emitted as explicit failure/UNVERIFIED rather than repaired post hoc;
@@ -67,13 +81,13 @@ The decision may be `AUTHORIZE` only if all of the following remain true:
 
 ## REJECT criteria
 
-The decision must be `REJECT` if any prerequisite evidence is stale or inconsistent, if the 147-launch set cannot be frozen unambiguously, if the replay requires changing reviewed historical semantics, or if authorization would implicitly widen current/live execution authority.
+The decision must be `REJECT` if any prerequisite evidence is stale or inconsistent, if the 147-launch population cannot be frozen unambiguously, if the replay requires changing reviewed historical semantics, or if authorization would implicitly widen current/live execution authority.
 
 ## Scientific boundary
 
 Representative 45/45 compatibility is evidence that the reviewed historical mechanics are portable across the nine known implementation cohorts and five frozen horizons. It is **not** evidence that the full 147 replay will be 100% COMPLETE.
 
-The point of a full replay, if authorized, is to measure the complete historical cohort under frozen rules. Failures in that later replay are results to classify, not reasons to mutate the policy.
+The point of a full replay, if authorized, is to measure the complete frozen historical cohort under frozen rules. Failures in that later replay are results to classify, not reasons to mutate the policy.
 
 ## Authority boundary
 
@@ -89,6 +103,6 @@ An `AUTHORIZE` decision may flip only the research-only full-147-replay authoriz
 
 ## Completion policy
 
-`PREREGISTER DECISION -> VERIFY PREDECESSOR EVIDENCE -> ONE independent hostile review -> fix Critical/High -> ONE targeted re-review only if needed -> AUTHORIZE or REJECT -> CLOSE -> MOVE FORWARD`
+`PREREGISTER DECISION -> FREEZE 147-LAUNCH SCOPE -> VERIFY PREDECESSOR EVIDENCE -> ONE independent hostile review -> fix Critical/High -> ONE targeted re-review only if needed -> AUTHORIZE or REJECT -> CLOSE -> MOVE FORWARD`
 
 No review loops. Do not reopen closed predecessor review cycles absent evidence that invalidates their recorded receipts or frozen invariants.

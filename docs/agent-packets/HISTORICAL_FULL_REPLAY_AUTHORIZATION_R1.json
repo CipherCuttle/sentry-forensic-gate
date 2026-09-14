@@ -3,7 +3,7 @@
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1",
   "state": "HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN",
-  "objective": "Decide whether a separate research-only phase may replay the frozen 147 historical launches under the already-reviewed historical baseline and outcome policies, without changing current R3/default semantics or widening live execution authority.",
+  "objective": "Decide whether a separate research-only phase may replay a cryptographically frozen manifest of the 147 historical launches under the already-reviewed historical baseline and outcome policies, without changing current R3/default semantics or widening live execution authority.",
   "predecessor": {
     "phase": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1",
     "pr": 21,
@@ -57,7 +57,18 @@
     "current_r3_must_remain_unchanged": true,
     "full_replay_scope_must_equal_frozen_147": true,
     "unverified_must_remain_explicit": true,
-    "per_launch_per_horizon_receipts_required": true
+    "per_launch_per_horizon_receipts_required": true,
+    "full_replay_scope_manifest": {
+      "required": true,
+      "status": "DISCOVERY_PENDING",
+      "path": "fixtures/historical-full-replay-scope-r1.json",
+      "expected_launches": 147,
+      "first_launch_block": 39943476,
+      "final_launch_block": 49271598,
+      "launch_identity_sha256": null,
+      "live_verification_run": null,
+      "evidence_artifact_id": null
+    }
   },
   "frozen_policies": {
     "baseline_policy_version": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
@@ -74,7 +85,8 @@
   },
   "decision_rules": [
     "AUTHORIZE only if the exact predecessor closure evidence remains internally consistent and all four exact-head predecessor workflows are SUCCESS.",
-    "Authorization scope, if granted, is exactly the frozen 147 historical launches and the frozen five horizons under the existing historical baseline/outcome policies.",
+    "Before AUTHORIZE, recover exactly 147 canonical historical deployment identities, commit the full scope manifest, pin its SHA-256 identity digest, and verify a fresh live discovery matches it.",
+    "Authorization scope, if granted, is exactly the committed 147-launch manifest and the frozen five horizons under the existing historical baseline/outcome policies.",
     "Do not infer that the full replay will be 147/147 COMPLETE from representative 45/45 compatibility; full-cohort failures remain valid results.",
     "Do not change historical pricing, valuation, horizon, authority, notional, or failure semantics to improve replay completion.",
     "Any provider/transport limitation remains explicit and is never economic evidence.",
@@ -82,12 +94,15 @@
   ],
   "known_historical_state": {
     "launch_count": 147,
+    "first_launch_block": 39943476,
+    "final_launch_block": 49271598,
     "launch_producing_implementation_cohorts": 9,
     "representative_fixture_status": "CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT",
     "representative_fixture_path": "fixtures/historical-compatibility-r1.json"
   },
   "prohibitions": [
-    "Do not run the 147-launch replay while this decision is open.",
+    "Do not run the 147-launch economic replay while this decision is open.",
+    "Scope discovery may enumerate canonical deployment identities only; it may not construct baselines or outcomes.",
     "Do not change current R3 authority, EXECUTABLE_BASELINE_R1, FORWARD_OUTCOMES_R1, or reviewed historical baseline/outcome semantics.",
     "Do not fit oracle freshness thresholds or use retrospective off-chain prices.",
     "Do not silently shrink notionals or create alternate baseline/outcome algorithms.",
@@ -113,6 +128,8 @@
     "docs/HISTORICAL_BASELINE_POLICY_R1.md",
     "docs/FORWARD_OUTCOMES_R1.md",
     "fixtures/historical-compatibility-r1.json",
+    "scripts/historical-full-replay-scope-r1.mjs",
+    ".github/workflows/historical-full-replay-authorization-r1.yml",
     "src/runtime/forwardOutcomes.ts",
     "src/runtime/executableBaseline.ts",
     "src/outcome/horizons.ts",
@@ -120,10 +137,12 @@
     "src/tsunami/historicalRedstoneBaselineSource.ts",
     "mise.toml"
   ],
-  "next_action": "DECIDE_FULL_147_REPLAY_AUTHORIZATION",
+  "next_action": "FREEZE_FULL_147_REPLAY_SCOPE_THEN_DECIDE",
   "notes": [
     "The predecessor phase is closed PASS on exact head 28e598d738c633b0211bae914b8f92450ae61f90 with all four exact-head verification workflows green.",
     "Representative 45/45 compatibility supports portability across the nine known historical implementation cohorts but does not predeclare full-cohort replay completeness.",
-    "This initial decision packet grants no replay authority."
+    "The repository previously recorded the 147 count and cohort distribution but did not contain a committed 147-launch identity manifest; authorization therefore remains blocked until that scope is frozen and reverified.",
+    "Superseded PR #18 is not treated as full-cohort evidence because its live discovery failed on public-RPC rate limiting before producing scientific evidence.",
+    "This decision packet grants no replay authority."
   ]
 }

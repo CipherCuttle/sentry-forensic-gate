@@ -42,6 +42,34 @@ function invariant(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function validateFrozenScopeManifest(packet, { requiredFrozen }) {
+  const scope = packet.acceptance?.full_replay_scope_manifest;
+  invariant(scope?.required === true, 'full replay scope manifest must be required');
+  invariant(scope?.path === 'fixtures/historical-full-replay-scope-r1.json', 'full replay scope manifest path drift');
+  invariant(scope?.expected_launches === 147, 'scope manifest expected launch count must remain 147');
+  invariant(scope?.first_launch_block === 39943476, 'scope manifest first launch block drift');
+  invariant(scope?.final_launch_block === 49271598, 'scope manifest final launch block drift');
+  invariant(scope?.status === 'DISCOVERY_PENDING' || scope?.status === 'FROZEN', 'unsupported scope manifest status');
+
+  if (requiredFrozen || scope.status === 'FROZEN') {
+    invariant(scope.status === 'FROZEN', 'authorized replay requires FROZEN scope manifest');
+    invariant(fs.existsSync(scope.path) && fs.statSync(scope.path).isFile(), 'frozen scope manifest file missing');
+    invariant(/^[0-9a-f]{64}$/.test(scope.launch_identity_sha256 ?? ''), 'frozen scope manifest digest required');
+    invariant(Number.isInteger(scope.live_verification_run) && scope.live_verification_run > 0, 'frozen scope live verification run required');
+    invariant(Number.isInteger(scope.evidence_artifact_id) && scope.evidence_artifact_id > 0, 'frozen scope evidence artifact id required');
+    const manifest = JSON.parse(fs.readFileSync(scope.path, 'utf8'));
+    invariant(manifest?.schema === 'historical-full-replay-scope-r1/v1', 'unexpected frozen scope manifest schema');
+    invariant(manifest?.sourceRange?.observedLaunches === 147, 'frozen scope manifest must contain 147 launches');
+    invariant(manifest?.uniqueIdentityCount === 147, 'frozen scope manifest must contain 147 unique identities');
+    invariant(Array.isArray(manifest?.launches) && manifest.launches.length === 147, 'frozen scope manifest launch list must contain 147 rows');
+    invariant(manifest?.launchIdentitySha256 === scope.launch_identity_sha256, 'packet scope digest must match committed manifest');
+  } else {
+    invariant(scope.launch_identity_sha256 === null, 'pending scope manifest must not predeclare digest');
+    invariant(scope.live_verification_run === null, 'pending scope manifest must not predeclare verification run');
+    invariant(scope.evidence_artifact_id === null, 'pending scope manifest must not predeclare evidence artifact');
+  }
+}
+
 export function validatePacket(packet) {
   invariant(packet.schema === 'dev-spine-phase/v1', 'unexpected phase packet schema');
   invariant(packet.repo === 'CipherCuttle/sentry-forensic-gate', 'unexpected repository identity');
@@ -99,6 +127,7 @@ export function validatePacket(packet) {
   invariant(acceptance?.full_replay_scope_must_equal_frozen_147 === true, 'full replay scope must remain frozen at 147');
   invariant(acceptance?.unverified_must_remain_explicit === true, 'UNVERIFIED results must remain explicit');
   invariant(acceptance?.per_launch_per_horizon_receipts_required === true, 'per-launch/per-horizon receipts must remain required');
+  validateFrozenScopeManifest(packet, { requiredFrozen: authorized });
 
   const policy = packet.frozen_policies;
   invariant(policy?.baseline_policy_version === BASELINE_POLICY, 'historical baseline policy version drift');
@@ -109,17 +138,20 @@ export function validatePacket(packet) {
 
   const historical = packet.known_historical_state;
   invariant(historical?.launch_count === 147, 'historical launch count must remain 147');
+  invariant(historical?.first_launch_block === 39943476, 'historical first launch block drift');
+  invariant(historical?.final_launch_block === 49271598, 'historical final launch block drift');
   invariant(historical?.launch_producing_implementation_cohorts === 9, 'historical implementation cohort count must remain 9');
   invariant(historical?.representative_fixture_status === 'CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT', 'representative fixture status must remain reviewed');
   invariant(fs.existsSync(historical?.representative_fixture_path), 'representative fixture path must exist');
 
   if (packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN') {
-    invariant(packet.next_action === 'DECIDE_FULL_147_REPLAY_AUTHORIZATION', 'open decision next action drift');
+    invariant(packet.next_action === 'FREEZE_FULL_147_REPLAY_SCOPE_THEN_DECIDE' || packet.next_action === 'DECIDE_FULL_147_REPLAY_AUTHORIZATION', 'open decision next action drift');
     invariant(!packet.decision_result, 'decision result must not be predeclared while decision is open');
   } else if (packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZED') {
     invariant(packet.next_action === 'OPEN_HISTORICAL_FULL_REPLAY_R1_IMPLEMENTATION', 'authorized next action drift');
     invariant(packet.decision_result?.status === 'AUTHORIZE', 'authorized state requires AUTHORIZE decision result');
     invariant(packet.decision_result?.basis_predecessor_head === PREDECESSOR_HEAD, 'authorized decision predecessor basis drift');
+    invariant(packet.decision_result?.scope_identity_sha256 === packet.acceptance.full_replay_scope_manifest.launch_identity_sha256, 'authorized decision must bind frozen scope digest');
     invariant(typeof packet.decision_result?.rationale === 'string' && packet.decision_result.rationale.length > 0, 'authorized decision rationale required');
   } else {
     invariant(packet.next_action === 'STOP_FULL_147_REPLAY', 'rejected next action drift');
