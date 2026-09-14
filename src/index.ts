@@ -24,6 +24,7 @@ export * from './outcome/forwardTypes.js';
 export * from './outcome/ports.js';
 export * from './outcome/store.js';
 export * from './outcome/viemSource.js';
+export * from './outcome/historicalRedstoneOutcomeSource.js';
 export * from './db/schema.js';
 export * from './db/store.js';
 export * from './db/memoryStore.js';

@@ -5,6 +5,9 @@ on:
     paths:
       - 'docs/HISTORICAL_OUTCOME_POLICY_R1.md'
       - 'docs/agent-packets/HISTORICAL_OUTCOME_POLICY_R1.json'
+      - 'src/historicalOutcomePolicyCli.ts'
+      - 'src/outcome/historicalRedstoneOutcomeSource.ts'
+      - 'src/index.ts'
       - 'scripts/historical-outcome-oracle-probe.mjs'
       - 'scripts/dev-spine-check.mjs'
       - 'scripts/dev-spine-check-test.mjs'
@@ -17,29 +20,38 @@ permissions:
   contents: read
 
 jobs:
-  point-in-time-redstone-discovery:
+  historical-outcome-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: corepack enable
-      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
       - name: Validate fail-closed phase metadata
         run: |
           node scripts/dev-spine-check-test.mjs
           node scripts/dev-spine-check.mjs
-      - name: Probe RedStone at exact 24h observed blocks
+      - name: Build
+        run: pnpm build
+      - name: Reconfirm RedStone at exact 24h observed blocks
         env:
           SHADOW_ONLY: 'true'
           OUTPUT_PATH: historical-outcome-policy-r1-oracle-discovery.json
         run: node scripts/historical-outcome-oracle-probe.mjs
-      - name: Upload discovery receipt
+      - name: Run historical outcome representative gate
+        env:
+          SHADOW_ONLY: 'true'
+          OUTPUT_PATH: historical-outcome-policy-r1-live-receipt.json
+        run: node dist/historicalOutcomePolicyCli.js
+      - name: Upload outcome evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: historical-outcome-policy-r1-oracle-discovery
-          path: historical-outcome-policy-r1-oracle-discovery.json
+          name: historical-outcome-policy-r1-evidence
+          path: |
+            historical-outcome-policy-r1-oracle-discovery.json
+            historical-outcome-policy-r1-live-receipt.json
           if-no-files-found: warn

@@ -120,6 +120,8 @@
     "src/outcome/viemSource.ts",
     "src/outcome/forwardTypes.ts",
     "src/outcome/ports.ts",
+    "src/outcome/historicalRedstoneOutcomeSource.ts",
+    "src/historicalOutcomePolicyCli.ts",
     "scripts/historical-outcome-oracle-probe.mjs",
     ".github/workflows/historical-outcome-policy-r1.yml",
     "mise.toml"
