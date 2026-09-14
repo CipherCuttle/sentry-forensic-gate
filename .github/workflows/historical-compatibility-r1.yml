@@ -1,0 +1,32 @@
+name: historical-compatibility-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'fixtures/historical-compatibility-r1.json'
+      - 'src/authority/readAuthorityContext.ts'
+      - 'src/runtime/executableBaseline.ts'
+      - 'src/runtime/forwardOutcomes.ts'
+      - 'src/tsunami/viemBaselineSource.ts'
+      - 'src/outcome/viemSource.ts'
+      - 'src/historicalCompatibilityCli.ts'
+      - 'scripts/historical-compatibility-config-check.mjs'
+      - 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json'
+      - '.github/workflows/historical-compatibility-r1.yml'
+
+jobs:
+  live-archive-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+      - name: Run nine-representative live archive-RPC compatibility gate
+        env:
+          SHADOW_ONLY: 'true'
+        run: pnpm start:historical-compatibility
