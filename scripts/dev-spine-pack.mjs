@@ -48,9 +48,9 @@ const output = [
   JSON.stringify(metadata, null, 2),
   '```',
   '',
-  '```text',
+  '````text',
   contextContent,
-  '```',
+  '````',
   '',
 ].join('\n');
 
