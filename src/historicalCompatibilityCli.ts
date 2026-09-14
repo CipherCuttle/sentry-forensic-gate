@@ -75,8 +75,14 @@ for (const representative of fixture.representatives) {
     DEFAULT_BASELINE_NOTIONALS_USD_MICROS,
     authorizeExecutableBlock
   );
-  if (baseline.status === 'COMPLETE') baselineComplete += 1;
-  else baselineUnverified += 1;
+  if (baseline.status === 'COMPLETE') {
+    baselineComplete += 1;
+  } else {
+    baselineUnverified += 1;
+    throw new Error(
+      `HISTORICAL_COMPATIBILITY_BASELINE_UNVERIFIED:block=${launchBlock}:tokenId=${tokenId}:reason=${baseline.reason ?? 'UNKNOWN'}`
+    );
+  }
 
   const outcomeSource = new ViemForwardOutcomeSource({ rpcUrl, authority });
   const outcome = await buildForwardOutcome(
@@ -88,7 +94,7 @@ for (const representative of fixture.representatives) {
     authorizeExecutableBlock
   );
   if (!outcome) {
-    throw new Error(`HISTORICAL_COMPATIBILITY_OUTCOME_NOT_MATURE:${launch.launchId}`);
+    throw new Error(`HISTORICAL_COMPATIBILITY_OUTCOME_UNEXPECTED_NULL:${launch.launchId}`);
   }
   if (outcome.status === 'COMPLETE') outcomesComplete += 1;
   else outcomesUnverified += 1;
