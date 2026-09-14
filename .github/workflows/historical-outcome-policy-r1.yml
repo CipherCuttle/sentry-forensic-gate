@@ -20,6 +20,7 @@ on:
       - 'src/authority/readAuthorityContext.ts'
       - 'src/sentry/viemSource.ts'
       - 'src/sentry/contracts.ts'
+      - 'src/evidence/canonical.ts'
       - 'src/index.ts'
       - 'scripts/historical-outcome-oracle-probe.mjs'
       - 'scripts/dev-spine-check.mjs'
