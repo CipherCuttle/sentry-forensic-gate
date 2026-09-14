@@ -1,0 +1,91 @@
+name: historical-outcome-all-horizons-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'docs/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.md'
+      - 'docs/agent-packets/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.json'
+      - 'fixtures/historical-compatibility-r1.json'
+      - 'src/historicalOutcomeAllHorizonsCli.ts'
+      - 'src/historicalBaselinePolicyCli.ts'
+      - 'src/historicalOutcomePolicyCli.ts'
+      - 'src/runtime/forwardOutcomes.ts'
+      - 'src/runtime/executableBaseline.ts'
+      - 'src/outcome/horizons.ts'
+      - 'src/outcome/historicalRedstoneOutcomeSource.ts'
+      - 'src/outcome/viemSource.ts'
+      - 'src/outcome/ports.ts'
+      - 'src/outcome/forwardTypes.ts'
+      - 'src/shadow/baselineTypes.ts'
+      - 'src/tsunami/historicalRedstoneBaselineSource.ts'
+      - 'src/tsunami/viemBaselineSource.ts'
+      - 'src/tsunami/contracts.ts'
+      - 'src/authority/readAuthorityContext.ts'
+      - 'src/sentry/viemSource.ts'
+      - 'src/sentry/contracts.ts'
+      - 'src/evidence/canonical.ts'
+      - 'scripts/historical-baseline-policy-config-check.mjs'
+      - 'scripts/historical-baseline-policy-receipt-check.mjs'
+      - 'scripts/historical-outcome-oracle-probe.mjs'
+      - 'scripts/dev-spine-check.mjs'
+      - 'scripts/dev-spine-check-test.mjs'
+      - 'scripts/dev-spine-context.mjs'
+      - 'scripts/dev-spine-pack.mjs'
+      - 'scripts/dev-spine-receipt.mjs'
+      - '.github/workflows/historical-baseline-policy-r1.yml'
+      - '.github/workflows/historical-outcome-policy-r1.yml'
+      - '.github/workflows/historical-outcome-all-horizons-r1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  all-horizon-representative-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+      - name: Validate fail-closed successor phase metadata
+        run: |
+          node scripts/dev-spine-check-test.mjs
+          node scripts/dev-spine-check.mjs
+      - name: Build
+        run: pnpm build
+      - name: Run predecessor historical baseline regression
+        env:
+          SHADOW_ONLY: 'true'
+          OUTPUT_PATH: historical-baseline-policy-r1-live-receipt.json
+        run: |
+          pnpm historicalbaselinepolicycheck
+          pnpm start:historical-baseline-policy || true
+          node scripts/historical-baseline-policy-receipt-check.mjs
+      - name: Provider pacing before exact-24h regression
+        run: sleep 15
+      - name: Run predecessor exact-24h historical outcome regression
+        run: |
+          SHADOW_ONLY=true OUTPUT_PATH=historical-outcome-policy-r1-oracle-discovery.json node scripts/historical-outcome-oracle-probe.mjs
+          SHADOW_ONLY=true OUTPUT_PATH=historical-outcome-policy-r1-live-receipt.json node dist/historicalOutcomePolicyCli.js
+      - name: Provider pacing before all-horizon gate
+        run: sleep 15
+      - name: Run 9x5 historical all-horizon representative gate
+        env:
+          SHADOW_ONLY: 'true'
+          OUTPUT_PATH: historical-outcome-all-horizons-r1-live-receipt.json
+        run: node dist/historicalOutcomeAllHorizonsCli.js
+      - name: Upload integrated historical evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-outcome-all-horizons-r1-evidence
+          path: |
+            historical-baseline-policy-r1-live-receipt.json
+            historical-outcome-policy-r1-oracle-discovery.json
+            historical-outcome-policy-r1-live-receipt.json
+            historical-outcome-all-horizons-r1-live-receipt.json
+          if-no-files-found: warn

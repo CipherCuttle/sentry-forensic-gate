@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_OUTCOME_POLICY_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.json';
 const OUTPUT_PATH = '.dev-spine/receipt.json';
 
 function fail(message) {
@@ -32,20 +32,21 @@ const receipt = {
     verdict: repositoryVerification,
   },
   phase_evidence: {
-    historical_outcome_policy_discovery: 'NOT_EVALUATED',
-    live_archive_rpc: 'NOT_RUN',
-    representatives_attempted: 0,
-    representatives_structurally_point_in_time_usable: 0,
+    live_archive_rpc: 'NOT_EVALUATED_BY_GENERIC_CI',
+    representatives_expected: 9,
+    horizons_per_representative: 5,
+    outcomes_expected: 45,
+    representative_gate: 'NOT_EVALUATED_BY_GENERIC_CI',
   },
   authorization: packet.authorization,
   phase_state: packet.state,
   next_action: packet.next_action,
   verdict:
     repositoryVerification === 'PASS' && !dirty
-      ? 'REPO_VERIFICATION_PASS_PHASE_NOT_EVALUATED'
+      ? 'REPO_VERIFICATION_PASS_PHASE_GATE_SEPARATE'
       : repositoryVerification === 'FAIL'
-        ? 'REPO_VERIFICATION_FAIL_PHASE_NOT_EVALUATED'
-        : 'REPO_VERIFICATION_UNKNOWN_PHASE_NOT_EVALUATED',
+        ? 'REPO_VERIFICATION_FAIL_PHASE_GATE_SEPARATE'
+        : 'REPO_VERIFICATION_UNKNOWN_PHASE_GATE_SEPARATE',
 };
 
 fs.mkdirSync('.dev-spine', { recursive: true });
