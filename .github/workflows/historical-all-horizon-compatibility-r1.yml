@@ -6,6 +6,7 @@ on:
       - 'docs/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.md'
       - 'docs/agent-packets/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.json'
       - 'fixtures/historical-compatibility-r1.json'
+      - 'src/**'
       - 'src/historicalAllHorizonCompatibilityCli.ts'
       - 'src/runtime/forwardOutcomes.ts'
       - 'src/runtime/executableBaseline.ts'
