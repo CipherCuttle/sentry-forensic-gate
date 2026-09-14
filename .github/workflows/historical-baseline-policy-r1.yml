@@ -8,6 +8,11 @@ on:
       - 'fixtures/historical-compatibility-r1.json'
       - 'scripts/historical-baseline-policy-probe.mjs'
       - 'scripts/historical-oracle-availability-probe.mjs'
+      - 'scripts/historical-baseline-policy-config-check.mjs'
+      - 'src/historicalBaselinePolicyCli.ts'
+      - 'src/runtime/executableBaseline.ts'
+      - 'src/shadow/baselineTypes.ts'
+      - 'src/tsunami/historicalRedstoneBaselineSource.ts'
       - 'scripts/dev-spine-check.mjs'
       - 'scripts/dev-spine-check-test.mjs'
       - 'scripts/dev-spine-context.mjs'
@@ -15,8 +20,11 @@ on:
       - 'scripts/dev-spine-receipt.mjs'
       - '.github/workflows/historical-baseline-policy-r1.yml'
 
+permissions:
+  contents: read
+
 jobs:
-  live-point-in-time-oracle-discovery:
+  stage-c-representative-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -25,9 +33,18 @@ jobs:
         with:
           node-version: 20
       - run: corepack enable
-      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
       - run: pnpm build
-      - name: Probe documented ETH/USD candidates at historical decision blocks
+      - run: pnpm historicalbaselinepolicycheck
+      - name: Run RedStone as-of historical baseline on nine representatives
         env:
           SHADOW_ONLY: 'true'
-        run: node scripts/historical-oracle-availability-probe.mjs
+          OUTPUT_PATH: historical-baseline-policy-r1-live-receipt.json
+        run: pnpm start:historical-baseline-policy
+      - name: Upload Stage C receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-baseline-policy-r1-live-receipt
+          path: historical-baseline-policy-r1-live-receipt.json
+          if-no-files-found: warn
