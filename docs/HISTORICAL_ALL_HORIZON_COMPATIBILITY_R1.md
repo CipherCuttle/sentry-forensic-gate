@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTATION_AUTHORIZED / LIVE 45-CELL GATE NOT YET RUN`
+`CLOSED / PASS — 9/9 BASELINES COMPLETE / 45/45 OUTCOMES COMPLETE / 0 UNVERIFIED`
 
 This is a bounded successor to `HISTORICAL_OUTCOME_POLICY_R1`. It does not reopen that phase and does not alter current R3/default behavior.
 
@@ -37,7 +37,7 @@ The historical baseline is reconstructed once per representative. Each COMPLETE 
 
 ## Preregistration
 
-Before live execution, the following are frozen:
+Before live execution, the following were frozen:
 
 - representative fixture: `fixtures/historical-compatibility-r1.json`
 - representative count: `9`
@@ -54,11 +54,11 @@ Before live execution, the following are frozen:
 - canary remains unauthorized
 - merge remains unauthorized
 
-Observed outcome blocks are deliberately **not preregistered**. They are outputs of the existing first-canonical-block-at-or-after-target algorithm and must be recorded from live evidence rather than hard-coded before discovery.
+Observed outcome blocks were deliberately **not preregistered**. They remained outputs of the existing first-canonical-block-at-or-after-target algorithm and were recorded from live evidence rather than hard-coded before discovery.
 
 ## Acceptance gate
 
-PASS requires all of the following:
+PASS required all of the following:
 
 - representatives attempted = `9/9`
 - historical baseline COMPLETE = `9/9`
@@ -73,16 +73,50 @@ PASS requires all of the following:
 - ordinary repository CI green
 - research-only guardrails green
 
-If a horizon exposes a genuine historical incompatibility, stop. Do not broaden the historical policy, fit a new oracle freshness threshold, substitute retrospective off-chain prices, shrink notionals, or create a second outcome algorithm to manufacture 45/45.
+If a horizon exposed a genuine historical incompatibility, the phase was required to stop rather than broaden the historical policy, fit a new oracle freshness threshold, substitute retrospective off-chain prices, shrink notionals, or create a second outcome algorithm to manufacture 45/45.
+
+## Result
+
+The preregistered gate passed on repaired exact implementation head `58ded45899b288f159ef3248365a664896fa0665`:
+
+- representatives attempted: `9/9`
+- historical baselines COMPLETE: `9/9`
+- historical baselines UNVERIFIED: `0`
+- horizon cells attempted: `45/45`
+- outcomes COMPLETE: `45`
+- outcomes UNVERIFIED: `0`
+- results per frozen horizon: `1m=9`, `5m=9`, `30m=9`, `2h=9`, `24h=9`
+- all-horizon workflow run: `34901882252` — `SUCCESS`
+- evidence artifact: `10370608538`
+- artifact digest: `sha256:f1b616164c851f2bb9afa896064fb1c6f1ba8b709ea5a978d61b44c02f61380e`
+- ordinary CI run: `34901882036` — `SUCCESS`
+- historical outcome predecessor regression run: `34901882028` — `SUCCESS`
+- historical baseline predecessor regression run: `34901882212` — initial attempt transport-rate-limited, bounded retry `SUCCESS`
+
+The initial predecessor baseline failure was an Ink public-RPC rate-limit transport error (`Your IP has exceeded its request rate limit`), not economic evidence. The bounded retry passed after the all-horizon RPC workload completed.
+
+## Review closure
+
+The single independent hostile Codex review on `3a1366ccc5f550eb8bd3a779858cf81a168561ff` found one P1: the all-horizon workflow did not trigger for all transitive evidence-critical source changes.
+
+The repair on `58ded45899b288f159ef3248365a664896fa0665` broadened the pull-request trigger to `src/**`. It did not change baseline, outcome, valuation, authority, or current-R3 semantics.
+
+The one allowed targeted Codex re-review examined exact repaired head `58ded45899b288f159ef3248365a664896fa0665` and reported no major issues. The P1 review thread is resolved. No additional review cycle is authorized or required.
 
 ## Authorization boundary
 
-A 45/45 PASS may authorize only a successor decision phase named `HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1`.
+This 45/45 PASS authorizes only opening the successor decision phase `HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1`.
 
 It does **not** authorize the 147-launch replay itself, FAST_VET, canary, signing, transaction construction, transaction broadcast, or merge.
+
+## Verdict
+
+`HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS`
+
+Next action: `OPEN_HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1_DECISION`.
 
 ## Bounded completion
 
 `IMPLEMENT -> TEST -> ONE independent hostile review -> fix Critical/High -> ONE targeted re-review only if Critical/High fixes were needed -> CLOSE -> MOVE FORWARD`
 
-Do not reopen review cycles on `HISTORICAL_BASELINE_POLICY_R1` or `HISTORICAL_OUTCOME_POLICY_R1`.
+This phase is closed. Do not reopen review cycles on `HISTORICAL_BASELINE_POLICY_R1`, `HISTORICAL_OUTCOME_POLICY_R1`, or this phase absent evidence that invalidates the recorded result or a frozen invariant.

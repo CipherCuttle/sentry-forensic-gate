@@ -2,7 +2,7 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1",
-  "state": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED",
+  "state": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS",
   "objective": "Run the same nine reviewed historical implementation representatives across all five frozen FORWARD_OUTCOMES_R1 horizons using only the already-reviewed historical baseline and historical RedStone-as-of outcome mechanics, requiring 45 COMPLETE / 0 UNVERIFIED before any full-replay authorization decision.",
   "predecessor": {
     "phase": "HISTORICAL_OUTCOME_POLICY_R1",
@@ -27,7 +27,7 @@
     "historical_baseline_policy_implementation": false,
     "historical_outcome_policy_discovery": false,
     "historical_outcome_policy_implementation": false,
-    "historical_all_horizon_compatibility_implementation": true,
+    "historical_all_horizon_compatibility_implementation": false,
     "full_147_replay": false,
     "fast_vet": false,
     "canary": false,
@@ -73,6 +73,36 @@
     "If any horizon is historically non-portable, stop and classify the incompatibility instead of broadening policy post hoc.",
     "A 45/45 PASS permits only a successor full-replay authorization decision; it does not self-authorize the 147 replay."
   ],
+  "implementation_result": {
+    "status": "PASS",
+    "tested_head": "58ded45899b288f159ef3248365a664896fa0665",
+    "representatives_attempted": 9,
+    "baseline_complete": 9,
+    "baseline_unverified": 0,
+    "outcomes_attempted": 45,
+    "outcomes_complete": 45,
+    "outcomes_unverified": 0,
+    "per_horizon_complete": {
+      "1m": 9,
+      "5m": 9,
+      "30m": 9,
+      "2h": 9,
+      "24h": 9
+    },
+    "all_horizon_workflow_run": 34901882252,
+    "evidence_artifact_id": 10370608538,
+    "evidence_artifact_sha256": "f1b616164c851f2bb9afa896064fb1c6f1ba8b709ea5a978d61b44c02f61380e",
+    "ordinary_ci_run": 34901882036,
+    "historical_outcome_regression_run": 34901882028,
+    "historical_baseline_regression_run": 34901882212,
+    "historical_baseline_regression_retry_status": "PASS_AFTER_TRANSPORT_RATE_LIMIT",
+    "hostile_review_finding": "P1_TRANSITIVE_WORKFLOW_TRIGGER_GAP",
+    "hostile_review_repair_head": "58ded45899b288f159ef3248365a664896fa0665",
+    "targeted_re_review_closed": true,
+    "targeted_re_review_result": "NO_MAJOR_ISSUES",
+    "review_thread_resolved": true,
+    "verdict": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS"
+  },
   "known_historical_state": {
     "launch_count": 147,
     "launch_producing_implementation_cohorts": 9,
@@ -117,11 +147,14 @@
     ".github/workflows/historical-all-horizon-compatibility-r1.yml",
     "mise.toml"
   ],
-  "next_action": "IMPLEMENT_ALL_HORIZON_HARNESS_AND_RUN_45_CELL_LIVE_GATE",
+  "next_action": "OPEN_HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1_DECISION",
   "notes": [
     "The exact predecessor head cc53013075d9e450fe6c92c07269a577cbfaa7aa was still unmerged and its three exact-head workflows were green when this successor was opened.",
     "No existing HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1 branch or PR was present at successor creation.",
-    "Observed horizon blocks are intentionally outputs, not preregistered constants.",
-    "The implementation harness and evidence workflow are context-only additions around the already-reviewed baseline/outcome mechanics; they do not create a new pricing, horizon, or authority algorithm."
+    "Observed horizon blocks remained live outputs rather than preregistered constants.",
+    "The implementation harness and evidence workflow were context-only additions around the already-reviewed baseline/outcome mechanics; they did not create a new pricing, horizon, or authority algorithm.",
+    "The repaired exact implementation head produced 9/9 COMPLETE baselines and 45/45 COMPLETE outcomes with 0 UNVERIFIED.",
+    "The single P1 review finding was repaired by broadening the workflow trigger to src/**; the one allowed targeted re-review found no major issues.",
+    "This PASS opens only the HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1 decision. The 147 replay itself remains unauthorized."
   ]
 }
