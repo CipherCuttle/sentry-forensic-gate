@@ -1,0 +1,65 @@
+name: historical-outcome-all-horizons-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'package.json'
+      - 'docs/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.md'
+      - 'docs/agent-packets/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.json'
+      - 'fixtures/historical-compatibility-r1.json'
+      - 'src/historicalOutcomeAllHorizonsCli.ts'
+      - 'src/runtime/forwardOutcomes.ts'
+      - 'src/runtime/executableBaseline.ts'
+      - 'src/outcome/horizons.ts'
+      - 'src/outcome/historicalRedstoneOutcomeSource.ts'
+      - 'src/outcome/viemSource.ts'
+      - 'src/outcome/ports.ts'
+      - 'src/outcome/forwardTypes.ts'
+      - 'src/shadow/baselineTypes.ts'
+      - 'src/tsunami/historicalRedstoneBaselineSource.ts'
+      - 'src/tsunami/viemBaselineSource.ts'
+      - 'src/tsunami/contracts.ts'
+      - 'src/authority/readAuthorityContext.ts'
+      - 'src/sentry/viemSource.ts'
+      - 'src/sentry/contracts.ts'
+      - 'src/evidence/canonical.ts'
+      - 'scripts/dev-spine-check.mjs'
+      - 'scripts/dev-spine-check-test.mjs'
+      - 'scripts/dev-spine-context.mjs'
+      - 'scripts/dev-spine-pack.mjs'
+      - 'scripts/dev-spine-receipt.mjs'
+      - '.github/workflows/historical-outcome-all-horizons-r1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  all-horizon-representative-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+      - name: Validate fail-closed successor phase metadata
+        run: |
+          node scripts/dev-spine-check-test.mjs
+          node scripts/dev-spine-check.mjs
+      - name: Build
+        run: pnpm build
+      - name: Run 9x5 historical all-horizon representative gate
+        env:
+          SHADOW_ONLY: 'true'
+          OUTPUT_PATH: historical-outcome-all-horizons-r1-live-receipt.json
+        run: node dist/historicalOutcomeAllHorizonsCli.js
+      - name: Upload all-horizon evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-outcome-all-horizons-r1-evidence
+          path: historical-outcome-all-horizons-r1-live-receipt.json
+          if-no-files-found: warn

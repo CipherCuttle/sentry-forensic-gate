@@ -28,7 +28,8 @@
     "start:provider-capability": "node dist/providerCapabilityCli.js",
     "start:infra-discovery": "node dist/executableInfraDiscoveryCli.js",
     "start:historical-compatibility": "node dist/historicalCompatibilityCli.js",
-    "start:historical-baseline-policy": "node dist/historicalBaselinePolicyCli.js"
+    "start:historical-baseline-policy": "node dist/historicalBaselinePolicyCli.js",
+    "start:historical-outcome-all-horizons": "node dist/historicalOutcomeAllHorizonsCli.js"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",

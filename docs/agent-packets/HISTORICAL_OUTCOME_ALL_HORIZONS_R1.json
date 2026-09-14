@@ -1,0 +1,127 @@
+{
+  "schema": "dev-spine-phase/v1",
+  "repo": "CipherCuttle/sentry-forensic-gate",
+  "phase": "HISTORICAL_OUTCOME_ALL_HORIZONS_R1",
+  "state": "HISTORICAL_OUTCOME_ALL_HORIZONS_R1_AUTHORIZED",
+  "objective": "Verify the reviewed historical baseline/outcome compatibility across the complete frozen 1m / 5m / 30m / 2h / 24h outcome contract using the same nine reviewed historical representatives, without changing current R3 behavior or authorizing full historical replay.",
+  "predecessor": {
+    "phase": "HISTORICAL_OUTCOME_POLICY_R1",
+    "pr": 19,
+    "closure_head": "cc53013075d9e450fe6c92c07269a577cbfaa7aa",
+    "verdict": "HISTORICAL_OUTCOME_POLICY_PASS",
+    "representatives": 9,
+    "outcomes_24h_complete": 9,
+    "outcomes_24h_unverified": 0
+  },
+  "authority": {
+    "current_default": "R3",
+    "current_r3_behavior_must_remain_unchanged": true,
+    "historical_authorization_granted": false,
+    "historical_baseline_policy_status": "PASS",
+    "historical_outcome_policy_status": "PASS",
+    "full_147_replay_authorized": false
+  },
+  "authorization": {
+    "historical_compatibility_implementation": false,
+    "historical_baseline_policy_discovery": false,
+    "historical_baseline_policy_implementation": false,
+    "historical_outcome_policy_discovery": false,
+    "historical_outcome_policy_implementation": false,
+    "historical_outcome_all_horizons_gate": true,
+    "full_147_replay": false,
+    "fast_vet": false,
+    "canary": false,
+    "merge": false
+  },
+  "acceptance": {
+    "representatives": 9,
+    "horizons": [
+      { "label": "1m", "ms": 60000 },
+      { "label": "5m", "ms": 300000 },
+      { "label": "30m", "ms": 1800000 },
+      { "label": "2h", "ms": 7200000 },
+      { "label": "24h", "ms": 86400000 }
+    ],
+    "horizons_per_representative": 5,
+    "expected_outcomes": 45,
+    "baseline_complete_required": 9,
+    "baseline_unverified_required": 0,
+    "outcome_complete_required": 45,
+    "outcome_unverified_required": 0,
+    "live_archive_rpc_required": true,
+    "point_in_time_inputs_only": true,
+    "existing_baseline_builder_required": true,
+    "existing_historical_outcome_builder_required": true,
+    "derive_observed_blocks_from_existing_horizon_algorithm": true,
+    "provider_or_transport_failure_is_not_market_evidence": true,
+    "full_147_replay_must_remain_unauthorized": true
+  },
+  "predecessor_result": {
+    "source_head_sha": "cc53013075d9e450fe6c92c07269a577cbfaa7aa",
+    "historical_baseline_complete": 9,
+    "historical_baseline_unverified": 0,
+    "outcomes_24h_attempted": 9,
+    "outcomes_24h_complete": 9,
+    "outcomes_24h_unverified": 0,
+    "verdict": "HISTORICAL_OUTCOME_POLICY_PASS"
+  },
+  "historical_policy": {
+    "baseline_policy_version": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
+    "outcome_policy_version": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
+    "current_r1_default_must_remain_bit_for_bit_identity_compatible": true,
+    "historical_valuation_semantics_must_remain_unchanged": true
+  },
+  "decision_rules": [
+    "Build exactly one existing historical baseline per reviewed representative and require it to be COMPLETE before attempting outcomes.",
+    "Iterate the frozen OUTCOME_HORIZONS exported by src/outcome/horizons.ts; do not hard-code shorter-horizon observed blocks.",
+    "Use buildHistoricalForwardOutcome() for every representative/horizon combination; do not duplicate the outcome algorithm.",
+    "A provider or transport failure is not market evidence and must not be converted into COMPLETE or a market-loss classification.",
+    "If any representative/horizon combination exposes a semantic incompatibility, stop and report it rather than broadening semantics to force 45/45.",
+    "A 45/45 representative PASS does not authorize the full 147 replay, FAST_VET, canary, merge, signing, or execution."
+  ],
+  "known_historical_state": {
+    "launch_count": 147,
+    "launch_producing_implementation_cohorts": 9,
+    "representative_fixture_status": "CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT",
+    "representative_fixture_path": "fixtures/historical-compatibility-r1.json"
+  },
+  "prohibitions": [
+    "Do not change current R3 authority or default behavior.",
+    "Do not change historical baseline or historical outcome valuation semantics in this phase.",
+    "Do not invent or freeze shorter-horizon observed block numbers.",
+    "Do not create another baseline or outcome algorithm.",
+    "Do not map UNKNOWN or UNVERIFIED to PASS.",
+    "Do not treat provider or transport failure as market evidence.",
+    "Do not authorize or run the full 147-launch replay from this packet.",
+    "Do not run FAST_VET or a canary.",
+    "Do not add signing, key custody, approvals, swaps, or transaction broadcast.",
+    "Do not merge without explicit user authority."
+  ],
+  "authority_docs": [
+    "AGENTS.md",
+    "docs/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.md",
+    "docs/HISTORICAL_OUTCOME_POLICY_R1.md",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "docs/FORWARD_OUTCOMES_R1.md"
+  ],
+  "context_files": [
+    "AGENTS.md",
+    "docs/agent-packets/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.json",
+    "docs/HISTORICAL_OUTCOME_ALL_HORIZONS_R1.md",
+    "docs/HISTORICAL_OUTCOME_POLICY_R1.md",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "fixtures/historical-compatibility-r1.json",
+    "src/outcome/horizons.ts",
+    "src/runtime/forwardOutcomes.ts",
+    "src/outcome/historicalRedstoneOutcomeSource.ts",
+    "src/historicalOutcomeAllHorizonsCli.ts",
+    ".github/workflows/historical-outcome-all-horizons-r1.yml",
+    "mise.toml"
+  ],
+  "next_action": "RUN_9X5_ALL_HORIZON_REPRESENTATIVE_GATE",
+  "notes": [
+    "The predecessor exact-24h historical outcome policy is reviewed/fixed and PASS at cc53013075d9e450fe6c92c07269a577cbfaa7aa.",
+    "This successor is a verification gate over the frozen five-horizon contract, not a new market policy.",
+    "Full replay, FAST_VET, canary, merge, signing, and execution remain unauthorized."
+  ]
+}
