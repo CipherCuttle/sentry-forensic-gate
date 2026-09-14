@@ -50,7 +50,15 @@ for (const representative of fixture.representatives) {
   const baselineSource = new ViemExecutableBaselineSource({ rpcUrl, authority });
   await baselineSource.assertAuthority(launchBlock);
 
-  const launchSource = new ViemSentryLaunchSource({ rpcUrl });
+  // Historical implementations predate some current launch-type helper methods.
+  // The compatibility gate needs the canonical deployment identity for the existing
+  // baseline/outcome pipeline; unavailable future flag methods are therefore treated
+  // as false only in this ephemeral historical fixture-recovery path. Specialized
+  // deployment events still classify themselves, and transport/provider errors escape.
+  const launchSource = new ViemSentryLaunchSource({
+    rpcUrl,
+    allowUnavailableGenericLaunchTypeFlags: true
+  });
   const launches = await launchSource.catchUp(launchBlock, launchBlock);
   const matches = launches.filter((launch) => launch.tokenId === tokenId);
   if (matches.length !== 1) {
