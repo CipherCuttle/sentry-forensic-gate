@@ -2,7 +2,7 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_COMPATIBILITY_R1",
-  "state": "NEXT_AWAITING_IMPLEMENTATION_PROMPT",
+  "state": "HISTORICAL_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED",
   "discovery_base_sha": "392236cf162a298e40dcb0662eb3e524e58aeb6e",
   "objective": "Add an explicit dependency-injection seam for historical authority contexts while preserving current R3 behavior by default, then test the existing frozen baseline and forward-outcome pipeline on nine historical implementation representatives.",
   "authority": {
@@ -13,7 +13,7 @@
     "historical_compatibility_status": "NOT_RUN"
   },
   "authorization": {
-    "historical_compatibility_implementation": false,
+    "historical_compatibility_implementation": true,
     "full_147_replay": false,
     "fast_vet": false,
     "canary": false,
@@ -52,7 +52,8 @@
       {"implementation": "0x3515ce96c5c6fb8e73ebe04756f2227d035d6334", "launches": 2},
       {"implementation": "0xd5bced4c43eef627ee0524368cabafcb9f29cff0", "launches": 59}
     ],
-    "representative_fixture_status": "NOT_CAPTURED_IN_REPO_DO_NOT_INVENT"
+    "representative_fixture_status": "CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT",
+    "representative_fixture_path": "fixtures/historical-compatibility-r1.json"
   },
   "prohibitions": [
     "Do not weaken current R3 authority or default behavior.",
@@ -75,6 +76,7 @@
   "context_files": [
     "AGENTS.md",
     "docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json",
+    "fixtures/historical-compatibility-r1.json",
     "docs/SENTRY_TRUTH_R1.md",
     "docs/EXECUTABLE_BASELINE_R1.md",
     "docs/FORWARD_OUTCOMES_R1.md",
@@ -83,19 +85,20 @@
     "authority/ink-57073-sentry-v1.json",
     "src/authority/executableInfraAuthority.ts",
     "src/authority/sentryAuthority.ts",
+    "src/authority/readAuthorityContext.ts",
     "src/runtime/executableBaseline.ts",
     "src/runtime/forwardOutcomes.ts",
     "src/tsunami/viemBaselineSource.ts",
     "src/outcome/viemSource.ts",
-    "scripts/executable-baseline-check.mjs",
-    "scripts/forward-outcomes-check.mjs",
-    "scripts/forward-outcome-final-authority-race-check.mjs",
+    "src/historicalCompatibilityCli.ts",
+    "scripts/historical-compatibility-config-check.mjs",
     "package.json",
     "mise.toml"
   ],
-  "next_action": "WAIT_FOR_SEPARATE_HISTORICAL_COMPATIBILITY_R1_IMPLEMENTATION_PROMPT",
+  "next_action": "RUN_NINE_REPRESENTATIVE_LIVE_COMPATIBILITY_GATE",
   "notes": [
-    "This packet is a machine-readable state/navigation artifact. It does not itself grant implementation, replay, merge, FAST_VET, or canary authority.",
-    "The exact nine representative launches were established during discovery but are not encoded in the repository yet. Do not fabricate them; capture them from the reviewed discovery artifact or the separate implementation prompt before live compatibility execution."
+    "The user explicitly authorized HISTORICAL_COMPATIBILITY_R1 implementation after PR #15 merged; this state does not authorize the full 147 replay, FAST_VET, canary, merge, signing, or execution.",
+    "The nine representatives are captured from the reviewed discovery artifact using the frozen first-real-launch-per-launch-producing-implementation-cohort rule.",
+    "A PASS from the nine-representative live gate is evidence for a later replay authorization decision; it does not self-authorize replay."
   ]
 }

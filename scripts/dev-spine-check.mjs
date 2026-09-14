@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
-const CURRENT_STATE = 'NEXT_AWAITING_IMPLEMENTATION_PROMPT';
 const SENSITIVE_AUTHORIZATION_KEYS = [
   'historical_compatibility_implementation',
   'full_147_replay',
@@ -10,6 +9,22 @@ const SENSITIVE_AUTHORIZATION_KEYS = [
   'canary',
   'merge',
 ];
+const STATE_AUTHORIZATION = {
+  NEXT_AWAITING_IMPLEMENTATION_PROMPT: {
+    historical_compatibility_implementation: false,
+    full_147_replay: false,
+    fast_vet: false,
+    canary: false,
+    merge: false,
+  },
+  HISTORICAL_COMPATIBILITY_IMPLEMENTATION_AUTHORIZED: {
+    historical_compatibility_implementation: true,
+    full_147_replay: false,
+    fast_vet: false,
+    canary: false,
+    merge: false,
+  },
+};
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -31,11 +46,13 @@ export function validatePacket(packet) {
     invariant(typeof auth?.[key] === 'boolean', `authorization.${key} must be boolean`);
   }
 
-  // Fail closed: this validator recognizes only the current pre-implementation state.
-  // Any future authority-bearing state must deliberately update this code and its tests.
-  invariant(packet.state === CURRENT_STATE, `unsupported phase state: ${packet.state}`);
+  const expectedAuthorization = STATE_AUTHORIZATION[packet.state];
+  invariant(expectedAuthorization, `unsupported phase state: ${packet.state}`);
   for (const key of SENSITIVE_AUTHORIZATION_KEYS) {
-    invariant(auth[key] === false, `state ${CURRENT_STATE} cannot authorize ${key}`);
+    invariant(
+      auth[key] === expectedAuthorization[key],
+      `state ${packet.state} requires authorization.${key}=${expectedAuthorization[key]}`,
+    );
   }
 
   if (auth.full_147_replay) {
