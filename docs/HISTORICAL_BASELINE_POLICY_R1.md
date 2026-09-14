@@ -2,11 +2,11 @@
 
 ## Status
 
-**Discovery authorized. No historical baseline policy is authorized yet.**
+**Stage A calibration-surface discovery is complete. Stage B point-in-time oracle availability discovery is authorized. No historical baseline policy is authorized yet.**
 
 This successor exists because `HISTORICAL_COMPATIBILITY_R1` reached the real frozen baseline pipeline on all nine reviewed historical implementation representatives but only one representative produced a COMPLETE baseline. The other eight were deterministic `UNVERIFIED` with `USD_CALIBRATION_UNAVAILABLE`.
 
-The purpose of this phase is to determine whether that incompatibility is caused by an adapter defect or by the actual point-in-time market/infrastructure surface.
+Current R3 remains unchanged. The purpose of this phase is to determine whether a separately versioned historical baseline can be grounded in evidence that actually existed at each decision block.
 
 ## Frozen predecessor semantics
 
@@ -20,36 +20,57 @@ The purpose of this phase is to determine whether that incompatibility is caused
 
 For WETH-base launches, R1 converts each target notional into WETH with a point-in-time WETH -> USDT0 exact-output quote against the authorized historical factory/quoter. It tries fee tiers 500, 3000, and 10000 and accepts the least WETH input among executable routes.
 
-This discovery phase MUST NOT reduce the notionals, substitute a later price, or choose a different sizing rule merely because doing so increases coverage.
+This phase MUST NOT reduce the notionals, substitute a later price, or choose a different sizing rule merely because doing so increases coverage.
 
-## Preregistered hypotheses
+## Stage A — calibration-surface result
 
-**H1 — depth failure.** The WETH/USDT0 route exists but cannot execute one or more frozen notionals at many historical decision blocks.
+Live archive-RPC discovery attempted the same nine reviewed implementation representatives at exactly launch block + 2 using the frozen R1 notionals.
 
-**H2 — infrastructure absence.** One or more epochs lack the required pool/token/code surface entirely.
+Observed result:
 
-**H3 — later transition.** Full R1 calibration becomes available only after a later infrastructure/liquidity transition, so the current R1 policy is genuinely non-portable to earlier launches.
+- 9/9 representatives attempted;
+- 8 WETH-base launches and 1 USDT0-base launch;
+- only 1/9 representatives supports all five frozen R1 calibration notionals;
+- the first two WETH representatives have no WETH/USDT0 pool at fee 500, 3000, or 10000;
+- the other six WETH representatives have a usable 3000-fee WETH/USDT0 route for $0.25, $0.50, and $1, but $2 and $5 exact-output quotes revert;
+- the sole full-calibration representative is USDT0-base and therefore uses the R1 nominal-peg path rather than WETH/USDT0 market calibration.
 
-## Discovery measurements
+This falsifies an adapter-only explanation. `EXECUTABLE_BASELINE_R1` is genuinely non-portable across the reviewed historical representatives because the required calibration market did not yet exist or was too shallow.
 
-For the same nine representatives used by `HISTORICAL_COMPATIBILITY_R1`, at exactly launch block + 2, the live archive-RPC probe records:
+The result does **not** authorize shrinking notionals. Doing so after observing failures would redefine the measurement rather than reconstruct it.
 
-- canonical launch identity and base token recovered through the reviewed historical tuple;
-- block timestamp and hash;
-- WETH and USDT0 code/decimals;
-- WETH/USDT0 pool existence for fee tiers 500, 3000, and 10000;
-- pool bytecode, token identity, fee, and active liquidity;
-- exact-output quote executability for every frozen notional at every available fee tier;
-- the result of the existing baseline adapter's `calibrateUsd()` for each frozen notional.
+## Stage B — preregistered on-chain oracle availability discovery
 
-Provider, authority, or reorg failures abort. Missing pools, shallow liquidity, and quote reverts are recorded as market/infrastructure evidence rather than silently upgraded to PASS.
+The next question is whether contemporaneous on-chain ETH/USD evidence existed at the same decision blocks. Current Ink documentation is used only to identify candidate contract addresses; current documentation is **not** evidence that a feed existed historically.
 
-## Decision rules
+Candidates are frozen before the historical reads:
 
-1. If the historical route is in fact executable for all frozen notionals and the previous failure is caused by the compatibility adapter, repair only that adapter defect and keep `EXECUTABLE_BASELINE_R1` unchanged.
-2. If the route is genuinely absent or too shallow, do **not** shrink notionals post hoc and do **not** reinterpret R1 to manufacture compatibility.
-3. If R1 is genuinely non-portable, any historical replacement must be a separately versioned policy using only data available at the decision block and must be preregistered before the 147-launch replay.
-4. Future prices, retrospective centralized-exchange prices, outcome-conditioned sizing, and per-token adaptive notionals are forbidden as rescue mechanisms.
+1. `EORACLE_ETH_USD` — `0xdFc720E1ef024bfc768ed9E6F0e7Fc80E28f8CFA` — documented by Ink as ETH/USD with 8 decimals.
+2. `REDSTONE_ETH_USD` — `0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF` — documented by Ink as ETH/USD.
+
+The probe uses only read-only AggregatorV3-style calls at the exact historical decision block and records:
+
+- bytecode presence;
+- `decimals()`;
+- `description()` when supported;
+- `version()` when supported;
+- `latestRoundData()`;
+- whether answer > 0;
+- whether `updatedAt` is nonzero and no later than the decision-block timestamp;
+- `age_seconds = decision_block_timestamp - updatedAt`.
+
+### Important anti-overfitting rule
+
+**No freshness threshold is selected in Stage B.** The probe records update ages but does not classify a feed as fresh/stale using a threshold chosen after seeing those ages. No oracle is selected as the historical policy winner in this discovery gate.
+
+A candidate is only *structurally point-in-time usable* at a representative when its contract has code at that historical block and `latestRoundData()` returns a positive answer with nonzero `updatedAt <= decisionBlock.timestamp`.
+
+## Decision rules after Stage B
+
+1. If no candidate is structurally usable across all WETH representatives, do not backfill with future prices or retrospective centralized-exchange prices. The next policy decision must consider a non-USD or explicitly partially observed historical evidence contract.
+2. If one or more candidates are structurally usable across all WETH representatives, define a **separately versioned** historical calibration policy and freeze its oracle-selection and freshness rules before testing historical baselines.
+3. Current `EXECUTABLE_BASELINE_R1` remains untouched in either case.
+4. The 147-launch replay remains unauthorized until the replacement historical policy has its own preregistration, tests, live representative evidence, and explicit replay authorization.
 
 ## Safety / authority boundary
 

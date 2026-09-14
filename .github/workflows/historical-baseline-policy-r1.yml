@@ -7,6 +7,7 @@ on:
       - 'docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json'
       - 'fixtures/historical-compatibility-r1.json'
       - 'scripts/historical-baseline-policy-probe.mjs'
+      - 'scripts/historical-oracle-availability-probe.mjs'
       - 'scripts/dev-spine-check.mjs'
       - 'scripts/dev-spine-check-test.mjs'
       - 'scripts/dev-spine-context.mjs'
@@ -15,7 +16,7 @@ on:
       - '.github/workflows/historical-baseline-policy-r1.yml'
 
 jobs:
-  live-point-in-time-discovery:
+  live-point-in-time-oracle-discovery:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -26,7 +27,7 @@ jobs:
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile --lockfile=false
       - run: pnpm build
-      - name: Probe historical calibration surface
+      - name: Probe documented ETH/USD candidates at historical decision blocks
         env:
           SHADOW_ONLY: 'true'
-        run: node scripts/historical-baseline-policy-probe.mjs
+        run: node scripts/historical-oracle-availability-probe.mjs
