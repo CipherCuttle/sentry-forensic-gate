@@ -2,8 +2,8 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_OUTCOME_POLICY_R1",
-  "state": "HISTORICAL_OUTCOME_POLICY_DISCOVERY_AUTHORIZED",
-  "objective": "Determine whether point-in-time RedStone ETH/USD evidence is structurally usable at the exact nine 24h observed blocks before defining any separately versioned historical outcome USD-valuation policy.",
+  "state": "HISTORICAL_OUTCOME_POLICY_IMPLEMENTATION_AUTHORIZED",
+  "objective": "Implement and test a separately versioned exact-24h historical outcome policy that preserves the existing horizon, exit, authority, and reorg semantics while replacing only non-portable WETH USD valuation with point-in-time RedStone ETH/USD evidence from the exact observed block.",
   "predecessor": {
     "phase": "HISTORICAL_BASELINE_POLICY_R1",
     "pr": 17,
@@ -17,14 +17,14 @@
     "current_r3_behavior_must_remain_unchanged": true,
     "historical_authorization_granted": false,
     "historical_baseline_policy_status": "PASS",
-    "historical_outcome_policy_status": "DISCOVERY_NOT_RUN"
+    "historical_outcome_policy_status": "IMPLEMENTATION_AUTHORIZED"
   },
   "authorization": {
     "historical_compatibility_implementation": false,
     "historical_baseline_policy_discovery": false,
     "historical_baseline_policy_implementation": false,
-    "historical_outcome_policy_discovery": true,
-    "historical_outcome_policy_implementation": false,
+    "historical_outcome_policy_discovery": false,
+    "historical_outcome_policy_implementation": true,
     "full_147_replay": false,
     "fast_vet": false,
     "canary": false,
@@ -34,6 +34,9 @@
     "representatives": 9,
     "outcome_horizon_ms": 86400000,
     "observed_blocks": [40029876, 40118660, 42146879, 44224383, 45720972, 45900260, 46697772, 46723560, 46753934],
+    "baseline_complete_required": 9,
+    "outcome_complete_required": 9,
+    "outcome_unverified_required": 0,
     "live_archive_rpc_required": true,
     "point_in_time_inputs_only": true,
     "all_representatives_must_be_attempted": true,
@@ -48,37 +51,42 @@
     "outcomes_24h_complete": 7,
     "outcomes_24h_unverified": 2,
     "blocked": [
-      {
-        "launch_block": 39943476,
-        "token_id": 1,
-        "observed_block": 40029876,
-        "reason": "OUTCOME_USD_VALUATION_UNAVAILABLE:block=40029876:baseAmount=49475793190238"
-      },
-      {
-        "launch_block": 40032260,
-        "token_id": 5,
-        "observed_block": 40118660,
-        "reason": "OUTCOME_USD_VALUATION_UNAVAILABLE:block=40118660:baseAmount=19726984103325"
-      }
+      {"launch_block":39943476,"token_id":1,"observed_block":40029876,"reason":"OUTCOME_USD_VALUATION_UNAVAILABLE:block=40029876:baseAmount=49475793190238"},
+      {"launch_block":40032260,"token_id":5,"observed_block":40118660,"reason":"OUTCOME_USD_VALUATION_UNAVAILABLE:block=40118660:baseAmount=19726984103325"}
     ]
   },
-  "candidate_oracle": {
-    "id": "REDSTONE_ETH_USD",
-    "address": "0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF",
-    "required_decimals": 8,
-    "required_description": "RedStone Price Feed for ETH",
-    "required_version": 1,
-    "freshness_rejection_threshold_seconds": null
+  "oracle_discovery_result": {
+    "status": "DISCOVERY_COMPLETE",
+    "source_head_sha": "8bdda299db3ee3fc901bfca0a35f131fe4a27118",
+    "github_actions_run_id": 34858280746,
+    "artifact_id": 10353524370,
+    "representatives_attempted": 9,
+    "code_present": 9,
+    "structurally_point_in_time_usable": 9,
+    "observed_age_seconds": [6419, 83, 852, 13876, 9994, 5285, 1721, 5907, 7607]
+  },
+  "historical_policy": {
+    "policy_version": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
+    "weth_valuation_kind": "WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1",
+    "redstone_eth_usd_address": "0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF",
+    "required_oracle_decimals": 8,
+    "required_oracle_description": "RedStone Price Feed for ETH",
+    "required_oracle_version": 1,
+    "usdt0_valuation": "NOMINAL_STABLECOIN_VALUATION_UNCHANGED",
+    "weth_valuation_formula": "floor(baseAmount * oracleAnswer * 1000000 / (10^wethDecimals * 10^oracleDecimals))",
+    "oracle_time_rule": "Use latestRoundData state already published at the exact observed outcome block; require answer > 0, updatedAt > 0, updatedAt <= observedBlock.timestamp.",
+    "freshness_rejection_threshold_seconds": null,
+    "oracle_age_must_be_recorded_in_outcome_evidence": true,
+    "outcome_ids_must_be_policy_separated": true,
+    "current_r1_default_must_remain_bit_for_bit_identity_compatible": true
   },
   "decision_rules": [
-    "Query RedStone at the exact outcome observed block; never reuse the launch or decision-block price.",
-    "Do not choose a freshness threshold from the nine observed ages.",
-    "Provider or transport failure aborts discovery and is not market evidence.",
-    "Missing code, metadata drift, non-positive answer, zero updatedAt, or updatedAt later than the observed block timestamp are structural failures.",
-    "No historical outcome implementation is authorized until discovery is complete and a replacement policy is separately preregistered.",
-    "If RedStone is structurally point-in-time usable at all nine observed blocks, any replacement must be separately versioned from FORWARD_OUTCOMES_R1.",
-    "USDT0-base historical outcomes retain existing nominal stablecoin valuation semantics; discovery targets only WETH USD-valuation portability.",
-    "Discovery success does not authorize the 147-launch replay, FAST_VET, canary, merge, signing, approvals, swaps, or transaction broadcast."
+    "Implement through the existing buildForwardOutcome algorithm and ForwardOutcomeSource port; do not create a second outcome algorithm.",
+    "Current callers with no historical override must retain FORWARD_OUTCOMES_R1 IDs, receipt shape, valuation behavior, evidence digest, authority behavior, and horizon behavior.",
+    "For WETH historical valuation, query RedStone at the exact observed block and fail closed if code is absent, metadata drifts, answer is non-positive, updatedAt is zero, or updatedAt is later than the observed block.",
+    "Do not reject a historical RedStone value solely because of its observed age in this policy version; record ageSeconds in digested evidence.",
+    "For USDT0 base, preserve existing nominal stablecoin valuation.",
+    "Do not authorize the 147-launch replay, FAST_VET, canary, merge, signing, or execution from a representative PASS."
   ],
   "known_historical_state": {
     "launch_count": 147,
@@ -87,11 +95,11 @@
     "representative_fixture_path": "fixtures/historical-compatibility-r1.json"
   },
   "prohibitions": [
-    "Do not change current R3 authority, baseline behavior, or FORWARD_OUTCOMES_R1 behavior.",
+    "Do not change current R3 authority, EXECUTABLE_BASELINE_R1, historical baseline semantics, or current FORWARD_OUTCOMES_R1 default behavior.",
     "Do not reuse decision-block oracle prices for 24h valuation.",
-    "Do not fit an oracle-age cutoff to these nine representatives.",
+    "Do not fit an oracle-age cutoff to representative ages.",
     "Do not use future or retrospective off-chain prices.",
-    "Do not implement a historical outcome policy during this discovery gate.",
+    "Do not duplicate the outcome algorithm.",
     "Do not authorize or run the full 147-launch replay.",
     "Do not run FAST_VET meaningfully.",
     "Do not authorize canary or execution authority.",
@@ -111,13 +119,14 @@
     "src/runtime/forwardOutcomes.ts",
     "src/outcome/viemSource.ts",
     "src/outcome/forwardTypes.ts",
+    "src/outcome/ports.ts",
     "scripts/historical-outcome-oracle-probe.mjs",
     ".github/workflows/historical-outcome-policy-r1.yml",
     "mise.toml"
   ],
-  "next_action": "RUN_POINT_IN_TIME_REDSTONE_AT_EXACT_24H_BLOCKS",
+  "next_action": "IMPLEMENT_SEPARATELY_VERSIONED_REDSTONE_ASOF_HISTORICAL_OUTCOME_AND_RUN_NINE_REPRESENTATIVES",
   "notes": [
-    "The user explicitly authorized continuing to the next bounded step after historical baseline reconstruction passed 9/9 and the unchanged 24h outcome probe exposed two historical valuation gaps.",
-    "This packet authorizes discovery only. It does not authorize historical outcome implementation or any downstream replay/execution phase."
+    "Point-in-time RedStone discovery passed 9/9 at the exact observed 24h blocks before implementation semantics were frozen.",
+    "Implementation authority is limited to the separately versioned historical outcome policy. Replay, FAST_VET, canary, merge, signing, and execution remain unauthorized."
   ]
 }
