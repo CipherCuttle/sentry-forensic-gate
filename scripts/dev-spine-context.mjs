@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json';
 
 const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
 const dirtyRaw = process.env.DEV_SPINE_DIRTY;

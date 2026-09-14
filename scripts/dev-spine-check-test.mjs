@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { validatePacket } from './dev-spine-check.mjs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
-const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
-
+const packet = JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json', 'utf8'));
 validatePacket(packet);
 
 for (const key of [
   'historical_compatibility_implementation',
+  'historical_baseline_policy_discovery',
+  'historical_baseline_policy_implementation',
   'full_147_replay',
   'fast_vet',
   'canary',
@@ -16,32 +16,31 @@ for (const key of [
 ]) {
   const mutated = structuredClone(packet);
   mutated.authorization[key] = !mutated.authorization[key];
-  assert.throws(
-    () => validatePacket(mutated),
-    new RegExp(`requires authorization\\.${key}=`),
-    `${key} drift must fail closed in the current phase state`,
-  );
+  assert.throws(() => validatePacket(mutated), new RegExp(`requires authorization\\.${key}=`));
 }
 
-const preImplementation = structuredClone(packet);
-preImplementation.state = 'NEXT_AWAITING_IMPLEMENTATION_PROMPT';
-preImplementation.authorization.historical_compatibility_implementation = false;
-validatePacket(preImplementation);
+const changedNotionals = structuredClone(packet);
+changedNotionals.acceptance.notionals_usd_micros = [100000, 250000, 500000, 1000000, 2000000];
+assert.throws(() => validatePacket(changedNotionals), /frozen R1 notionals must remain exactly/);
 
-const unauthorizedPreImplementation = structuredClone(preImplementation);
-unauthorizedPreImplementation.authorization.historical_compatibility_implementation = true;
-assert.throws(
-  () => validatePacket(unauthorizedPreImplementation),
-  /requires authorization\.historical_compatibility_implementation=false/,
-  'pre-implementation state must reject implementation authority',
-);
+const fittedFreshness = structuredClone(packet);
+fittedFreshness.historical_policy.freshness_rejection_threshold_seconds = 18056;
+assert.throws(() => validatePacket(fittedFreshness), /must not fit an age cutoff/);
 
-const unknownState = structuredClone(packet);
-unknownState.state = 'FUTURE_UNREVIEWED_STATE';
-assert.throws(
-  () => validatePacket(unknownState),
-  /unsupported phase state/,
-  'unreviewed future states must fail closed',
-);
+const changedOracle = structuredClone(packet);
+changedOracle.historical_policy.redstone_eth_usd_address = '0x0000000000000000000000000000000000000001';
+assert.throws(() => validatePacket(changedOracle), /historical RedStone address drift/);
+
+const changedPolicy = structuredClone(packet);
+changedPolicy.historical_policy.policy_version = 'EXECUTABLE_BASELINE_R1';
+assert.throws(() => validatePacket(changedPolicy), /historical policy version drift/);
+
+const replayAuthorized = structuredClone(packet);
+replayAuthorized.authorization.full_147_replay = true;
+assert.throws(() => validatePacket(replayAuthorized), /requires authorization\.full_147_replay=false/);
+
+const weakenedR3 = structuredClone(packet);
+weakenedR3.authority.current_r3_behavior_must_remain_unchanged = false;
+assert.throws(() => validatePacket(weakenedR3), /current R3 default invariant/);
 
 console.log('DEV_SPINE_CHECK_TEST=PASS');

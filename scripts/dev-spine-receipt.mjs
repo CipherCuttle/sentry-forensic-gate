@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json';
 const OUTPUT_PATH = '.dev-spine/receipt.json';
 
 function fail(message) {
@@ -32,11 +32,10 @@ const receipt = {
     verdict: repositoryVerification,
   },
   phase_evidence: {
-    historical_compatibility: 'NOT_EVALUATED',
+    historical_baseline_policy_discovery: 'NOT_EVALUATED',
     live_archive_rpc: 'NOT_RUN',
     representatives_attempted: 0,
-    baseline_complete: 0,
-    outcomes_24h_complete: 0,
+    representatives_with_full_frozen_r1_calibration: 0,
   },
   authorization: packet.authorization,
   phase_state: packet.state,

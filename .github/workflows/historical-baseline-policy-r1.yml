@@ -1,0 +1,56 @@
+name: historical-baseline-policy-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/HISTORICAL_BASELINE_POLICY_R1.md'
+      - 'docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json'
+      - 'fixtures/historical-compatibility-r1.json'
+      - 'scripts/historical-baseline-policy-probe.mjs'
+      - 'scripts/historical-oracle-availability-probe.mjs'
+      - 'scripts/historical-baseline-policy-config-check.mjs'
+      - 'scripts/historical-baseline-policy-receipt-check.mjs'
+      - 'src/historicalBaselinePolicyCli.ts'
+      - 'src/runtime/executableBaseline.ts'
+      - 'src/shadow/baselineTypes.ts'
+      - 'src/tsunami/historicalRedstoneBaselineSource.ts'
+      - 'scripts/dev-spine-check.mjs'
+      - 'scripts/dev-spine-check-test.mjs'
+      - 'scripts/dev-spine-context.mjs'
+      - 'scripts/dev-spine-pack.mjs'
+      - 'scripts/dev-spine-receipt.mjs'
+      - '.github/workflows/historical-baseline-policy-r1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  stage-c-representative-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+      - run: pnpm historicalbaselinepolicycheck
+      - name: Run RedStone as-of historical baseline and unchanged 24h outcome diagnostic
+        continue-on-error: true
+        env:
+          SHADOW_ONLY: 'true'
+          OUTPUT_PATH: historical-baseline-policy-r1-live-receipt.json
+        run: pnpm start:historical-baseline-policy
+      - name: Enforce Stage C baseline PASS and preserve outcome blocker
+        env:
+          OUTPUT_PATH: historical-baseline-policy-r1-live-receipt.json
+        run: node scripts/historical-baseline-policy-receipt-check.mjs
+      - name: Upload Stage C receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-baseline-policy-r1-live-receipt
+          path: historical-baseline-policy-r1-live-receipt.json
+          if-no-files-found: warn
