@@ -10,6 +10,7 @@ on:
       - 'src/tsunami/viemBaselineSource.ts'
       - 'src/outcome/viemSource.ts'
       - 'src/historicalCompatibilityCli.ts'
+      - 'src/historicalCalibrationDiscoveryCli.ts'
       - 'scripts/historical-compatibility-config-check.mjs'
       - 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json'
       - '.github/workflows/historical-compatibility-r1.yml'
@@ -26,6 +27,8 @@ jobs:
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile --lockfile=false
       - run: pnpm build
+      - name: Discover historical USD calibration availability at first failing decision block
+        run: node dist/historicalCalibrationDiscoveryCli.js
       - name: Run nine-representative live archive-RPC compatibility gate
         env:
           SHADOW_ONLY: 'true'
