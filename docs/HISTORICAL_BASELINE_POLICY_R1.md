@@ -2,76 +2,142 @@
 
 ## Status
 
-**Stage A calibration-surface discovery is complete. Stage B point-in-time oracle availability discovery is authorized. No historical baseline policy is authorized yet.**
+**Stage A calibration-surface discovery: COMPLETE.**  
+**Stage B point-in-time oracle discovery: COMPLETE.**  
+**Stage C separately versioned historical baseline implementation: AUTHORIZED.**
 
-This successor exists because `HISTORICAL_COMPATIBILITY_R1` reached the real frozen baseline pipeline on all nine reviewed historical implementation representatives but only one representative produced a COMPLETE baseline. The other eight were deterministic `UNVERIFIED` with `USD_CALIBRATION_UNAVAILABLE`.
+No full historical replay, FAST_VET, canary, merge, signing, or execution is authorized.
 
-Current R3 remains unchanged. The purpose of this phase is to determine whether a separately versioned historical baseline can be grounded in evidence that actually existed at each decision block.
+## Why a separate policy is required
 
-## Frozen predecessor semantics
+`EXECUTABLE_BASELINE_R1` remains the frozen current-R3 policy. Its decision point is launch block + 2 blocks and its five notionals remain exactly $0.25, $0.50, $1, $2, and $5.
 
-`EXECUTABLE_BASELINE_R1` remains unchanged for current R3. Its decision point is launch block + 2 blocks and its five USD notionals remain exactly:
+Historical discovery established that the R1 WETH -> USDT0 exact-output sizing route is genuinely non-portable:
 
+- the earliest two WETH representatives have no WETH/USDT0 pool at the frozen fee tiers;
+- the later six WETH representatives have a 3000-fee route that handles $0.25/$0.50/$1 but reverts at $2/$5;
+- the sole representative with all five R1 notionals is USDT0-base and therefore uses nominal stablecoin sizing.
+
+That is market/infrastructure history, not an adapter defect. We therefore do not shrink the frozen notionals or rewrite `EXECUTABLE_BASELINE_R1`.
+
+## Point-in-time oracle discovery
+
+Before selecting a replacement, two Ink-documented ETH/USD contracts were frozen and queried at all nine historical decision blocks.
+
+### eOracle
+
+`0xdFc720E1ef024bfc768ed9E6F0e7Fc80E28f8CFA`
+
+Code and metadata existed at all nine decision blocks, but `latestRoundData()` reverted at every representative. It is not selected.
+
+### RedStone
+
+`0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF`
+
+At all nine decision blocks the contract had code and exposed:
+
+- decimals: `8`
+- description: `RedStone Price Feed for ETH`
+- version: `1`
+- positive `latestRoundData()` answer
+- nonzero `updatedAt`
+- `updatedAt <= decisionBlock.timestamp`
+
+Observed ages in seconds were:
+
+`2483, 97, 398, 13044, 1995, 10723, 103, 18055, 14689`
+
+No feed-specific Ink heartbeat was independently established before policy selection. A rejection threshold is therefore **not** fitted to these observed ages.
+
+## Frozen Stage C policy
+
+Policy version:
+
+`HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1`
+
+WETH calibration kind:
+
+`WETH_REDSTONE_ETH_USD_ASOF_V1`
+
+### Decision point and notionals
+
+Unchanged from R1:
+
+- decision block = launch block + 2
 - $0.25
 - $0.50
 - $1
 - $2
 - $5
 
-For WETH-base launches, R1 converts each target notional into WETH with a point-in-time WETH -> USDT0 exact-output quote against the authorized historical factory/quoter. It tries fee tiers 500, 3000, and 10000 and accepts the least WETH input among executable routes.
+### USDT0 base
 
-This phase MUST NOT reduce the notionals, substitute a later price, or choose a different sizing rule merely because doing so increases coverage.
+Use the existing `USDT0_NOMINAL_PEG_V0` calibration unchanged.
 
-## Stage A — calibration-surface result
+### WETH base
 
-Live archive-RPC discovery attempted the same nine reviewed implementation representatives at exactly launch block + 2 using the frozen R1 notionals.
+At the exact historical decision block:
 
-Observed result:
+1. require RedStone ETH/USD contract code;
+2. require `decimals() == 8`;
+3. require `description() == "RedStone Price Feed for ETH"`;
+4. require `version() == 1`;
+5. read `latestRoundData()` at that same block;
+6. require `answer > 0`;
+7. require `updatedAt > 0`;
+8. require `updatedAt <= decisionBlock.timestamp`;
+9. record the oracle answer, decimals, update timestamp, decision-block timestamp, and `ageSeconds` in calibration authority evidence;
+10. size WETH using ceiling division:
 
-- 9/9 representatives attempted;
-- 8 WETH-base launches and 1 USDT0-base launch;
-- only 1/9 representatives supports all five frozen R1 calibration notionals;
-- the first two WETH representatives have no WETH/USDT0 pool at fee 500, 3000, or 10000;
-- the other six WETH representatives have a usable 3000-fee WETH/USDT0 route for $0.25, $0.50, and $1, but $2 and $5 exact-output quotes revert;
-- the sole full-calibration representative is USDT0-base and therefore uses the R1 nominal-peg path rather than WETH/USDT0 market calibration.
+`ceil(notionalUsdMicros * 10^wethDecimals * 10^oracleDecimals / (1_000_000 * oracleAnswer))`
 
-This falsifies an adapter-only explanation. `EXECUTABLE_BASELINE_R1` is genuinely non-portable across the reviewed historical representatives because the required calibration market did not yet exist or was too shallow.
+Ceiling division prevents the requested USD notional from being silently undershot by integer truncation.
 
-The result does **not** authorize shrinking notionals. Doing so after observing failures would redefine the measurement rather than reconstruct it.
+### Freshness semantics
 
-## Stage B — preregistered on-chain oracle availability discovery
+This policy reconstructs the **last provider-published on-chain ETH/USD state available as of the decision block**. It does not claim that every such value would satisfy a live trading risk freshness standard.
 
-The next question is whether contemporaneous on-chain ETH/USD evidence existed at the same decision blocks. Current Ink documentation is used only to identify candidate contract addresses; current documentation is **not** evidence that a feed existed historically.
+No arbitrary age cutoff is introduced in R1 of the historical policy. Oracle age is retained as evidence so later analysis can stratify or sensitivity-test historical results without changing which information was available at the decision point.
 
-Candidates are frozen before the historical reads:
+This is a historical reconstruction policy, not production execution authority.
 
-1. `EORACLE_ETH_USD` — `0xdFc720E1ef024bfc768ed9E6F0e7Fc80E28f8CFA` — documented by Ink as ETH/USD with 8 decimals.
-2. `REDSTONE_ETH_USD` — `0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF` — documented by Ink as ETH/USD.
+## Identity separation
 
-The probe uses only read-only AggregatorV3-style calls at the exact historical decision block and records:
+The historical policy MUST NOT masquerade as current `EXECUTABLE_BASELINE_R1`.
 
-- bytecode presence;
-- `decimals()`;
-- `description()` when supported;
-- `version()` when supported;
-- `latestRoundData()`;
-- whether answer > 0;
-- whether `updatedAt` is nonzero and no later than the decision-block timestamp;
-- `age_seconds = decision_block_timestamp - updatedAt`.
+- baseline IDs must be derived under the historical policy version;
+- quote IDs must be policy-separated;
+- batch `policyVersion` must be the historical version;
+- RedStone calibration evidence must be included in the authority digest;
+- existing callers without an explicit historical override must retain current R1 IDs and semantics unchanged.
 
-### Important anti-overfitting rule
+## Implementation boundary
 
-**No freshness threshold is selected in Stage B.** The probe records update ages but does not classify a feed as fresh/stale using a threshold chosen after seeing those ages. No oracle is selected as the historical policy winner in this discovery gate.
+Use the existing `buildBaselineBatch()` algorithm and the existing `ExecutableBaselineSource` port. The historical source may replace only `calibrateUsd()` and policy-scoped quote identity while delegating market resolution, entry quoting, reverse quoting, authority checks, and reorg checks to the reviewed pipeline.
 
-A candidate is only *structurally point-in-time usable* at a representative when its contract has code at that historical block and `latestRoundData()` returns a positive answer with nonzero `updatedAt <= decisionBlock.timestamp`.
+Do not create a second baseline algorithm.
 
-## Decision rules after Stage B
+## Representative gate
 
-1. If no candidate is structurally usable across all WETH representatives, do not backfill with future prices or retrospective centralized-exchange prices. The next policy decision must consider a non-USD or explicitly partially observed historical evidence contract.
-2. If one or more candidates are structurally usable across all WETH representatives, define a **separately versioned** historical calibration policy and freeze its oracle-selection and freshness rules before testing historical baselines.
-3. Current `EXECUTABLE_BASELINE_R1` remains untouched in either case.
-4. The 147-launch replay remains unauthorized until the replacement historical policy has its own preregistration, tests, live representative evidence, and explicit replay authorization.
+Run the same nine historical representatives through the real existing baseline pipeline using the new historical policy.
 
-## Safety / authority boundary
+Baseline acceptance:
 
-Read-only research only. This phase does not authorize historical replay, FAST_VET, canary execution, wallet access, approvals, swap construction, signing, private keys, transaction broadcast, or merge.
+- 9 attempted
+- 9 COMPLETE
+- 0 UNVERIFIED
+
+After each COMPLETE baseline, probe the existing exact-24h outcome path unchanged. If the outcome path is historically non-portable, report and stop that as a separate successor problem; do not repair outcome semantics inside this baseline-policy gate.
+
+## Authority boundary
+
+Even a 9/9 baseline PASS does not authorize:
+
+- the 147-launch replay;
+- FAST_VET;
+- canary trading;
+- signing;
+- approvals;
+- swap construction;
+- transaction broadcast;
+- merge.

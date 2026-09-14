@@ -2,12 +2,11 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_BASELINE_POLICY_R1",
-  "state": "HISTORICAL_BASELINE_POLICY_ORACLE_DISCOVERY_AUTHORIZED",
-  "objective": "Determine whether a separately versioned historical USD baseline can be grounded in point-in-time on-chain ETH/USD evidence across the nine reviewed historical Sentry representatives without changing current R3 semantics.",
+  "state": "HISTORICAL_BASELINE_POLICY_IMPLEMENTATION_AUTHORIZED",
+  "objective": "Implement and test a separately versioned historical executable-baseline policy that preserves the frozen R1 decision point and USD notionals while replacing non-portable WETH/USDT0 calibration with point-in-time RedStone ETH/USD evidence already published on Ink at the decision block.",
   "predecessor": {
     "phase": "HISTORICAL_COMPATIBILITY_R1",
     "pr": 16,
-    "closure_head": "c277257b5e27838b70ba41835d08067a2f654970",
     "verdict": "BLOCKED_BY_FROZEN_BASELINE_SEMANTICS",
     "blocking_reason_family": "USD_CALIBRATION_UNAVAILABLE"
   },
@@ -15,13 +14,12 @@
     "current_default": "R3",
     "current_r3_behavior_must_remain_unchanged": true,
     "historical_authorization_granted": false,
-    "historical_compatibility_status": "BLOCKED_BY_FROZEN_BASELINE_SEMANTICS",
-    "historical_baseline_policy_status": "ORACLE_DISCOVERY_AUTHORIZED"
+    "historical_baseline_policy_status": "IMPLEMENTATION_AUTHORIZED"
   },
   "authorization": {
     "historical_compatibility_implementation": false,
     "historical_baseline_policy_discovery": true,
-    "historical_baseline_policy_implementation": false,
+    "historical_baseline_policy_implementation": true,
     "full_147_replay": false,
     "fast_vet": false,
     "canary": false,
@@ -31,18 +29,16 @@
     "representatives": 9,
     "decision_delay_blocks": 2,
     "notionals_usd_micros": [250000, 500000, 1000000, 2000000, 5000000],
+    "baseline_complete_required": 9,
+    "baseline_unverified_required": 0,
     "live_archive_rpc_required": true,
     "point_in_time_inputs_only": true,
-    "existing_historical_tuple_only": true,
     "all_representatives_must_be_attempted": true,
-    "provider_or_authority_failure_is_not_market_evidence": true
+    "existing_24h_outcome_path_must_be_probed_after_complete_baseline": true
   },
   "calibration_surface_result": {
     "status": "DISCOVERY_COMPLETE",
-    "source_mode": "LIVE_ARCHIVE_RPC_POINT_IN_TIME",
     "github_actions_run_id": 34854154899,
-    "source_head_sha": "a6012893c96a33c310e82cd74f22e7743504a34d",
-    "tested_merge_sha": "177720d921af0ae23a8e8effa67fd8eaa638b061",
     "representatives_attempted": 9,
     "representatives_with_full_frozen_r1_calibration": 1,
     "base_kinds": {"WETH": 8, "USDT0": 1},
@@ -50,47 +46,53 @@
     "weth_representatives_with_partial_3000_fee_calibration": 6,
     "partial_route_executable_notionals_usd_micros": [250000, 500000, 1000000],
     "partial_route_non_executable_notionals_usd_micros": [2000000, 5000000],
-    "usdt0_base_representatives_with_full_nominal_calibration": 1,
-    "conclusion": "EXECUTABLE_BASELINE_R1 USD calibration is genuinely non-portable across the reviewed historical representatives: early WETH/USDT0 infrastructure is absent, later WETH/USDT0 infrastructure is too shallow for the frozen $2/$5 notionals, and the sole full-calibration representative uses USDT0 as its launch base."
+    "conclusion": "Frozen EXECUTABLE_BASELINE_R1 DEX calibration is genuinely non-portable historically."
   },
-  "oracle_discovery": {
-    "status": "AUTHORIZED_NOT_RUN",
-    "purpose": "Test whether documented Ink mainnet ETH/USD push-style oracle candidates existed and exposed point-in-time data at each historical decision block. Current documentation is candidate provenance only, not proof of historical availability.",
-    "candidates": [
-      {
-        "id": "EORACLE_ETH_USD",
-        "address": "0xdFc720E1ef024bfc768ed9E6F0e7Fc80E28f8CFA",
-        "documented_decimals": 8,
-        "provenance": "Ink official Oracles documentation"
-      },
-      {
-        "id": "REDSTONE_ETH_USD",
-        "address": "0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF",
-        "documented_decimals": null,
-        "provenance": "Ink official Oracles documentation"
-      }
-    ],
-    "probe_interface": "CHAINLINK_AGGREGATOR_V3_READ_ONLY",
-    "measurements": [
-      "contract bytecode presence at decision block",
-      "decimals() at decision block",
-      "description() at decision block when supported",
-      "version() at decision block when supported",
-      "latestRoundData() at decision block",
-      "answer positivity",
-      "updatedAt nonzero and not after decision-block timestamp",
-      "age_seconds = decision_block_timestamp - updatedAt"
-    ],
-    "freshness_threshold_selected": false,
-    "policy_candidate_selected": false
+  "oracle_discovery_result": {
+    "status": "DISCOVERY_COMPLETE",
+    "github_actions_run_id": 34855074279,
+    "representatives_attempted": 9,
+    "eoracle": {
+      "address": "0xdFc720E1ef024bfc768ed9E6F0e7Fc80E28f8CFA",
+      "code_present": 9,
+      "structurally_point_in_time_usable": 0,
+      "reason": "latestRoundData reverted at every representative"
+    },
+    "redstone": {
+      "address": "0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF",
+      "code_present": 9,
+      "structurally_point_in_time_usable": 9,
+      "decimals": 8,
+      "description": "RedStone Price Feed for ETH",
+      "version": 1,
+      "observed_age_seconds": [2483, 97, 398, 13044, 1995, 10723, 103, 18055, 14689]
+    }
+  },
+  "historical_policy": {
+    "policy_version": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
+    "weth_calibration_kind": "WETH_REDSTONE_ETH_USD_ASOF_V1",
+    "redstone_eth_usd_address": "0xe5867B1d421f0b52697F16e2ac437e87d66D5fbF",
+    "required_oracle_decimals": 8,
+    "required_oracle_description": "RedStone Price Feed for ETH",
+    "required_oracle_version": 1,
+    "usdt0_calibration": "USDT0_NOMINAL_PEG_V0_UNCHANGED",
+    "weth_sizing_formula": "ceil(notionalUsdMicros * 10^wethDecimals * 10^oracleDecimals / (1000000 * oracleAnswer))",
+    "oracle_time_rule": "Use latestRoundData state already published at the exact decision block; require answer > 0, updatedAt > 0, updatedAt <= decisionBlock.timestamp.",
+    "freshness_rejection_threshold_seconds": null,
+    "freshness_rationale": "No Ink-feed-specific heartbeat was established independently before policy selection. Historical reconstruction therefore records oracle age as evidence instead of fitting a rejection threshold to the nine representatives.",
+    "oracle_age_must_be_recorded_in_calibration_evidence": true,
+    "baseline_ids_must_be_policy_separated": true,
+    "quote_ids_must_be_policy_separated": true,
+    "current_r1_default_must_remain_bit_for_bit_identity_compatible": true
   },
   "decision_rules": [
-    "The completed calibration-surface discovery falsifies an adapter-only explanation for the historical compatibility failure; do not repair the adapter or shrink R1 notionals to manufacture coverage.",
-    "Oracle discovery is availability/evidence discovery only. Do not select a freshness threshold or a winning oracle based on observed prices in this gate.",
-    "A candidate is point-in-time structurally usable at a representative only if its contract has code at that block and latestRoundData returns a positive answer with nonzero updatedAt not later than the decision-block timestamp.",
-    "If no candidate is structurally usable across all WETH representatives, do not use retrospective off-chain prices to fill gaps; the next policy decision must consider a non-USD or explicitly partially observed historical evidence contract.",
-    "If one or more candidates are structurally usable across all WETH representatives, freeze a separately versioned historical calibration policy and freshness rule before testing historical baselines or running the 147-launch replay.",
-    "Do not use future prices, retrospective centralized-exchange prices, outcome-conditioned sizing, or per-token adaptive notionals."
+    "Implement the historical policy through the existing baseline builder and ExecutableBaselineSource calibration port; do not create a second baseline algorithm.",
+    "Current callers with no historical policy override must retain EXECUTABLE_BASELINE_R1 IDs, quote IDs, policyVersion, calibration behavior, and authority behavior.",
+    "For WETH historical calibration, fail closed if RedStone code is absent, metadata drifts, answer is non-positive, updatedAt is zero, or updatedAt is later than the decision block.",
+    "Do not reject a historical RedStone value solely because of its observed age in this policy version; record ageSeconds in the calibration authority evidence.",
+    "For USDT0-base launches, preserve the existing nominal-peg calibration path.",
+    "After each COMPLETE historical baseline, probe the existing exact-24h outcome path without changing it. Outcome incompatibility must be reported as a separate successor problem, not repaired inside baseline policy implementation.",
+    "Do not authorize the 147-launch replay, FAST_VET, canary, merge, signing, or execution from a representative PASS."
   ],
   "known_historical_state": {
     "launch_count": 147,
@@ -106,15 +108,16 @@
     }
   },
   "prohibitions": [
-    "Do not change current R3 baseline semantics or authority.",
-    "Do not modify the five frozen EXECUTABLE_BASELINE_R1 notionals.",
-    "Do not choose an oracle freshness threshold in the oracle-availability discovery gate.",
-    "Do not use current oracle documentation as proof of historical availability.",
+    "Do not change current R3 authority or default behavior.",
+    "Do not modify the five frozen USD notionals or +2-block decision point.",
+    "Do not add an age cutoff chosen from the observed representative ages.",
+    "Do not use future or retrospective off-chain prices.",
+    "Do not duplicate the baseline algorithm.",
+    "Do not broaden outcome semantics inside this baseline-policy gate.",
     "Do not authorize or run the full 147-launch replay.",
     "Do not run FAST_VET meaningfully.",
     "Do not authorize the canary.",
-    "Do not add signing, approvals, swap construction, transaction broadcast, private keys, or execution authority.",
-    "Do not use future or retrospective off-chain prices as point-in-time evidence.",
+    "Do not add signing, approvals, swaps, private keys, or transaction broadcast.",
     "Do not merge without explicit user authority."
   ],
   "authority_docs": [
@@ -132,17 +135,16 @@
     "fixtures/historical-compatibility-r1.json",
     "docs/EXECUTABLE_BASELINE_R1.md",
     "src/shadow/baselineTypes.ts",
+    "src/runtime/executableBaseline.ts",
     "src/authority/readAuthorityContext.ts",
     "src/tsunami/viemBaselineSource.ts",
-    "scripts/historical-baseline-policy-probe.mjs",
-    "scripts/historical-oracle-availability-probe.mjs",
-    ".github/workflows/historical-baseline-policy-r1.yml",
+    "src/tsunami/ports.ts",
     "mise.toml"
   ],
-  "next_action": "RUN_POINT_IN_TIME_ETH_USD_ORACLE_AVAILABILITY_PROBE",
+  "next_action": "IMPLEMENT_SEPARATELY_VERSIONED_REDSTONE_ASOF_HISTORICAL_BASELINE_AND_RUN_NINE_REPRESENTATIVES",
   "notes": [
-    "The user explicitly authorized HISTORICAL_BASELINE_POLICY_R1 after HISTORICAL_COMPATIBILITY_R1 stopped on frozen baseline semantics.",
-    "Stage A calibration-surface discovery completed without changing R3 or the frozen R1 notionals and established genuine historical non-portability.",
-    "Stage B is limited to read-only point-in-time oracle availability discovery. It does not self-authorize a historical policy, replay, FAST_VET, canary, merge, signing, or execution."
+    "The user explicitly authorized HISTORICAL_BASELINE_POLICY_R1 as the bounded successor after HISTORICAL_COMPATIBILITY_R1 stopped.",
+    "Stage A and Stage B discovery are complete and are frozen before implementation semantics are introduced.",
+    "Representative success does not self-authorize historical replay, FAST_VET, canary, merge, signing, or execution."
   ]
 }

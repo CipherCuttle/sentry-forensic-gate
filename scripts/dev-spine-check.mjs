@@ -3,10 +3,8 @@ import { pathToFileURL } from 'node:url';
 
 const PACKET_PATH = 'docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json';
 const FROZEN_R1_NOTIONALS = [250000, 500000, 1000000, 2000000, 5000000];
-const FROZEN_ORACLE_CANDIDATES = [
-  ['EORACLE_ETH_USD', '0xdfc720e1ef024bfc768ed9e6f0e7fc80e28f8cfa'],
-  ['REDSTONE_ETH_USD', '0xe5867b1d421f0b52697f16e2ac437e87d66d5fbf'],
-];
+const HISTORICAL_POLICY_VERSION = 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1';
+const REDSTONE_ADDRESS = '0xe5867b1d421f0b52697f16e2ac437e87d66d5fbf';
 const SENSITIVE_AUTHORIZATION_KEYS = [
   'historical_compatibility_implementation',
   'historical_baseline_policy_discovery',
@@ -17,10 +15,10 @@ const SENSITIVE_AUTHORIZATION_KEYS = [
   'merge',
 ];
 const STATE_AUTHORIZATION = {
-  HISTORICAL_BASELINE_POLICY_ORACLE_DISCOVERY_AUTHORIZED: {
+  HISTORICAL_BASELINE_POLICY_IMPLEMENTATION_AUTHORIZED: {
     historical_compatibility_implementation: false,
     historical_baseline_policy_discovery: true,
-    historical_baseline_policy_implementation: false,
+    historical_baseline_policy_implementation: true,
     full_147_replay: false,
     fast_vet: false,
     canary: false,
@@ -48,7 +46,6 @@ export function validatePacket(packet) {
   for (const key of SENSITIVE_AUTHORIZATION_KEYS) {
     invariant(typeof auth?.[key] === 'boolean', `authorization.${key} must be boolean`);
   }
-
   const expectedAuthorization = STATE_AUTHORIZATION[packet.state];
   invariant(expectedAuthorization, `unsupported phase state: ${packet.state}`);
   for (const key of SENSITIVE_AUTHORIZATION_KEYS) {
@@ -59,36 +56,42 @@ export function validatePacket(packet) {
   }
 
   invariant(packet.authority?.current_r3_behavior_must_remain_unchanged === true, 'current R3 default invariant must remain explicit');
-  invariant(packet.authority?.historical_authorization_granted === false, 'historical authorization must remain false during policy discovery');
+  invariant(packet.authority?.historical_authorization_granted === false, 'historical authorization must remain false before replay authority');
 
   const acceptance = packet.acceptance;
-  invariant(Number.isInteger(acceptance?.representatives) && acceptance.representatives === 9, 'acceptance.representatives must equal 9');
-  invariant(Number.isInteger(acceptance?.decision_delay_blocks) && acceptance.decision_delay_blocks === 2, 'acceptance.decision_delay_blocks must equal 2');
+  invariant(acceptance?.representatives === 9, 'acceptance.representatives must equal 9');
+  invariant(acceptance?.decision_delay_blocks === 2, 'acceptance.decision_delay_blocks must equal 2');
   invariant(
     JSON.stringify(acceptance?.notionals_usd_micros) === JSON.stringify(FROZEN_R1_NOTIONALS),
     'frozen R1 notionals must remain exactly 250000,500000,1000000,2000000,5000000',
   );
-  invariant(acceptance.live_archive_rpc_required === true, 'live archive RPC requirement must remain explicit');
-  invariant(acceptance.point_in_time_inputs_only === true, 'point-in-time input requirement must remain explicit');
-  invariant(acceptance.existing_historical_tuple_only === true, 'historical tuple requirement must remain explicit');
+  invariant(acceptance?.baseline_complete_required === 9, 'baseline COMPLETE requirement must remain 9');
+  invariant(acceptance?.baseline_unverified_required === 0, 'baseline UNVERIFIED requirement must remain 0');
+  invariant(acceptance?.live_archive_rpc_required === true, 'live archive RPC requirement must remain explicit');
+  invariant(acceptance?.point_in_time_inputs_only === true, 'point-in-time input requirement must remain explicit');
 
   const stageA = packet.calibration_surface_result;
-  invariant(stageA?.status === 'DISCOVERY_COMPLETE', 'Stage A calibration discovery must remain complete');
-  invariant(stageA?.representatives_attempted === 9, 'Stage A representative count must remain 9');
+  invariant(stageA?.status === 'DISCOVERY_COMPLETE', 'Stage A must remain complete');
   invariant(stageA?.representatives_with_full_frozen_r1_calibration === 1, 'Stage A full-calibration count must remain 1');
-  invariant(stageA?.base_kinds?.WETH === 8 && stageA?.base_kinds?.USDT0 === 1, 'Stage A base-kind accounting must remain 8 WETH / 1 USDT0');
-  invariant(stageA?.weth_representatives_with_no_weth_usdt0_pool === 2, 'Stage A absent-pool count must remain 2');
-  invariant(stageA?.weth_representatives_with_partial_3000_fee_calibration === 6, 'Stage A partial-route count must remain 6');
 
-  const oracle = packet.oracle_discovery;
-  invariant(oracle?.status === 'AUTHORIZED_NOT_RUN', 'oracle discovery must remain authorized and not yet run');
-  invariant(oracle?.freshness_threshold_selected === false, 'freshness threshold must not be selected before oracle discovery');
-  invariant(oracle?.policy_candidate_selected === false, 'oracle policy candidate must not be selected before discovery');
-  const actualCandidates = oracle?.candidates?.map((candidate) => [candidate.id, String(candidate.address).toLowerCase()]);
-  invariant(
-    JSON.stringify(actualCandidates) === JSON.stringify(FROZEN_ORACLE_CANDIDATES),
-    'oracle discovery candidates must remain the preregistered eOracle and RedStone ETH/USD addresses',
-  );
+  const stageB = packet.oracle_discovery_result;
+  invariant(stageB?.status === 'DISCOVERY_COMPLETE', 'Stage B must remain complete');
+  invariant(stageB?.eoracle?.structurally_point_in_time_usable === 0, 'eOracle historical usability must remain 0/9');
+  invariant(stageB?.redstone?.structurally_point_in_time_usable === 9, 'RedStone historical usability must remain 9/9');
+  invariant(String(stageB?.redstone?.address).toLowerCase() === REDSTONE_ADDRESS, 'RedStone discovery address drift');
+
+  const policy = packet.historical_policy;
+  invariant(policy?.policy_version === HISTORICAL_POLICY_VERSION, 'historical policy version drift');
+  invariant(policy?.weth_calibration_kind === 'WETH_REDSTONE_ETH_USD_ASOF_V1', 'historical calibration kind drift');
+  invariant(String(policy?.redstone_eth_usd_address).toLowerCase() === REDSTONE_ADDRESS, 'historical RedStone address drift');
+  invariant(policy?.required_oracle_decimals === 8, 'historical RedStone decimals must remain 8');
+  invariant(policy?.required_oracle_description === 'RedStone Price Feed for ETH', 'historical RedStone description drift');
+  invariant(policy?.required_oracle_version === 1, 'historical RedStone version drift');
+  invariant(policy?.freshness_rejection_threshold_seconds === null, 'historical policy must not fit an age cutoff to representative data');
+  invariant(policy?.oracle_age_must_be_recorded_in_calibration_evidence === true, 'oracle age evidence must remain required');
+  invariant(policy?.baseline_ids_must_be_policy_separated === true, 'baseline IDs must remain policy-separated');
+  invariant(policy?.quote_ids_must_be_policy_separated === true, 'quote IDs must remain policy-separated');
+  invariant(policy?.current_r1_default_must_remain_bit_for_bit_identity_compatible === true, 'current R1 identity compatibility must remain explicit');
 
   const historical = packet.known_historical_state;
   invariant(historical?.launch_count === 147, 'historical launch count must remain 147');
@@ -108,6 +111,4 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
-}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
