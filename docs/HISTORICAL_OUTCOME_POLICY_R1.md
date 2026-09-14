@@ -2,16 +2,17 @@
 
 ## Status
 
-**Point-in-time outcome-oracle discovery: COMPLETE.**  
-**Separately versioned historical outcome implementation: AUTHORIZED.**
+**Point-in-time outcome-oracle discovery: COMPLETE / PASS.**  
+**Separately versioned historical outcome implementation: COMPLETE / PASS.**  
+**Representative exact-24h gate: 9/9 COMPLETE, 0 UNVERIFIED.**
 
-No 147-launch replay, FAST_VET, canary, merge, signing, approvals, swaps, or transaction broadcast is authorized.
+Implementation authority is closed. No 147-launch replay, FAST_VET, canary, merge, signing, approvals, swaps, or transaction broadcast is authorized.
 
-## Why a separate policy is required
+## Why a separate policy was required
 
 `HISTORICAL_BASELINE_POLICY_R1` passed 9/9 historical representatives. The unchanged `FORWARD_OUTCOMES_R1` path then completed 7/9 exact-24h outcomes and returned deterministic `OUTCOME_USD_VALUATION_UNAVAILABLE` for the first two WETH-base cohorts at observed blocks `40029876` and `40118660`.
 
-The exit/sellability quote itself is not the blocker. The non-portable component is the frozen WETH -> USDT0 USD-valuation route after a successful token -> WETH exit.
+The exit/sellability quote itself was not the blocker. The non-portable component was the frozen WETH -> USDT0 USD-valuation route after a successful token -> WETH exit.
 
 Current `FORWARD_OUTCOMES_R1` remains unchanged.
 
@@ -38,7 +39,11 @@ Observed ages in seconds were:
 
 `6419, 83, 852, 13876, 9994, 5285, 1721, 5907, 7607`
 
-No freshness cutoff is fitted to these observations.
+No freshness cutoff was fitted to these observations.
+
+Discovery source head: `8bdda299db3ee3fc901bfca0a35f131fe4a27118`  
+Discovery Actions run: `34858280746`  
+Discovery artifact: `10353524370`
 
 ## Frozen historical outcome policy
 
@@ -96,32 +101,59 @@ No arbitrary age rejection threshold is introduced in R1. Oracle age is retained
 
 The historical policy MUST NOT masquerade as current `FORWARD_OUTCOMES_R1`.
 
-- outcome IDs must be derived under the historical policy version;
-- receipt `policyVersion` must be the historical policy version;
-- RedStone valuation evidence must be included in the evidence digest;
-- callers without an explicit historical override must retain current `FORWARD_OUTCOMES_R1` IDs, valuation behavior, receipt shape, and digest semantics unchanged.
+- outcome IDs are derived under the historical policy version;
+- receipt `policyVersion` is the historical policy version;
+- RedStone valuation evidence is included in the evidence digest;
+- callers without an explicit historical override retain current `FORWARD_OUTCOMES_R1` IDs, valuation behavior, receipt shape, and digest semantics unchanged.
 
 ## Implementation boundary
 
-Use the existing `buildForwardOutcome()` algorithm and `ForwardOutcomeSource` port. A historical source may replace only WETH USD valuation while delegating block selection, authority, market state, exit quoting, and reorg checks to the reviewed existing source.
+The implementation reuses the existing `buildForwardOutcome()` algorithm and `ForwardOutcomeSource` port. The historical source replaces only WETH USD valuation while delegating block selection, authority, market state, exit quoting, and reorg checks to the reviewed existing source.
 
-Do not create a second outcome algorithm.
+No second outcome algorithm was created.
 
-## Representative acceptance gate
+## Representative acceptance result
 
-Run the same nine historical representatives through:
+The same nine historical representatives were run through:
 
 1. the already-passed `HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1` baseline;
 2. the existing exact-24h outcome algorithm;
 3. the separately versioned historical RedStone-as-of WETH valuation.
 
-Acceptance:
+Observed result:
 
-- 9 historical baselines COMPLETE;
-- 9 exact-24h outcomes attempted;
-- 9 exact-24h outcomes COMPLETE;
-- 0 exact-24h outcomes UNVERIFIED;
-- no provider, authority, horizon-boundary, or reorg failures;
-- current R3/default tests remain unchanged and green.
+- representatives attempted: `9/9`
+- historical baselines COMPLETE: `9`
+- historical baselines UNVERIFIED: `0`
+- exact-24h outcomes attempted: `9/9`
+- exact-24h outcomes COMPLETE: `9`
+- exact-24h outcomes UNVERIFIED: `0`
+- verdict: `HISTORICAL_OUTCOME_POLICY_PASS`
 
-A representative PASS still does not authorize the full 147 replay, FAST_VET, canary, merge, or any execution authority.
+The two previously blocked earliest WETH cohorts now produce deterministic COMPLETE outcomes at their original exact observed blocks:
+
+- tokenId `1`, observed block `40029876`: COMPLETE, sellable, `CATASTROPHIC_LOSS`, executable value `103274` USD micros, oracle age `6419s`;
+- tokenId `5`, observed block `40118660`: COMPLETE, sellable, `CATASTROPHIC_LOSS`, executable value `42984` USD micros, oracle age `83s`.
+
+Live-evidence source head: `ba1d8982b693ac9aa7c5b299eb6613b219005f82`  
+Synthetic PR merge tested: `5492a83f8468f92f5e83369ce25d4c25456eecb4`  
+Historical outcome Actions run: `34859868652`  
+Evidence artifact: `10354757274`  
+Repository CI run: `34859868700` — PASS
+
+## Closure boundary
+
+`HISTORICAL_OUTCOME_POLICY_R1` is closed PASS. Historical outcome implementation authority is now false.
+
+This PASS does **not** authorize:
+
+- the full 147-launch replay;
+- FAST_VET;
+- canary trading;
+- signing;
+- approvals;
+- swap construction;
+- transaction broadcast;
+- merge.
+
+Before any 147-launch replay, the next bounded successor must run the same nine reviewed representatives across every frozen outcome horizon: `1m / 5m / 30m / 2h / 24h`. This prevents a 24h-only compatibility result from silently standing in for the PRD's full horizon contract.
