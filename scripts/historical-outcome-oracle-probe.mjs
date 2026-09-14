@@ -103,6 +103,7 @@ for (const blockNumber of OBSERVED_BLOCKS) {
 }
 
 const usableCount = rows.filter((row) => row.structurallyPointInTimeUsable).length;
+const discoveryPass = rows.length === OBSERVED_BLOCKS.length && usableCount === OBSERVED_BLOCKS.length;
 const receipt = {
   schema: 'historical-outcome-policy-r1-oracle-discovery/v1',
   phase: 'HISTORICAL_OUTCOME_POLICY_R1',
@@ -128,14 +129,14 @@ const receipt = {
       .filter((age) => age !== undefined && age !== null),
   },
   rows,
-  verdict: 'DISCOVERY_COMPLETE',
+  verdict: discoveryPass ? 'DISCOVERY_COMPLETE' : 'DISCOVERY_BLOCKED',
 };
 
 const serialized = `${JSON.stringify(jsonSafe(receipt), null, 2)}\n`;
 fs.writeFileSync(OUTPUT_PATH, serialized, 'utf8');
 process.stdout.write(serialized);
 console.log(`RECEIPT_PATH=${OUTPUT_PATH}`);
-if (rows.length !== OBSERVED_BLOCKS.length) process.exitCode = 1;
+if (!discoveryPass) process.exitCode = 1;
 
 function structuralReason(decimals, description, version, answer, updatedAt, blockTimestamp) {
   if (decimals !== EXPECTED_DECIMALS) return `REDSTONE_DECIMALS_DRIFT:${decimals}`;
