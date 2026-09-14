@@ -1,0 +1,55 @@
+# Universal Dev Spine V1.1 adapter for Sentry Forensic Gate.
+# This standardizes development entrypoints only. Repository authority remains in AGENTS.md
+# and the canonical documents it names. These tasks do not authorize historical replay,
+# FAST_VET, merge, canary execution, signing, or transaction broadcast.
+
+[tasks.context]
+description = "Show exact Git state, active phase packet, authority, and next action"
+run = "node scripts/dev-spine-context.mjs"
+
+[tasks.context-json]
+description = "Emit the same Dev Spine context as machine-readable JSON"
+run = "node scripts/dev-spine-context.mjs --json"
+
+[tasks.pack]
+description = "Generate a SHA-bound phase context pack from tracked HEAD content"
+run = "node scripts/dev-spine-pack.mjs"
+
+[tasks.spinecheck]
+description = "Validate Dev Spine metadata and fail-closed phase invariants"
+run = "node scripts/dev-spine-check.mjs"
+
+[tasks.test]
+description = "Run Sentry Forensic Gate's repository-native test suite"
+run = "pnpm test"
+
+[tasks.lint]
+description = "Run TypeScript build plus research-boundary static guardrails"
+run = [
+  "pnpm build",
+  "node scripts/research-boundary-package-check.mjs",
+  "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests",
+  "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan",
+]
+
+[tasks.verify]
+description = "Run Dev Spine validation and the existing repository verification surface"
+run = [
+  "node scripts/dev-spine-check.mjs",
+  "node scripts/research-boundary-package-check.mjs",
+  "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests",
+  "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan",
+  "pnpm test",
+]
+
+[tasks.ci]
+description = "Run the closest local equivalent of required CI"
+run = [
+  "corepack enable",
+  "pnpm install --no-frozen-lockfile",
+  "node scripts/dev-spine-check.mjs",
+  "node scripts/research-boundary-package-check.mjs",
+  "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests",
+  "pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan",
+  "pnpm test",
+]

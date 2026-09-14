@@ -13,6 +13,8 @@ jobs:
         with:
           node-version: 20
       - run: corepack enable
+      - name: Validate Dev Spine metadata
+        run: node scripts/dev-spine-check.mjs
       - name: Enforce supported execution surfaces
         run: node scripts/research-boundary-package-check.mjs
       - name: Test research-only guardrails
@@ -21,3 +23,17 @@ jobs:
         run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm test
+      - name: Generate Dev Spine evidence
+        if: always()
+        env:
+          DEV_SPINE_CI_STATUS: ${{ job.status }}
+        run: |
+          node scripts/dev-spine-pack.mjs
+          node scripts/dev-spine-receipt.mjs
+      - name: Upload Dev Spine evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-spine-${{ github.sha }}
+          path: .dev-spine/
+          if-no-files-found: error

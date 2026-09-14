@@ -1,0 +1,101 @@
+{
+  "schema": "dev-spine-phase/v1",
+  "repo": "CipherCuttle/sentry-forensic-gate",
+  "phase": "HISTORICAL_COMPATIBILITY_R1",
+  "state": "NEXT_AWAITING_IMPLEMENTATION_PROMPT",
+  "discovery_base_sha": "392236cf162a298e40dcb0662eb3e524e58aeb6e",
+  "objective": "Add an explicit dependency-injection seam for historical authority contexts while preserving current R3 behavior by default, then test the existing frozen baseline and forward-outcome pipeline on nine historical implementation representatives.",
+  "authority": {
+    "current_default": "R3",
+    "current_r3_behavior_must_remain_unchanged": true,
+    "historical_authorization_granted": false,
+    "historical_tuple_status": "PASS",
+    "historical_compatibility_status": "NOT_RUN"
+  },
+  "authorization": {
+    "historical_compatibility_implementation": false,
+    "full_147_replay": false,
+    "fast_vet": false,
+    "canary": false,
+    "merge": false
+  },
+  "acceptance": {
+    "representatives": 9,
+    "decision_delay_blocks": 2,
+    "outcome_horizon_ms": 86400000,
+    "baseline_complete_required": 9,
+    "baseline_unverified_required": 0,
+    "outcomes_complete_required": 9,
+    "outcomes_unverified_required": 0,
+    "live_archive_rpc_required": true,
+    "real_existing_pipeline_required": true
+  },
+  "known_historical_state": {
+    "launch_count": 147,
+    "first_launch_block": 39943476,
+    "final_launch_block": 49271598,
+    "launch_producing_implementation_cohorts": 9,
+    "historical_executable_tuple": {
+      "npm": "0x98b6267DA27c5A21Bd6e3edfBC2DA6b0428Fa9F7",
+      "factory": "0xD8B0826150B7686D1F56d6F10E31E58e1BCF1193",
+      "quoterV2": "0x547D43a6F83A28720908537Aa25179ff8c6A6411",
+      "weth": "0x4200000000000000000000000000000000000006"
+    },
+    "implementation_cohorts": [
+      {"implementation": "0xf6b81e4a431aa5c459b7502802bab306ce465146", "launches": 2},
+      {"implementation": "0x3f01f1e0d8b76e0a7bf476335a9ebcb6755df536", "launches": 5},
+      {"implementation": "0x6f269786695fcd8cc684ebf37604dd2fb1797fcc", "launches": 22},
+      {"implementation": "0x71b2296124ce438bf2d0fef01e0adbd14a020282", "launches": 29},
+      {"implementation": "0xfab1d73e877947fabe2d0966f9832541b6f82750", "launches": 4},
+      {"implementation": "0xbe0e8f5d351b6acb0ec5c4ce6d2ba6c602bbb80f", "launches": 22},
+      {"implementation": "0x28ed07daba4ca9025819b64e1abb98d6c15ba069", "launches": 2},
+      {"implementation": "0x3515ce96c5c6fb8e73ebe04756f2227d035d6334", "launches": 2},
+      {"implementation": "0xd5bced4c43eef627ee0524368cabafcb9f29cff0", "launches": 59}
+    ],
+    "representative_fixture_status": "NOT_CAPTURED_IN_REPO_DO_NOT_INVENT"
+  },
+  "prohibitions": [
+    "Do not weaken current R3 authority or default behavior.",
+    "Do not authorize or run the full 147-launch replay in this phase.",
+    "Do not run FAST_VET meaningfully before historical replay is authorized and reconstructed.",
+    "Do not authorize the canary.",
+    "Do not add signing, approvals, swaps, transaction broadcast, or execution authority.",
+    "Do not create a second independent baseline or outcome implementation.",
+    "Do not treat UNKNOWN or missing evidence as PASS.",
+    "Do not merge without explicit user authority."
+  ],
+  "authority_docs": [
+    "AGENTS.md",
+    "docs/SENTRY_TRUTH_R1.md",
+    "docs/EXECUTABLE_BASELINE_R1.md",
+    "docs/FORWARD_OUTCOMES_R1.md",
+    "docs/EXECUTABLE_INFRA_AUTHORITY_R3.md",
+    "docs/SENTRY_AUTHORITY_EPOCHS_R1.md"
+  ],
+  "context_files": [
+    "AGENTS.md",
+    "docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json",
+    "docs/SENTRY_TRUTH_R1.md",
+    "docs/EXECUTABLE_BASELINE_R1.md",
+    "docs/FORWARD_OUTCOMES_R1.md",
+    "docs/EXECUTABLE_INFRA_AUTHORITY_R3.md",
+    "docs/SENTRY_AUTHORITY_EPOCHS_R1.md",
+    "authority/ink-57073-sentry-v1.json",
+    "src/authority/executableInfraAuthority.ts",
+    "src/authority/sentryAuthority.ts",
+    "src/runtime/executableBaseline.ts",
+    "src/runtime/forwardOutcomes.ts",
+    "src/tsunami/viemBaselineSource.ts",
+    "src/outcome/viemSource.ts",
+    "scripts/executable-baseline-check.mjs",
+    "scripts/forward-outcomes-check.mjs",
+    "scripts/forward-outcome-final-authority-race-check.mjs",
+    "package.json",
+    "mise.toml"
+  ],
+  "next_action": "WAIT_FOR_SEPARATE_HISTORICAL_COMPATIBILITY_R1_IMPLEMENTATION_PROMPT",
+  "notes": [
+    "This packet is a machine-readable state/navigation artifact. It does not itself grant implementation, replay, merge, FAST_VET, or canary authority.",
+    "The exact nine representative launches were established during discovery but are not encoded in the repository yet. Do not fabricate them; capture them from the reviewed discovery artifact or the separate implementation prompt before live compatibility execution."
+  ]
+}
