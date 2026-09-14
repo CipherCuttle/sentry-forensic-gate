@@ -24,6 +24,15 @@ const STATE_AUTHORIZATION = {
     canary: false,
     merge: false,
   },
+  HISTORICAL_BASELINE_POLICY_PASS_OUTCOME_VALUATION_BLOCKED: {
+    historical_compatibility_implementation: false,
+    historical_baseline_policy_discovery: false,
+    historical_baseline_policy_implementation: false,
+    full_147_replay: false,
+    fast_vet: false,
+    canary: false,
+    merge: false,
+  },
 };
 
 function invariant(condition, message) {
@@ -92,6 +101,23 @@ export function validatePacket(packet) {
   invariant(policy?.baseline_ids_must_be_policy_separated === true, 'baseline IDs must remain policy-separated');
   invariant(policy?.quote_ids_must_be_policy_separated === true, 'quote IDs must remain policy-separated');
   invariant(policy?.current_r1_default_must_remain_bit_for_bit_identity_compatible === true, 'current R1 identity compatibility must remain explicit');
+
+  if (packet.state === 'HISTORICAL_BASELINE_POLICY_PASS_OUTCOME_VALUATION_BLOCKED') {
+    invariant(packet.authority?.historical_baseline_policy_status === 'PASS', 'closed baseline policy status must be PASS');
+    invariant(packet.authority?.historical_outcome_valuation_status === 'BLOCKED', 'historical outcome valuation must remain BLOCKED');
+    const stageC = packet.stage_c_result;
+    invariant(stageC?.status === 'BASELINE_POLICY_PASS_OUTCOME_PROBE_BLOCKED', 'Stage C closure status drift');
+    invariant(stageC?.baseline_attempted === 9, 'Stage C baseline attempted must equal 9');
+    invariant(stageC?.baseline_complete === 9, 'Stage C baseline COMPLETE must equal 9');
+    invariant(stageC?.baseline_unverified === 0, 'Stage C baseline UNVERIFIED must equal 0');
+    invariant(stageC?.baseline_verdict === 'PASS', 'Stage C baseline verdict must remain PASS');
+    invariant(stageC?.outcomes_24h_attempted === 9, 'Stage C outcome attempted must equal 9');
+    invariant(stageC?.outcomes_24h_complete === 7, 'Stage C outcome COMPLETE must equal 7');
+    invariant(stageC?.outcomes_24h_unverified === 2, 'Stage C outcome UNVERIFIED must equal 2');
+    invariant(stageC?.outcome_probe_verdict === 'BLOCKED', 'Stage C outcome probe must remain BLOCKED');
+    invariant(stageC?.outcome_blocking_reason_family === 'OUTCOME_USD_VALUATION_UNAVAILABLE', 'Stage C blocker family drift');
+    invariant(packet.next_action === 'OPEN_HISTORICAL_OUTCOME_VALUATION_POLICY_R1_SUCCESSOR', 'closed phase next_action drift');
+  }
 
   const historical = packet.known_historical_state;
   invariant(historical?.launch_count === 147, 'historical launch count must remain 147');
