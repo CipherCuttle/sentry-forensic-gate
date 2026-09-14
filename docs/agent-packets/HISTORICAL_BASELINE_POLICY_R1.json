@@ -1,0 +1,101 @@
+{
+  "schema": "dev-spine-phase/v1",
+  "repo": "CipherCuttle/sentry-forensic-gate",
+  "phase": "HISTORICAL_BASELINE_POLICY_R1",
+  "state": "HISTORICAL_BASELINE_POLICY_DISCOVERY_AUTHORIZED",
+  "objective": "Determine which point-in-time USD calibration evidence actually existed across the nine reviewed historical Sentry implementation representatives, then define a separate historical baseline policy only if the evidence supports one without changing current R3 semantics.",
+  "predecessor": {
+    "phase": "HISTORICAL_COMPATIBILITY_R1",
+    "pr": 16,
+    "closure_head": "c277257b5e27838b70ba41835d08067a2f654970",
+    "verdict": "BLOCKED_BY_FROZEN_BASELINE_SEMANTICS",
+    "blocking_reason_family": "USD_CALIBRATION_UNAVAILABLE"
+  },
+  "authority": {
+    "current_default": "R3",
+    "current_r3_behavior_must_remain_unchanged": true,
+    "historical_authorization_granted": false,
+    "historical_compatibility_status": "BLOCKED_BY_FROZEN_BASELINE_SEMANTICS",
+    "historical_baseline_policy_status": "DISCOVERY_NOT_RUN"
+  },
+  "authorization": {
+    "historical_compatibility_implementation": false,
+    "historical_baseline_policy_discovery": true,
+    "historical_baseline_policy_implementation": false,
+    "full_147_replay": false,
+    "fast_vet": false,
+    "canary": false,
+    "merge": false
+  },
+  "acceptance": {
+    "representatives": 9,
+    "decision_delay_blocks": 2,
+    "notionals_usd_micros": [250000, 500000, 1000000, 2000000, 5000000],
+    "live_archive_rpc_required": true,
+    "point_in_time_inputs_only": true,
+    "existing_historical_tuple_only": true,
+    "all_representatives_must_be_attempted": true,
+    "provider_or_authority_failure_is_not_market_evidence": true
+  },
+  "preregistered_hypotheses": [
+    "H1: the historical WETH/USDT0 calibration route exists but lacks executable depth for one or more frozen R1 notionals at many decision blocks.",
+    "H2: one or more historical epochs lack the required WETH/USDT0 calibration pool or token/code surface entirely.",
+    "H3: full R1 calibration becomes available only after a later point-in-time infrastructure/liquidity transition, making current R1 semantics non-portable to earlier launches."
+  ],
+  "decision_rules": [
+    "If the exact historical calibration route is executable for all frozen notionals and the prior failure is caused by the compatibility adapter, repair the adapter without changing EXECUTABLE_BASELINE_R1 semantics.",
+    "If the point-in-time WETH/USDT0 route is genuinely absent or too shallow, do not shrink notionals post hoc and do not reinterpret EXECUTABLE_BASELINE_R1 to force coverage.",
+    "If R1 is genuinely non-portable, any successor historical policy must use only information available at the decision block, must be versioned separately from EXECUTABLE_BASELINE_R1, and must be preregistered before any 147-launch replay.",
+    "Do not use future prices, retrospective centralized-exchange prices, outcome-conditioned sizing, or per-token adaptive notionals to rescue failed historical launches."
+  ],
+  "known_historical_state": {
+    "launch_count": 147,
+    "launch_producing_implementation_cohorts": 9,
+    "representative_fixture_status": "CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT",
+    "representative_fixture_path": "fixtures/historical-compatibility-r1.json",
+    "historical_executable_tuple": {
+      "npm": "0x98b6267DA27c5A21Bd6e3edfBC2DA6b0428Fa9F7",
+      "factory": "0xD8B0826150B7686D1F56d6F10E31E58e1BCF1193",
+      "quoterV2": "0x547D43a6F83A28720908537Aa25179ff8c6A6411",
+      "weth": "0x4200000000000000000000000000000000000006",
+      "usdt0": "0x0200c29006150606b650577bbe7b6248f58470c1"
+    }
+  },
+  "prohibitions": [
+    "Do not change current R3 baseline semantics or authority.",
+    "Do not modify the five frozen EXECUTABLE_BASELINE_R1 notionals in this discovery gate.",
+    "Do not authorize or run the full 147-launch replay.",
+    "Do not run FAST_VET meaningfully.",
+    "Do not authorize the canary.",
+    "Do not add signing, approvals, swap construction, transaction broadcast, private keys, or execution authority.",
+    "Do not use future or retrospective off-chain prices as point-in-time evidence.",
+    "Do not merge without explicit user authority."
+  ],
+  "authority_docs": [
+    "AGENTS.md",
+    "docs/EXECUTABLE_BASELINE_R1.md",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "docs/FORWARD_OUTCOMES_R1.md",
+    "docs/EXECUTABLE_INFRA_AUTHORITY_R3.md",
+    "docs/SENTRY_AUTHORITY_EPOCHS_R1.md"
+  ],
+  "context_files": [
+    "AGENTS.md",
+    "docs/agent-packets/HISTORICAL_BASELINE_POLICY_R1.json",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "fixtures/historical-compatibility-r1.json",
+    "docs/EXECUTABLE_BASELINE_R1.md",
+    "src/shadow/baselineTypes.ts",
+    "src/authority/readAuthorityContext.ts",
+    "src/tsunami/viemBaselineSource.ts",
+    "scripts/historical-baseline-policy-probe.mjs",
+    ".github/workflows/historical-baseline-policy-r1.yml",
+    "mise.toml"
+  ],
+  "next_action": "RUN_HISTORICAL_CALIBRATION_SURFACE_PROBE",
+  "notes": [
+    "The user explicitly authorized the HISTORICAL_BASELINE_POLICY_R1 successor after HISTORICAL_COMPATIBILITY_R1 stopped on frozen baseline semantics.",
+    "This authorization covers the bounded successor phase; discovery is intentionally first because a valid historical policy cannot be selected before observing the point-in-time calibration surface.",
+    "Discovery completion does not self-authorize replay, FAST_VET, canary, merge, signing, or execution."
+  ]
+}
