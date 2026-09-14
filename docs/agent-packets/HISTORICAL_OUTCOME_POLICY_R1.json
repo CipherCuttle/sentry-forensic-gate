@@ -2,7 +2,7 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_OUTCOME_POLICY_R1",
-  "state": "HISTORICAL_OUTCOME_POLICY_IMPLEMENTATION_AUTHORIZED",
+  "state": "HISTORICAL_OUTCOME_POLICY_PASS",
   "objective": "Implement and test a separately versioned exact-24h historical outcome policy that preserves the existing horizon, exit, authority, and reorg semantics while replacing only non-portable WETH USD valuation with point-in-time RedStone ETH/USD evidence from the exact observed block.",
   "predecessor": {
     "phase": "HISTORICAL_BASELINE_POLICY_R1",
@@ -17,14 +17,14 @@
     "current_r3_behavior_must_remain_unchanged": true,
     "historical_authorization_granted": false,
     "historical_baseline_policy_status": "PASS",
-    "historical_outcome_policy_status": "IMPLEMENTATION_AUTHORIZED"
+    "historical_outcome_policy_status": "PASS"
   },
   "authorization": {
     "historical_compatibility_implementation": false,
     "historical_baseline_policy_discovery": false,
     "historical_baseline_policy_implementation": false,
     "historical_outcome_policy_discovery": false,
-    "historical_outcome_policy_implementation": true,
+    "historical_outcome_policy_implementation": false,
     "full_147_replay": false,
     "fast_vet": false,
     "canary": false,
@@ -65,6 +65,22 @@
     "structurally_point_in_time_usable": 9,
     "observed_age_seconds": [6419, 83, 852, 13876, 9994, 5285, 1721, 5907, 7607]
   },
+  "implementation_result": {
+    "status": "PASS",
+    "source_head_sha": "ba1d8982b693ac9aa7c5b299eb6613b219005f82",
+    "synthetic_pr_merge_sha": "5492a83f8468f92f5e83369ce25d4c25456eecb4",
+    "github_actions_run_id": 34859868652,
+    "artifact_id": 10354757274,
+    "repository_ci_run_id": 34859868700,
+    "representatives_attempted": 9,
+    "baseline_attempted": 9,
+    "baseline_complete": 9,
+    "baseline_unverified": 0,
+    "outcomes_24h_attempted": 9,
+    "outcomes_24h_complete": 9,
+    "outcomes_24h_unverified": 0,
+    "verdict": "HISTORICAL_OUTCOME_POLICY_PASS"
+  },
   "historical_policy": {
     "policy_version": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
     "weth_valuation_kind": "WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1",
@@ -81,12 +97,13 @@
     "current_r1_default_must_remain_bit_for_bit_identity_compatible": true
   },
   "decision_rules": [
-    "Implement through the existing buildForwardOutcome algorithm and ForwardOutcomeSource port; do not create a second outcome algorithm.",
+    "The historical outcome policy is closed PASS on the nine reviewed representatives; implementation authority is no longer active.",
     "Current callers with no historical override must retain FORWARD_OUTCOMES_R1 IDs, receipt shape, valuation behavior, evidence digest, authority behavior, and horizon behavior.",
     "For WETH historical valuation, query RedStone at the exact observed block and fail closed if code is absent, metadata drifts, answer is non-positive, updatedAt is zero, or updatedAt is later than the observed block.",
     "Do not reject a historical RedStone value solely because of its observed age in this policy version; record ageSeconds in digested evidence.",
     "For USDT0 base, preserve existing nominal stablecoin valuation.",
-    "Do not authorize the 147-launch replay, FAST_VET, canary, merge, signing, or execution from a representative PASS."
+    "Before any 147-launch replay, run the same nine representatives across every frozen outcome horizon: 1m, 5m, 30m, 2h, and 24h.",
+    "Do not authorize the 147-launch replay, FAST_VET, canary, merge, signing, or execution from this representative PASS."
   ],
   "known_historical_state": {
     "launch_count": 147,
@@ -96,11 +113,11 @@
   },
   "prohibitions": [
     "Do not change current R3 authority, EXECUTABLE_BASELINE_R1, historical baseline semantics, or current FORWARD_OUTCOMES_R1 default behavior.",
-    "Do not reuse decision-block oracle prices for 24h valuation.",
+    "Do not reuse decision-block oracle prices for outcome valuation.",
     "Do not fit an oracle-age cutoff to representative ages.",
     "Do not use future or retrospective off-chain prices.",
     "Do not duplicate the outcome algorithm.",
-    "Do not authorize or run the full 147-launch replay.",
+    "Do not authorize or run the full 147-launch replay before the all-horizon representative gate passes.",
     "Do not run FAST_VET meaningfully.",
     "Do not authorize canary or execution authority.",
     "Do not merge without explicit user authority."
@@ -126,9 +143,10 @@
     ".github/workflows/historical-outcome-policy-r1.yml",
     "mise.toml"
   ],
-  "next_action": "IMPLEMENT_SEPARATELY_VERSIONED_REDSTONE_ASOF_HISTORICAL_OUTCOME_AND_RUN_NINE_REPRESENTATIVES",
+  "next_action": "ONE_HOSTILE_REVIEW_THEN_ALL_HORIZON_REPRESENTATIVE_GATE",
   "notes": [
     "Point-in-time RedStone discovery passed 9/9 at the exact observed 24h blocks before implementation semantics were frozen.",
-    "Implementation authority is limited to the separately versioned historical outcome policy. Replay, FAST_VET, canary, merge, signing, and execution remain unauthorized."
+    "The separately versioned historical outcome implementation passed 9/9 exact-24h representatives with zero UNVERIFIED outcomes.",
+    "Implementation authority is closed. Full replay, FAST_VET, canary, merge, signing, and execution remain unauthorized."
   ]
 }
