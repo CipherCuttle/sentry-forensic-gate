@@ -38,3 +38,4 @@ jobs:
           name: dev-spine-${{ github.sha }}
           path: .dev-spine/
           if-no-files-found: error
+          include-hidden-files: true

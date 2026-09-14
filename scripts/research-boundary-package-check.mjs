@@ -3,10 +3,10 @@ import path from 'node:path';
 
 const allowedFileExtensions = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-  '.json', '.md', '.yml', '.yaml', '.sql', '.example'
+  '.json', '.md', '.yml', '.yaml', '.sql', '.example', '.toml'
 ]);
 const allowedExtensionlessFiles = new Set(['.gitignore']);
-const skippedDirs = new Set(['.git', 'node_modules', 'dist']);
+const skippedDirs = new Set(['.git', 'node_modules', 'dist', '.dev-spine']);
 
 function assertSupportedSurfaces(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
