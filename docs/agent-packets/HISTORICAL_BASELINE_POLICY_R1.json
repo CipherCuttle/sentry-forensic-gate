@@ -2,8 +2,8 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_BASELINE_POLICY_R1",
-  "state": "HISTORICAL_BASELINE_POLICY_IMPLEMENTATION_AUTHORIZED",
-  "objective": "Implement and test a separately versioned historical executable-baseline policy that preserves the frozen R1 decision point and USD notionals while replacing non-portable WETH/USDT0 calibration with point-in-time RedStone ETH/USD evidence already published on Ink at the decision block.",
+  "state": "HISTORICAL_BASELINE_POLICY_PASS_OUTCOME_VALUATION_BLOCKED",
+  "objective": "Close the separately versioned RedStone-as-of historical baseline policy after a 9/9 representative PASS, while preserving the separately observed historical 24h outcome USD-valuation blocker for a successor phase.",
   "predecessor": {
     "phase": "HISTORICAL_COMPATIBILITY_R1",
     "pr": 16,
@@ -14,12 +14,13 @@
     "current_default": "R3",
     "current_r3_behavior_must_remain_unchanged": true,
     "historical_authorization_granted": false,
-    "historical_baseline_policy_status": "IMPLEMENTATION_AUTHORIZED"
+    "historical_baseline_policy_status": "PASS",
+    "historical_outcome_valuation_status": "BLOCKED"
   },
   "authorization": {
     "historical_compatibility_implementation": false,
-    "historical_baseline_policy_discovery": true,
-    "historical_baseline_policy_implementation": true,
+    "historical_baseline_policy_discovery": false,
+    "historical_baseline_policy_implementation": false,
     "full_147_replay": false,
     "fast_vet": false,
     "canary": false,
@@ -79,20 +80,48 @@
     "weth_sizing_formula": "ceil(notionalUsdMicros * 10^wethDecimals * 10^oracleDecimals / (1000000 * oracleAnswer))",
     "oracle_time_rule": "Use latestRoundData state already published at the exact decision block; require answer > 0, updatedAt > 0, updatedAt <= decisionBlock.timestamp.",
     "freshness_rejection_threshold_seconds": null,
-    "freshness_rationale": "No Ink-feed-specific heartbeat was established independently before policy selection. Historical reconstruction therefore records oracle age as evidence instead of fitting a rejection threshold to the nine representatives.",
+    "freshness_rationale": "No Ink-feed-specific heartbeat was established independently before policy selection. Historical reconstruction records oracle age as evidence instead of fitting a rejection threshold to representative data.",
     "oracle_age_must_be_recorded_in_calibration_evidence": true,
     "baseline_ids_must_be_policy_separated": true,
     "quote_ids_must_be_policy_separated": true,
     "current_r1_default_must_remain_bit_for_bit_identity_compatible": true
   },
+  "stage_c_result": {
+    "status": "BASELINE_POLICY_PASS_OUTCOME_PROBE_BLOCKED",
+    "source_head_sha": "b15dcb24dc73cf583039c0f9e95e4c706556d1a1",
+    "github_actions_run_id": 34856771194,
+    "artifact_id": 10352059780,
+    "baseline_attempted": 9,
+    "baseline_complete": 9,
+    "baseline_unverified": 0,
+    "baseline_verdict": "PASS",
+    "outcomes_24h_attempted": 9,
+    "outcomes_24h_complete": 7,
+    "outcomes_24h_unverified": 2,
+    "outcome_probe_verdict": "BLOCKED",
+    "outcome_blocking_reason_family": "OUTCOME_USD_VALUATION_UNAVAILABLE",
+    "blocked_representatives": [
+      {
+        "launch_block": 39943476,
+        "token_id": 1,
+        "observed_block": 40029876,
+        "reason": "OUTCOME_USD_VALUATION_UNAVAILABLE:block=40029876:baseAmount=49475793190238"
+      },
+      {
+        "launch_block": 40032260,
+        "token_id": 5,
+        "observed_block": 40118660,
+        "reason": "OUTCOME_USD_VALUATION_UNAVAILABLE:block=40118660:baseAmount=19726984103325"
+      }
+    ],
+    "conclusion": "The separately versioned historical baseline policy satisfies its 9/9 representative acceptance contract. The unchanged 24h outcome path is separately non-portable for two early WETH-base representatives because its frozen WETH-to-USDT0 USD valuation is unavailable at those outcome blocks."
+  },
   "decision_rules": [
-    "Implement the historical policy through the existing baseline builder and ExecutableBaselineSource calibration port; do not create a second baseline algorithm.",
-    "Current callers with no historical policy override must retain EXECUTABLE_BASELINE_R1 IDs, quote IDs, policyVersion, calibration behavior, and authority behavior.",
-    "For WETH historical calibration, fail closed if RedStone code is absent, metadata drifts, answer is non-positive, updatedAt is zero, or updatedAt is later than the decision block.",
-    "Do not reject a historical RedStone value solely because of its observed age in this policy version; record ageSeconds in the calibration authority evidence.",
-    "For USDT0-base launches, preserve the existing nominal-peg calibration path.",
-    "After each COMPLETE historical baseline, probe the existing exact-24h outcome path without changing it. Outcome incompatibility must be reported as a separate successor problem, not repaired inside baseline policy implementation.",
-    "Do not authorize the 147-launch replay, FAST_VET, canary, merge, signing, or execution from a representative PASS."
+    "Treat the 9/9 historical baseline representative gate as PASS.",
+    "Do not change current EXECUTABLE_BASELINE_R1 behavior, IDs, authority, or semantics.",
+    "Do not repair OUTCOME_USD_VALUATION_UNAVAILABLE inside HISTORICAL_BASELINE_POLICY_R1.",
+    "Open any historical outcome valuation replacement as a separately versioned successor with point-in-time inputs and preregistered rules.",
+    "Do not authorize the 147-launch replay, FAST_VET, canary, merge, signing, or execution from this PASS."
   ],
   "known_historical_state": {
     "launch_count": 147,
@@ -113,7 +142,7 @@
     "Do not add an age cutoff chosen from the observed representative ages.",
     "Do not use future or retrospective off-chain prices.",
     "Do not duplicate the baseline algorithm.",
-    "Do not broaden outcome semantics inside this baseline-policy gate.",
+    "Do not broaden or repair outcome semantics inside this baseline-policy phase.",
     "Do not authorize or run the full 147-launch replay.",
     "Do not run FAST_VET meaningfully.",
     "Do not authorize the canary.",
@@ -136,15 +165,16 @@
     "docs/EXECUTABLE_BASELINE_R1.md",
     "src/shadow/baselineTypes.ts",
     "src/runtime/executableBaseline.ts",
-    "src/authority/readAuthorityContext.ts",
-    "src/tsunami/viemBaselineSource.ts",
-    "src/tsunami/ports.ts",
+    "src/tsunami/historicalRedstoneBaselineSource.ts",
+    "src/outcome/viemSource.ts",
     "mise.toml"
   ],
-  "next_action": "IMPLEMENT_SEPARATELY_VERSIONED_REDSTONE_ASOF_HISTORICAL_BASELINE_AND_RUN_NINE_REPRESENTATIVES",
+  "next_action": "OPEN_HISTORICAL_OUTCOME_VALUATION_POLICY_R1_SUCCESSOR",
   "notes": [
-    "The user explicitly authorized HISTORICAL_BASELINE_POLICY_R1 as the bounded successor after HISTORICAL_COMPATIBILITY_R1 stopped.",
-    "Stage A and Stage B discovery are complete and are frozen before implementation semantics are introduced.",
-    "Representative success does not self-authorize historical replay, FAST_VET, canary, merge, signing, or execution."
+    "Stage A calibration-surface discovery is complete.",
+    "Stage B oracle discovery is complete.",
+    "Stage C historical baseline representative acceptance passed 9/9 on live archive RPC evidence.",
+    "The unchanged 24h outcome probe completed 7/9 and exposed a separate historical USD-valuation portability blocker on the first two representatives.",
+    "Representative baseline success does not self-authorize historical replay, FAST_VET, canary, merge, signing, or execution."
   ]
 }
