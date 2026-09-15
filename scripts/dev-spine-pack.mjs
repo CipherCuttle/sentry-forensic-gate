@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { join } from 'node:path';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json';
 const OUTPUT_DIR = '.dev-spine';
 
 function fail(message) {
@@ -16,13 +16,11 @@ const dirtyRaw = process.env.DEV_SPINE_DIRTY;
 if (!testedSha || !sourceHeadSha) fail('tested/source SHA must be supplied by the Spine adapter');
 if (dirtyRaw !== 'false') fail('context pack requires an explicitly clean worktree');
 
-const packetRaw = fs.readFileSync(PACKET_PATH, 'utf8');
-const packet = JSON.parse(packetRaw);
+const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
 const sections = [];
 for (const path of packet.context_files) {
   if (!fs.existsSync(path)) fail(`context file missing: ${path}`);
-  const content = fs.readFileSync(path, 'utf8');
-  sections.push(`===== BEGIN FILE: ${path} =====\n${content}\n===== END FILE: ${path} =====`);
+  sections.push(`===== BEGIN FILE: ${path} =====\n${fs.readFileSync(path, 'utf8')}\n===== END FILE: ${path} =====`);
 }
 
 const contextContent = sections.join('\n\n');

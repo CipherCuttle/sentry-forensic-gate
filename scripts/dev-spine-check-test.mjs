@@ -2,42 +2,60 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { validatePacket } from './dev-spine-check.mjs';
 
-const packet = JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json','utf8'));
+const packet = JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json', 'utf8'));
 validatePacket(packet);
-assert.equal(packet.state,'HISTORICAL_FULL_REPLAY_AUTHORIZED');
-assert.equal(packet.authorization.full_147_replay,true);
-assert.equal(packet.authority.historical_authorization_granted,true);
-assert.equal(packet.next_action,'OPEN_HISTORICAL_FULL_REPLAY_R1_IMPLEMENTATION');
-assert.equal(packet.review_gate.status,'CLOSED_PASS');
-assert.equal(packet.review_gate.targeted_review_id,5204380099);
-assert.equal(packet.review_gate.targeted_reviewed_head,'e527255949ffd72409284a379cf4428c48aa855f');
-for (const key of ['fast_vet','canary','signing','transaction_construction','transaction_broadcast','live_execution','merge']) assert.equal(packet.authorization[key],false);
 
-for (const key of ['historical_compatibility_implementation','historical_baseline_policy_discovery','historical_baseline_policy_implementation','historical_outcome_policy_discovery','historical_outcome_policy_implementation','historical_all_horizon_compatibility_implementation','full_147_replay','fast_vet','canary','signing','transaction_construction','transaction_broadcast','live_execution','merge']) {
-  const mutated=structuredClone(packet); mutated.authorization[key]=!mutated.authorization[key]; assert.throws(()=>validatePacket(mutated),new RegExp(`requires authorization\\.${key}=`));
-}
-const extraAuth=structuredClone(packet); extraAuth.authorization.signing_bypass=true; assert.throws(()=>validatePacket(extraAuth),/authorization keyset drift/);
-const wrongReviewId=structuredClone(packet); wrongReviewId.review_gate.targeted_review_id=1; assert.throws(()=>validatePacket(wrongReviewId),/targeted review id drift/);
-const wrongReviewedHead=structuredClone(packet); wrongReviewedHead.review_gate.targeted_reviewed_head='0'.repeat(40); assert.throws(()=>validatePacket(wrongReviewedHead),/targeted reviewed head drift/);
-const wrongTargetedFinding=structuredClone(packet); wrongTargetedFinding.review_gate.targeted_review_finding.comment_id=1; assert.throws(()=>validatePacket(wrongTargetedFinding),/targeted re-review finding id drift/);
-const unresolved=structuredClone(packet); unresolved.review_gate.unresolved_critical_high=1; assert.throws(()=>validatePacket(unresolved),/zero unresolved Critical\/High/);
-const changedScope=structuredClone(packet); changedScope.acceptance.full_replay_scope_manifest.launch_identity_sha256='a'.repeat(64); assert.throws(()=>validatePacket(changedScope),/identity digest drift/);
-const changedHorizon=structuredClone(packet); changedHorizon.frozen_policies.horizons[0].ms+=1; assert.throws(()=>validatePacket(changedHorizon),/frozen horizon set drift/);
-const wrongDecisionReview=structuredClone(packet); wrongDecisionReview.decision_result.hostile_review_id=1; assert.throws(()=>validatePacket(wrongDecisionReview),/authorized decision hostile review id drift/);
-const wrongDecisionHead=structuredClone(packet); wrongDecisionHead.decision_result.reviewed_authorization_head='0'.repeat(40); assert.throws(()=>validatePacket(wrongDecisionHead),/authorized decision reviewed head drift/);
+assert.equal(packet.state, 'HISTORICAL_FULL_REPLAY_IMPLEMENTATION_AUTHORIZED');
+assert.equal(packet.authorization.full_147_replay, true);
+assert.equal(packet.next_action, 'BUILD_AND_VERIFY_147_LAUNCH_AUTHORITY_MAP');
+assert.equal(packet.authority_map_gate.status, 'PENDING_VERIFICATION');
+assert.equal(packet.authority_map_gate.authority_map_sha256, null);
+assert.equal(packet.replay_contract.expected_launch_receipts, 147);
+assert.equal(packet.replay_contract.expected_horizon_cells, 735);
+assert.equal(packet.replay_contract.economic_complete_required_for_phase_pass, false);
 
-const validOpen=structuredClone(packet);
-validOpen.state='HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN';
-validOpen.authorization.full_147_replay=false;
-validOpen.authority.historical_authorization_granted=false;
-validOpen.next_action='DECIDE_FULL_147_REPLAY_AUTHORIZATION';
-delete validOpen.decision_result;
-validatePacket(validOpen);
+const extraAuth = structuredClone(packet);
+extraAuth.authorization.live_execution_bypass = true;
+assert.throws(() => validatePacket(extraAuth), /authorization keyset drift/);
 
-const validRejected=structuredClone(validOpen);
-validRejected.state='HISTORICAL_FULL_REPLAY_AUTHORIZATION_REJECTED';
-validRejected.next_action='STOP_FULL_147_REPLAY';
-validRejected.decision_result={status:'REJECT',basis_predecessor_head:'28e598d738c633b0211bae914b8f92450ae61f90',rationale:'A frozen prerequisite failed.'};
-validatePacket(validRejected);
+const replayOff = structuredClone(packet);
+replayOff.authorization.full_147_replay = false;
+assert.throws(() => validatePacket(replayOff), /authorization\.full_147_replay=true/);
+
+const liveOn = structuredClone(packet);
+liveOn.authorization.live_execution = true;
+assert.throws(() => validatePacket(liveOn), /authorization\.live_execution=false/);
+
+const changedHead = structuredClone(packet);
+changedHead.predecessor.closure_head = '0'.repeat(40);
+assert.throws(() => validatePacket(changedHead), /authorization predecessor closure head drift/);
+
+const changedScope = structuredClone(packet);
+changedScope.frozen_scope.launch_identity_sha256 = 'a'.repeat(64);
+assert.throws(() => validatePacket(changedScope), /frozen scope identity digest drift/);
+
+const changedHorizon = structuredClone(packet);
+changedHorizon.frozen_policies.horizons[0].ms += 1;
+assert.throws(() => validatePacket(changedHorizon), /frozen horizon set drift/);
+
+const changedCount = structuredClone(packet);
+changedCount.authority_map_gate.expected_cohort_counts[0] = 1;
+assert.throws(() => validatePacket(changedCount), /historical cohort count vector drift/);
+
+const changedStart = structuredClone(packet);
+changedStart.authority_map_gate.expected_start_ordinals[1] = 4;
+assert.throws(() => validatePacket(changedStart), /historical cohort start ordinals drift/);
+
+const changedRep = structuredClone(packet);
+changedRep.authority_map_gate.cohorts[4].first_token_id = '999';
+assert.throws(() => validatePacket(changedRep), /cohort first token id drift/);
+
+const jumpReplay = structuredClone(packet);
+jumpReplay.next_action = 'EXECUTE_FULL_147_X_5_REPLAY';
+assert.throws(() => validatePacket(jumpReplay), /Stage A authority map must be next/);
+
+const fakeMap = structuredClone(packet);
+fakeMap.authority_map_gate.authority_map_sha256 = 'f'.repeat(64);
+assert.throws(() => validatePacket(fakeMap), /pending authority map must not predeclare digest/);
 
 console.log('DEV_SPINE_CHECK_TEST=PASS');
