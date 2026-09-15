@@ -2,96 +2,37 @@
 
 ## Status
 
-`DECISION OPEN / 147-LAUNCH SCOPE MANIFEST DISCOVERY PENDING / FULL REPLAY NOT AUTHORIZED`
+`DECISION OPEN / 147-LAUNCH SCOPE FROZEN / LIVE REVERIFY PENDING / FULL REPLAY NOT AUTHORIZED`
 
-This is a governance-only successor to the closed `HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1` phase. It decides whether the bounded historical replay of all 147 recorded launches may be opened as a separate implementation phase.
-
-This phase does **not** run the replay.
-
-## Decision question
-
-May the repository open a separate research-only implementation phase that replays a cryptographically frozen manifest of the 147 historical launches using only the already-reviewed historical baseline and historical outcome mechanics?
+This is a governance-only successor to the closed `HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1` phase. It decides whether a bounded research-only replay of all 147 historical launches may be opened as a separate implementation phase. **This phase does not run the replay.**
 
 ## Frozen predecessor evidence
 
-The decision is based on exact predecessor closure head `28e598d738c633b0211bae914b8f92450ae61f90`, verdict `HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS`.
+Decision basis: exact predecessor closure head `28e598d738c633b0211bae914b8f92450ae61f90`, verdict `HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS`. Exact-head closure runs: CI `34908787242`, baseline `34908787280`, outcome `34908787225`, all-horizon `34908787293` — all `SUCCESS`. Representative evidence remains `9/9` baselines COMPLETE and `45/45` horizon outcomes COMPLETE with `0` UNVERIFIED across all nine historical implementation cohorts.
 
-Exact-head verification at closure:
+## Frozen 147-launch scope
 
-- ordinary CI run `34908787242`: `SUCCESS`
-- historical baseline regression run `34908787280`: `SUCCESS`
-- historical outcome regression run `34908787225`: `SUCCESS`
-- all-horizon compatibility run `34908787293`: `SUCCESS`
-- representative historical baselines: `9/9 COMPLETE`
-- representative horizon outcomes: `45/45 COMPLETE`
-- representative horizon outcomes UNVERIFIED: `0`
-- launch-producing implementation cohorts represented: `9/9`
-- historical launch count: `147`
+Scope-only discovery run `34910384086` recovered exactly `147` unique canonical deployment identities between blocks `39943476` and `49271598`. Artifact `10374237897` has GitHub artifact digest `sha256:d63713918a90f018badf2e583a2b8230355a9dc21b0fc94499d675cf9919e296`.
 
-## Full-cohort scope prerequisite
+The frozen launch-identity digest is:
 
-A count of 147 and the nine representative fixtures are **not sufficient** to authorize the full replay. The replay population itself must be frozen before authority can be granted.
+`b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211`
 
-The authorization phase therefore reconstructs only the canonical deployment-event identities over the previously reviewed historical range `39943476..49271598`. It records, for each launch, its ordinal, event kind, block number/hash, transaction hash, log index, token id, token address, and creator. Those identities are hashed into one canonical SHA-256 scope digest.
+The canonical 147-row manifest is stored losslessly as deterministic gzip+base64 split across five repository chunks and indexed by `fixtures/historical-full-replay-scope-r1.json`. This is a storage representation only. The uncompressed payload SHA-256 is `c8188726b28e72a72ffc5c8233a416c2fb531d2e6e3229f8906969d9dc1609a0`; the deterministic gzip SHA-256 is `72a2b881c88ed1219b35406b129e5ea58968b0466cafcbe10a4a42468cd85813`. The validator decodes the chunks, verifies both hashes, parses all 147 identities, recomputes the identity digest, and fails closed on any mismatch.
 
-This is scope discovery only. It performs no baseline construction, no outcome calculation, no economic classification, and grants no replay authority.
+The scope is now frozen but is **not yet authorization evidence by itself**. A fresh live chain-log discovery on the committed fixture must reproduce the exact 147 identities and digest.
 
-Before `AUTHORIZE` is a legal state:
+## Frozen replay contract if later authorized
 
-- exactly `147` unique canonical launch identities must be recovered;
-- first launch block must be `39943476`;
-- final launch block must be `49271598`;
-- the full manifest must be committed as `fixtures/historical-full-replay-scope-r1.json`;
-- a fresh live discovery must match the committed fixture byte-for-identity and digest;
-- the decision packet must pin the manifest digest.
+A later `HISTORICAL_FULL_REPLAY_R1` may use only the committed 147-launch scope, `HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1`, `HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1`, and horizons `1m / 5m / 30m / 2h / 24h`. Inputs remain point-in-time. Existing authority/reorg/minimal-block/market/quote checks and exact-observed-block RedStone WETH valuation remain unchanged. Provider or transport failure is never market evidence.
 
-The superseded PR #18 does not satisfy this requirement: it attempted 147-point calibration discovery but its live run failed on public-RPC rate limiting and produced no scientific evidence artifact.
+No new pricing algorithm, freshness cutoff, retrospective off-chain substitute, notional shrink, or alternate baseline/outcome implementation is authorized. Full-cohort failures or UNVERIFIED cells are results to retain, not reasons to mutate the policy.
 
-## Frozen replay contract if authorized
+## Decision boundary
 
-Authorization may cover only a later, separate `HISTORICAL_FULL_REPLAY_R1` implementation using:
+`AUTHORIZE` is legal only after the committed scope receives a fresh exact-match live verification and one bounded hostile review closes without unresolved Critical/High findings. Authorization may flip only the research-only `full_147_replay` bit and may only open a separate implementation phase.
 
-- the committed 147-launch scope manifest, exactly;
-- `HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1` without semantic modification;
-- `HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1` without semantic modification;
-- the canonical frozen horizons `1m / 5m / 30m / 2h / 24h`;
-- point-in-time inputs only;
-- the existing canonical first-block-at-or-after-target horizon algorithm;
-- the existing launch/decision hash, reorg, authority, minimal-block, market, and executable-quote checks;
-- exact-observed-block RedStone historical WETH valuation and nominal USDT0 valuation;
-- fail-closed handling where provider or transport failure is not economic evidence.
-
-No new pricing algorithm, oracle freshness cutoff, retrospective off-chain substitute, notional shrink, or second outcome algorithm may be introduced under this authorization.
-
-## AUTHORIZE criteria
-
-The decision may be `AUTHORIZE` only if all of the following remain true:
-
-- the predecessor exact closure head and verdict are unchanged;
-- all four predecessor exact-head verification workflows are green;
-- the representative gate remains `9/9 baseline COMPLETE` and `45/45 outcome COMPLETE / 0 UNVERIFIED`;
-- all nine historical launch-producing implementation cohorts are represented by the reviewed fixture;
-- the full 147-launch scope manifest is committed, digest-pinned, and independently reverified from canonical chain logs;
-- the replay scope is exactly that frozen manifest, not a revised post-hoc cohort;
-- the replay is research-only and point-in-time;
-- replay implementation may not alter current R3/default behavior;
-- any launch/horizon that cannot be reconstructed under the frozen policy must be emitted as explicit failure/UNVERIFIED rather than repaired post hoc;
-- replay evidence must retain per-launch/per-horizon receipts sufficient to audit policy version, block/hash/timestamp, authority, valuation source, and failure classification;
-- FAST_VET, canary, signing, transaction construction, transaction broadcast, and merge remain separately unauthorized.
-
-## REJECT criteria
-
-The decision must be `REJECT` if any prerequisite evidence is stale or inconsistent, if the 147-launch population cannot be frozen unambiguously, if the replay requires changing reviewed historical semantics, or if authorization would implicitly widen current/live execution authority.
-
-## Scientific boundary
-
-Representative 45/45 compatibility is evidence that the reviewed historical mechanics are portable across the nine known implementation cohorts and five frozen horizons. It is **not** evidence that the full 147 replay will be 100% COMPLETE.
-
-The point of a full replay, if authorized, is to measure the complete frozen historical cohort under frozen rules. Failures in that later replay are results to classify, not reasons to mutate the policy.
-
-## Authority boundary
-
-Current state:
+Current authority remains:
 
 - full 147 replay: `NOT AUTHORIZED`
 - FAST_VET: `NOT AUTHORIZED`
@@ -99,10 +40,6 @@ Current state:
 - signing/execution: `NOT AUTHORIZED`
 - merge: `NOT AUTHORIZED`
 
-An `AUTHORIZE` decision may flip only the research-only full-147-replay authorization bit and may only open a separate `HISTORICAL_FULL_REPLAY_R1` implementation phase. It does not itself execute the replay and does not authorize any live trading capability.
-
 ## Completion policy
 
-`PREREGISTER DECISION -> FREEZE 147-LAUNCH SCOPE -> VERIFY PREDECESSOR EVIDENCE -> ONE independent hostile review -> fix Critical/High -> ONE targeted re-review only if needed -> AUTHORIZE or REJECT -> CLOSE -> MOVE FORWARD`
-
-No review loops. Do not reopen closed predecessor review cycles absent evidence that invalidates their recorded receipts or frozen invariants.
+`PREREGISTER DECISION -> FREEZE 147-LAUNCH SCOPE -> LIVE REVERIFY FROZEN SCOPE -> ONE independent hostile review -> fix Critical/High -> ONE targeted re-review only if needed -> AUTHORIZE or REJECT -> CLOSE -> MOVE FORWARD`

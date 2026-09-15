@@ -16,10 +16,10 @@
     "outcomes_complete": 45,
     "outcomes_unverified": 0,
     "exact_head_runs": {
-      "ci": {"id":34908787242,"status":"SUCCESS"},
-      "historical_baseline_policy": {"id":34908787280,"status":"SUCCESS"},
-      "historical_outcome_policy": {"id":34908787225,"status":"SUCCESS"},
-      "historical_all_horizon_compatibility": {"id":34908787293,"status":"SUCCESS"}
+      "ci": {"id": 34908787242, "status": "SUCCESS"},
+      "historical_baseline_policy": {"id": 34908787280, "status": "SUCCESS"},
+      "historical_outcome_policy": {"id": 34908787225, "status": "SUCCESS"},
+      "historical_all_horizon_compatibility": {"id": 34908787293, "status": "SUCCESS"}
     }
   },
   "authority": {
@@ -60,25 +60,32 @@
     "per_launch_per_horizon_receipts_required": true,
     "full_replay_scope_manifest": {
       "required": true,
-      "status": "DISCOVERY_PENDING",
+      "status": "FROZEN_PENDING_LIVE_VERIFY",
       "path": "fixtures/historical-full-replay-scope-r1.json",
       "expected_launches": 147,
       "first_launch_block": 39943476,
       "final_launch_block": 49271598,
-      "launch_identity_sha256": null,
+      "launch_identity_sha256": "b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211",
+      "payload_sha256": "c8188726b28e72a72ffc5c8233a416c2fb531d2e6e3229f8906969d9dc1609a0",
+      "compressed_payload_sha256": "72a2b881c88ed1219b35406b129e5ea58968b0466cafcbe10a4a42468cd85813",
+      "discovery_run": 34910384086,
+      "discovery_artifact_id": 10374237897,
+      "discovery_artifact_sha256": "d63713918a90f018badf2e583a2b8230355a9dc21b0fc94499d675cf9919e296",
+      "discovery_provider_origin": "https://rpc-qnd.inkonchain.com",
       "live_verification_run": null,
-      "evidence_artifact_id": null
+      "live_verification_artifact_id": null,
+      "live_verification_artifact_sha256": null
     }
   },
   "frozen_policies": {
     "baseline_policy_version": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
     "outcome_policy_version": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
     "horizons": [
-      {"label":"1m","ms":60000},
-      {"label":"5m","ms":300000},
-      {"label":"30m","ms":1800000},
-      {"label":"2h","ms":7200000},
-      {"label":"24h","ms":86400000}
+      {"label": "1m", "ms": 60000},
+      {"label": "5m", "ms": 300000},
+      {"label": "30m", "ms": 1800000},
+      {"label": "2h", "ms": 7200000},
+      {"label": "24h", "ms": 86400000}
     ],
     "weth_valuation_kind": "WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1",
     "freshness_rejection_threshold_seconds": null
@@ -128,6 +135,13 @@
     "docs/HISTORICAL_BASELINE_POLICY_R1.md",
     "docs/FORWARD_OUTCOMES_R1.md",
     "fixtures/historical-compatibility-r1.json",
+    "fixtures/historical-full-replay-scope-r1.json",
+    "fixtures/historical-full-replay-scope-r1.part-001.b64",
+    "fixtures/historical-full-replay-scope-r1.part-002.b64",
+    "fixtures/historical-full-replay-scope-r1.part-003.b64",
+    "fixtures/historical-full-replay-scope-r1.part-004.b64",
+    "fixtures/historical-full-replay-scope-r1.part-005.b64",
+    "scripts/historical-full-replay-scope-fixture.mjs",
     "scripts/historical-full-replay-scope-r1.mjs",
     ".github/workflows/historical-full-replay-authorization-r1.yml",
     "src/runtime/forwardOutcomes.ts",
@@ -137,12 +151,12 @@
     "src/tsunami/historicalRedstoneBaselineSource.ts",
     "mise.toml"
   ],
-  "next_action": "FREEZE_FULL_147_REPLAY_SCOPE_THEN_DECIDE",
+  "next_action": "DECIDE_FULL_147_REPLAY_AUTHORIZATION",
   "notes": [
     "The predecessor phase is closed PASS on exact head 28e598d738c633b0211bae914b8f92450ae61f90 with all four exact-head verification workflows green.",
-    "Representative 45/45 compatibility supports portability across the nine known historical implementation cohorts but does not predeclare full-cohort replay completeness.",
-    "The repository previously recorded the 147 count and cohort distribution but did not contain a committed 147-launch identity manifest; authorization therefore remains blocked until that scope is frozen and reverified.",
-    "Superseded PR #18 is not treated as full-cohort evidence because its live discovery failed on public-RPC rate limiting before producing scientific evidence.",
-    "This decision packet grants no replay authority."
+    "Scope discovery run 34910384086 recovered exactly 147 unique canonical launch identities over blocks 39943476..49271598 using the isolated public QuickNode transport.",
+    "The frozen identity digest is b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211. The committed payload is deterministic gzip+base64 split across five repository chunks; payload and compressed hashes are pinned and checked fail-closed.",
+    "The scope is frozen but must be freshly reverified against canonical chain logs on the committed fixture before AUTHORIZE is a legal state.",
+    "This decision packet still grants no replay authority."
   ]
 }
