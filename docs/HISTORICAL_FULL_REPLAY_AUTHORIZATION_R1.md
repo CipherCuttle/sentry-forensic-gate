@@ -2,7 +2,7 @@
 
 ## Status
 
-`DECISION OPEN / 147-LAUNCH SCOPE FROZEN / LIVE REVERIFY PENDING / FULL REPLAY NOT AUTHORIZED`
+`DECISION OPEN / 147-LAUNCH SCOPE FROZEN + LIVE VERIFIED / HOSTILE REVIEW NEXT / FULL REPLAY NOT AUTHORIZED`
 
 This is a governance-only successor to the closed `HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1` phase. It decides whether a bounded research-only replay of all 147 historical launches may be opened as a separate implementation phase. **This phase does not run the replay.**
 
@@ -20,7 +20,7 @@ The frozen launch-identity digest is:
 
 The canonical 147-row manifest is stored losslessly as deterministic gzip+base64 split across five repository chunks and indexed by `fixtures/historical-full-replay-scope-r1.json`. This is a storage representation only. The uncompressed payload SHA-256 is `c8188726b28e72a72ffc5c8233a416c2fb531d2e6e3229f8906969d9dc1609a0`; the deterministic gzip SHA-256 is `72a2b881c88ed1219b35406b129e5ea58968b0466cafcbe10a4a42468cd85813`. The validator decodes the chunks, verifies both hashes, parses all 147 identities, recomputes the identity digest, and fails closed on any mismatch.
 
-The scope is now frozen but is **not yet authorization evidence by itself**. A fresh live chain-log discovery on the committed fixture must reproduce the exact 147 identities and digest.
+The committed scope has now been freshly reverified against canonical chain logs. Run `34912185853` completed `SUCCESS`; artifact `10375315812` (`sha256:8eb03c983121261f3c4ed8923bc826f1e02c8f2c79ceecbfe345646059cb870a`) reports `147` observed/unique launches, `fixturePresent=true`, `fixtureMatch=true`, and the same frozen identity digest. The scope prerequisite is therefore `FROZEN_VERIFIED`. Replay authority is still false pending the bounded hostile review and explicit decision.
 
 ## Frozen replay contract if later authorized
 
@@ -30,7 +30,7 @@ No new pricing algorithm, freshness cutoff, retrospective off-chain substitute, 
 
 ## Decision boundary
 
-`AUTHORIZE` is legal only after the committed scope receives a fresh exact-match live verification and one bounded hostile review closes without unresolved Critical/High findings. Authorization may flip only the research-only `full_147_replay` bit and may only open a separate implementation phase.
+The fresh exact-match live verification is complete. `AUTHORIZE` is legal only after one bounded hostile review closes without unresolved Critical/High findings. Authorization may flip only the research-only `full_147_replay` bit and may only open a separate implementation phase.
 
 Current authority remains:
 

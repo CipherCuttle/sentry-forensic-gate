@@ -60,7 +60,7 @@
     "per_launch_per_horizon_receipts_required": true,
     "full_replay_scope_manifest": {
       "required": true,
-      "status": "FROZEN_PENDING_LIVE_VERIFY",
+      "status": "FROZEN_VERIFIED",
       "path": "fixtures/historical-full-replay-scope-r1.json",
       "expected_launches": 147,
       "first_launch_block": 39943476,
@@ -72,9 +72,9 @@
       "discovery_artifact_id": 10374237897,
       "discovery_artifact_sha256": "d63713918a90f018badf2e583a2b8230355a9dc21b0fc94499d675cf9919e296",
       "discovery_provider_origin": "https://rpc-qnd.inkonchain.com",
-      "live_verification_run": null,
-      "live_verification_artifact_id": null,
-      "live_verification_artifact_sha256": null
+      "live_verification_run": 34912185853,
+      "live_verification_artifact_id": 10375315812,
+      "live_verification_artifact_sha256": "8eb03c983121261f3c4ed8923bc826f1e02c8f2c79ceecbfe345646059cb870a"
     }
   },
   "frozen_policies": {
@@ -156,7 +156,7 @@
     "The predecessor phase is closed PASS on exact head 28e598d738c633b0211bae914b8f92450ae61f90 with all four exact-head verification workflows green.",
     "Scope discovery run 34910384086 recovered exactly 147 unique canonical launch identities over blocks 39943476..49271598 using the isolated public QuickNode transport.",
     "The frozen identity digest is b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211. The committed payload is deterministic gzip+base64 split across five repository chunks; payload and compressed hashes are pinned and checked fail-closed.",
-    "The scope is frozen but must be freshly reverified against canonical chain logs on the committed fixture before AUTHORIZE is a legal state.",
-    "This decision packet still grants no replay authority."
+    "The committed frozen scope was freshly reverified against canonical chain logs on run 34912185853: 147/147 identities matched exactly with fixtureMatch=true.",
+    "The scope prerequisite is FROZEN_VERIFIED; the replay decision remains open and grants no replay authority until hostile review closes."
   ]
 }
