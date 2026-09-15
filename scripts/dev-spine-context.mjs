@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json';
 
 const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
 const dirtyRaw = process.env.DEV_SPINE_DIRTY;
@@ -19,7 +19,7 @@ const context = {
   authorization: packet.authorization,
   authority: packet.authority,
   authority_docs: packet.authority_docs,
-  representative_fixture_status: packet.known_historical_state?.representative_fixture_status ?? 'UNKNOWN',
+  authority_map_status: packet.authority_map_gate?.status ?? 'UNKNOWN',
   next_action: packet.next_action,
 };
 
@@ -37,7 +37,7 @@ console.log('');
 console.log(`ACTIVE_PHASE=${context.phase}`);
 console.log(`PHASE_STATE=${context.phase_state}`);
 for (const [key, value] of Object.entries(context.authorization)) console.log(`AUTH_${key.toUpperCase()}=${value}`);
-console.log(`REPRESENTATIVE_FIXTURES=${context.representative_fixture_status}`);
+console.log(`AUTHORITY_MAP_STATUS=${context.authority_map_status}`);
 console.log('');
 console.log('AUTHORITY_ENTRY_POINTS:');
 for (const path of context.authority_docs) console.log(`  ${path}`);

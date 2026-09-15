@@ -1,0 +1,165 @@
+{
+  "schema": "dev-spine-phase/v1",
+  "repo": "CipherCuttle/sentry-forensic-gate",
+  "phase": "HISTORICAL_FULL_REPLAY_R1",
+  "state": "HISTORICAL_FULL_REPLAY_AUTHORITY_MAP_FROZEN",
+  "objective": "Replay the cryptographically frozen 147 historical launches across five frozen horizons using reviewed historical baseline/outcome policies after freezing an exact 147-row historical Sentry authority map.",
+  "predecessor": {
+    "phase": "HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1",
+    "pr": 22,
+    "closure_head": "efade9f625aeffc3f6e88494e13ac058c9ffb1ae",
+    "verdict": "CLOSED_AUTHORIZE",
+    "scope_identity_sha256": "b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211",
+    "exact_head_runs": {
+      "ci": {"id": 34914934591, "status": "SUCCESS"},
+      "historical_baseline_policy": {"id": 34914934649, "status": "SUCCESS"},
+      "historical_outcome_policy": {"id": 34914934625, "status": "SUCCESS"},
+      "historical_all_horizon_compatibility": {"id": 34914934604, "status": "SUCCESS"},
+      "historical_full_replay_authorization": {"id": 34914934640, "status": "SUCCESS"}
+    }
+  },
+  "authority": {
+    "current_default": "R3",
+    "current_r3_behavior_must_remain_unchanged": true,
+    "historical_full_replay_authorized": true,
+    "research_only": true
+  },
+  "authorization": {
+    "historical_compatibility_implementation": false,
+    "historical_baseline_policy_discovery": false,
+    "historical_baseline_policy_implementation": false,
+    "historical_outcome_policy_discovery": false,
+    "historical_outcome_policy_implementation": false,
+    "historical_all_horizon_compatibility_implementation": false,
+    "full_147_replay": true,
+    "fast_vet": false,
+    "canary": false,
+    "signing": false,
+    "transaction_construction": false,
+    "transaction_broadcast": false,
+    "live_execution": false,
+    "merge": false
+  },
+  "frozen_scope": {
+    "manifest_path": "fixtures/historical-full-replay-scope-r1.json",
+    "expected_launches": 147,
+    "first_launch_block": 39943476,
+    "final_launch_block": 49271598,
+    "launch_identity_sha256": "b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211",
+    "payload_sha256": "c8188726b28e72a72ffc5c8233a416c2fb531d2e6e3229f8906969d9dc1609a0",
+    "compressed_payload_sha256": "72a2b881c88ed1219b35406b129e5ea58968b0466cafcbe10a4a42468cd85813"
+  },
+  "frozen_policies": {
+    "baseline_policy_version": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
+    "outcome_policy_version": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
+    "decision_delay_blocks": 2,
+    "baseline_notionals_usd_micros": [250000, 500000, 1000000, 2000000, 5000000],
+    "horizons": [
+      {"label": "1m", "ms": 60000},
+      {"label": "5m", "ms": 300000},
+      {"label": "30m", "ms": 1800000},
+      {"label": "2h", "ms": 7200000},
+      {"label": "24h", "ms": 86400000}
+    ],
+    "weth_valuation_kind": "WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1",
+    "freshness_rejection_threshold_seconds": null
+  },
+  "authority_map_gate": {
+    "required": true,
+    "status": "FROZEN_VERIFIED",
+    "output_path": "fixtures/historical-full-replay-authority-map-r1.json",
+    "authority_map_sha256": "c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e6022275",
+    "fixture_content_sha256": "839c8ebd16589387b2e08888484962f0cf8d1389837f9045a7a9a4ef1eb97623",
+    "compressed_payload_sha256": "b140ffbfd3460de5a03c749d011ec8101323cc21f71af8c3c14826d5882b0893",
+    "mapping_rule": "PARTITION_FROZEN_LAUNCH_ORDER_BY_REVIEWED_CHRONOLOGICAL_COHORT_COUNTS_AND_VERIFY_EACH_PARTITION_START_AGAINST_REVIEWED_REPRESENTATIVE",
+    "expected_cohort_counts": [2, 5, 22, 29, 4, 22, 2, 2, 59],
+    "expected_start_ordinals": [1, 3, 8, 30, 59, 63, 85, 87, 89],
+    "cohorts": [
+      {"ordinal": 1, "implementation": "0xf6b81e4a431aa5c459b7502802bab306ce465146", "launches": 2, "first_launch_block": "39943476", "first_token_id": "1"},
+      {"ordinal": 2, "implementation": "0x3f01f1e0d8b76e0a7bf476335a9ebcb6755df536", "launches": 5, "first_launch_block": "40032260", "first_token_id": "5"},
+      {"ordinal": 3, "implementation": "0x6f269786695fcd8cc684ebf37604dd2fb1797fcc", "launches": 22, "first_launch_block": "42060479", "first_token_id": "24"},
+      {"ordinal": 4, "implementation": "0x71b2296124ce438bf2d0fef01e0adbd14a020282", "launches": 29, "first_launch_block": "44137983", "first_token_id": "49"},
+      {"ordinal": 5, "implementation": "0xfab1d73e877947fabe2d0966f9832541b6f82750", "launches": 4, "first_launch_block": "45634572", "first_token_id": "82"},
+      {"ordinal": 6, "implementation": "0xbe0e8f5d351b6acb0ec5c4ce6d2ba6c602bbb80f", "launches": 22, "first_launch_block": "45813860", "first_token_id": "86"},
+      {"ordinal": 7, "implementation": "0x28ed07daba4ca9025819b64e1abb98d6c15ba069", "launches": 2, "first_launch_block": "46611372", "first_token_id": "108"},
+      {"ordinal": 8, "implementation": "0x3515ce96c5c6fb8e73ebe04756f2227d035d6334", "launches": 2, "first_launch_block": "46637160", "first_token_id": "110"},
+      {"ordinal": 9, "implementation": "0xd5bced4c43eef627ee0524368cabafcb9f29cff0", "launches": 59, "first_launch_block": "46667534", "first_token_id": "112"}
+    ],
+    "discovery_run": 34917993958,
+    "discovery_artifact_id": 10376329939,
+    "discovery_artifact_sha256": "64ff2b9915cd0c449ac4edca8da96dfae773bd0de49e3225eac6720a1ac619c1"
+  },
+  "replay_contract": {
+    "expected_launch_receipts": 147,
+    "expected_horizon_cells": 735,
+    "economic_complete_required_for_phase_pass": false,
+    "accounting_complete_required_for_phase_pass": true,
+    "baseline_unverified_is_valid_evidence": true,
+    "outcome_unverified_is_valid_evidence": true,
+    "provider_transport_failure_is_not_market_evidence": true,
+    "per_launch_per_horizon_receipts_required": true,
+    "no_policy_mutation_after_observing_results": true
+  },
+  "acceptance": {
+    "authority_map_must_be_frozen_before_replay": true,
+    "scope_must_equal_frozen_147": true,
+    "point_in_time_inputs_only": true,
+    "reuse_reviewed_baseline_pipeline": true,
+    "reuse_reviewed_outcome_pipeline": true,
+    "all_147_launches_accounted": true,
+    "all_735_horizon_cells_accounted": true,
+    "unverified_remains_explicit": true,
+    "current_r3_must_remain_unchanged": true
+  },
+  "prohibitions": [
+    "Do not change historical baseline/outcome/valuation/notional/horizon/authority semantics after observing full-cohort results.",
+    "Do not convert provider or transport failures into market outcomes.",
+    "Do not change current R3/default behavior.",
+    "Do not run FAST_VET meaningfully.",
+    "Do not authorize canary, signing, transaction construction, transaction broadcast, live execution, or merge.",
+    "Do not merge without explicit user authority."
+  ],
+  "authority_docs": [
+    "AGENTS.md",
+    "docs/HISTORICAL_FULL_REPLAY_R1.md",
+    "docs/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.md",
+    "docs/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.md",
+    "docs/HISTORICAL_OUTCOME_POLICY_R1.md",
+    "docs/HISTORICAL_BASELINE_POLICY_R1.md",
+    "docs/FORWARD_OUTCOMES_R1.md"
+  ],
+  "context_files": [
+    "AGENTS.md",
+    "docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json",
+    "docs/HISTORICAL_FULL_REPLAY_R1.md",
+    "docs/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.md",
+    "fixtures/historical-full-replay-scope-r1.json",
+    "fixtures/historical-full-replay-scope-r1.part-001.b64",
+    "fixtures/historical-full-replay-scope-r1.part-002.b64",
+    "fixtures/historical-full-replay-scope-r1.part-003.b64",
+    "fixtures/historical-full-replay-scope-r1.part-004.b64",
+    "fixtures/historical-full-replay-scope-r1.part-005.b64",
+    "fixtures/historical-compatibility-r1.json",
+    "fixtures/historical-full-replay-authority-map-r1.json",
+    "fixtures/historical-full-replay-authority-map-r1.part-001.b64",
+    "fixtures/historical-full-replay-authority-map-r1.part-002.b64",
+    "fixtures/historical-full-replay-authority-map-r1.part-003.b64",
+    "fixtures/historical-full-replay-authority-map-r1.part-004.b64",
+    "fixtures/historical-full-replay-authority-map-r1.part-005.b64",
+    "scripts/historical-full-replay-scope-fixture.mjs",
+    "scripts/historical-full-replay-authority-map-fixture.mjs",
+    "scripts/historical-full-replay-authority-map-r1.mjs",
+    "src/historicalAllHorizonCompatibilityCli.ts",
+    "src/runtime/executableBaseline.ts",
+    "src/outcome/historicalRedstoneOutcomeSource.ts",
+    "src/tsunami/historicalRedstoneBaselineSource.ts",
+    "src/outcome/horizons.ts",
+    "mise.toml"
+  ],
+  "next_action": "EXECUTE_FULL_147_X_5_REPLAY",
+  "notes": [
+    "Stage A exact head 347dff80987eb403b0a215832b9a7823397816e0 passed CI, baseline, outcome, all-horizon, authorization-scope, and dedicated authority-map workflows.",
+    "Stage A run 34917993958 generated 147 rows across nine reviewed cohorts with canonical map digest c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e6022275.",
+    "The frozen authority map is stored losslessly as deterministic gzip+base64 chunks; the index pins raw and compressed SHA-256 digests. Stage B is legal only while deterministic regeneration exact-matches this fixture."
+  ]
+}

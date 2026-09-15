@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json';
 const OUTPUT_PATH = '.dev-spine/receipt.json';
 
 function fail(message) {
@@ -15,14 +15,9 @@ const dirtyRaw = process.env.DEV_SPINE_DIRTY;
 if (!testedSha || !sourceHeadSha) fail('tested/source SHA must be supplied by the Spine adapter');
 if (dirtyRaw !== 'true' && dirtyRaw !== 'false') fail('dirty state must be explicitly supplied by the Spine adapter');
 const dirty = dirtyRaw === 'true';
-
 const ciStatus = String(process.env.DEV_SPINE_CI_STATUS ?? 'unknown').toLowerCase();
 const repositoryVerification = ciStatus === 'success' ? 'PASS' : ciStatus === 'failure' || ciStatus === 'cancelled' ? 'FAIL' : 'UNKNOWN';
-const decision = packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZED'
-  ? 'AUTHORIZED'
-  : packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_REJECTED'
-    ? 'REJECTED'
-    : 'NOT_EVALUATED';
+const stage = packet.authority_map_gate?.status === 'FROZEN_VERIFIED' ? 'STAGE_B_AUTHORIZED_NOT_RUN' : 'STAGE_A_PENDING';
 
 const receipt = {
   schema: 'dev-spine-receipt/v1',
@@ -32,29 +27,25 @@ const receipt = {
   source_head_sha: sourceHeadSha,
   source_matches_tested_sha: sourceHeadSha === testedSha,
   dirty_worktree_observed: dirty,
-  repository_verification: {
-    ci_status: ciStatus,
-    verdict: repositoryVerification,
-  },
+  repository_verification: { ci_status: ciStatus, verdict: repositoryVerification },
   phase_evidence: {
     predecessor_phase: packet.predecessor.phase,
     predecessor_closure_head: packet.predecessor.closure_head,
     predecessor_verdict: packet.predecessor.verdict,
-    representative_baseline_complete: packet.predecessor.baseline_complete,
-    representative_outcomes_complete: packet.predecessor.outcomes_complete,
-    representative_outcomes_unverified: packet.predecessor.outcomes_unverified,
-    full_replay_authorization_decision: decision,
+    frozen_launches: packet.frozen_scope.expected_launches,
+    frozen_scope_sha256: packet.frozen_scope.launch_identity_sha256,
+    authority_map_status: packet.authority_map_gate.status,
+    authority_map_sha256: packet.authority_map_gate.authority_map_sha256,
     replay_executed: false,
   },
   authorization: packet.authorization,
   phase_state: packet.state,
   next_action: packet.next_action,
-  verdict:
-    repositoryVerification === 'PASS' && !dirty
-      ? `REPO_VERIFICATION_PASS_DECISION_${decision}`
-      : repositoryVerification === 'FAIL'
-        ? `REPO_VERIFICATION_FAIL_DECISION_${decision}`
-        : `REPO_VERIFICATION_UNKNOWN_DECISION_${decision}`,
+  verdict: repositoryVerification === 'PASS' && !dirty
+    ? `REPO_VERIFICATION_PASS_HISTORICAL_FULL_REPLAY_${stage}`
+    : repositoryVerification === 'FAIL'
+      ? `REPO_VERIFICATION_FAIL_HISTORICAL_FULL_REPLAY_${stage}`
+      : `REPO_VERIFICATION_UNKNOWN_HISTORICAL_FULL_REPLAY_${stage}`,
 };
 
 fs.mkdirSync('.dev-spine', { recursive: true });
