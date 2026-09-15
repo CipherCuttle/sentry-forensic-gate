@@ -8,7 +8,10 @@ on:
       - 'fixtures/historical-full-replay-scope-r1.json'
       - 'fixtures/historical-full-replay-scope-r1.part-*.b64'
       - 'fixtures/historical-compatibility-r1.json'
+      - 'fixtures/historical-full-replay-authority-map-r1.json'
+      - 'fixtures/historical-full-replay-authority-map-r1.part-*.b64'
       - 'scripts/historical-full-replay-scope-fixture.mjs'
+      - 'scripts/historical-full-replay-authority-map-fixture.mjs'
       - 'scripts/historical-full-replay-authority-map-r1.mjs'
       - 'scripts/dev-spine-check.mjs'
       - 'scripts/dev-spine-check-test.mjs'
@@ -30,23 +33,22 @@ jobs:
         run: |
           node scripts/dev-spine-check-test.mjs
           node scripts/dev-spine-check.mjs
-      - name: Build deterministic 147-row authority map
+      - name: Regenerate and exact-match frozen 147-row authority map
         env:
           OUTPUT_PATH: historical-full-replay-authority-map-r1-live.json
         run: node scripts/historical-full-replay-authority-map-r1.mjs
-      - name: Validate Stage A receipt
+      - name: Validate Stage A freeze receipt
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const receipt=JSON.parse(fs.readFileSync('historical-full-replay-authority-map-r1-live.json','utf8'));
           if(receipt.status!=='AUTHORITY_MAP_DISCOVERY_COMPLETE_NO_ECONOMIC_REPLAY') throw new Error('authority map status mismatch');
-          if(receipt.launchCount!==147||receipt.rows?.length!==147) throw new Error('authority map must contain exactly 147 rows');
-          if(receipt.cohortCount!==9) throw new Error('authority map must contain exactly nine cohorts');
-          if(!/^[0-9a-f]{64}$/.test(receipt.authorityMapSha256??'')) throw new Error('authority map digest missing');
-          if(receipt.sourceScopeIdentitySha256!=='b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211') throw new Error('source scope digest drift');
-          console.log(`HISTORICAL_FULL_REPLAY_STAGE_A=PASS launches=${receipt.launchCount} digest=${receipt.authorityMapSha256}`);
+          if(receipt.launchCount!==147||receipt.rows?.length!==147||receipt.cohortCount!==9) throw new Error('authority map accounting mismatch');
+          if(receipt.authorityMapSha256!=='c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e6022275') throw new Error('authority map digest mismatch');
+          if(!receipt.fixturePresent||receipt.fixtureMatch!==true) throw new Error('frozen authority map must exact-match deterministic regeneration');
+          console.log(`HISTORICAL_FULL_REPLAY_STAGE_A_FREEZE=PASS launches=${receipt.launchCount} digest=${receipt.authorityMapSha256} fixtureMatch=${receipt.fixtureMatch}`);
           NODE
-      - name: Upload Stage A evidence
+      - name: Upload Stage A freeze evidence
         uses: actions/upload-artifact@v4
         with:
           name: historical-full-replay-r1-authority-map

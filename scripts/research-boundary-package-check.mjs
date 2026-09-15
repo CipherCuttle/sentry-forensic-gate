@@ -13,6 +13,11 @@ const allowedExactFiles = new Set([
   'fixtures/historical-full-replay-scope-r1.part-003.b64',
   'fixtures/historical-full-replay-scope-r1.part-004.b64',
   'fixtures/historical-full-replay-scope-r1.part-005.b64',
+  'fixtures/historical-full-replay-authority-map-r1.part-001.b64',
+  'fixtures/historical-full-replay-authority-map-r1.part-002.b64',
+  'fixtures/historical-full-replay-authority-map-r1.part-003.b64',
+  'fixtures/historical-full-replay-authority-map-r1.part-004.b64',
+  'fixtures/historical-full-replay-authority-map-r1.part-005.b64',
 ]);
 const skippedDirs = new Set(['.git', 'node_modules', 'dist']);
 

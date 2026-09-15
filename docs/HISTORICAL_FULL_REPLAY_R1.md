@@ -2,7 +2,7 @@
 
 ## Status
 
-`PREREGISTERED / IMPLEMENTATION AUTHORIZED / STAGE A AUTHORITY MAP NEXT / ECONOMIC REPLAY NOT YET RUN`
+`STAGE A FROZEN + VERIFIED / STAGE B 147×5 REPLAY NEXT / ECONOMIC REPLAY NOT YET RUN`
 
 This phase is the separately authorized research-only successor to `HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1`. It will replay the frozen historical cohort only after an exact historical authority map is frozen. It does not broaden current R3 or live execution authority.
 
@@ -75,7 +75,7 @@ Expected cohort start ordinals are:
 
 Do **not** infer authority from approximate block ranges. A boundary mismatch is a STOP, not permission to guess.
 
-Stage B is mechanically unauthorized until Stage A is committed and verified.
+Stage A is now frozen and verified. Authority-map discovery run `34917993958` produced exactly 147 rows across the nine reviewed cohorts. Artifact `10376329939` has GitHub artifact digest `sha256:64ff2b9915cd0c449ac4edca8da96dfae773bd0de49e3225eac6720a1ac619c1`. The canonical authority-map digest is `c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e6022275`. Stage B is eligible only while the committed fixture re-generates to this exact digest and row set.
 
 ## Stage B — execute the frozen 147 × 5 replay
 
