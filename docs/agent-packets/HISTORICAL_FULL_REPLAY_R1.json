@@ -10,14 +10,8 @@
     "closure_head": "efade9f625aeffc3f6e88494e13ac058c9ffb1ae",
     "verdict": "CLOSED_AUTHORIZE",
     "scope_identity_sha256": "b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211",
-    "hostile_review": {
-      "id": 5204327465,
-      "reviewed_head": "be0259b1845787b651ad8ffdad32b693bc2c76ce"
-    },
-    "targeted_rereview": {
-      "id": 5204380099,
-      "reviewed_head": "e527255949ffd72409284a379cf4428c48aa855f"
-    },
+    "hostile_review": {"id": 5204327465, "reviewed_head": "be0259b1845787b651ad8ffdad32b693bc2c76ce"},
+    "targeted_rereview": {"id": 5204380099, "reviewed_head": "e527255949ffd72409284a379cf4428c48aa855f"},
     "exact_head_runs": {
       "ci": {"id": 34914934591, "status": "SUCCESS"},
       "historical_baseline_policy": {"id": 34914934649, "status": "SUCCESS"},
@@ -152,13 +146,16 @@
     "src/outcome/historicalRedstoneOutcomeSource.ts",
     "src/tsunami/historicalRedstoneBaselineSource.ts",
     "src/outcome/horizons.ts",
-    "mise.toml"
+    "mise.toml",
+    "scripts/historical-full-replay-authority-map-r1.mjs",
+    ".github/workflows/historical-full-replay-r1-stage-a.yml"
   ],
   "next_action": "BUILD_AND_VERIFY_147_LAUNCH_AUTHORITY_MAP",
   "notes": [
     "Authorization predecessor PR #22 closed AUTHORIZE on exact head efade9f625aeffc3f6e88494e13ac058c9ffb1ae with five exact-head workflows SUCCESS.",
     "The frozen canonical launch manifest contains exactly 147 unique launch identities but intentionally does not encode historical Sentry implementation authority.",
     "The reviewed historical compatibility evidence records nine chronological launch-producing implementation cohorts with counts 2,5,22,29,4,22,2,2,59 and first-launch representatives. Stage A must turn that evidence into a verified 147-row authority map before Stage B.",
-    "Stage B will reuse the reviewed historical baseline/outcome pipeline for all five frozen horizons. Full-cohort COMPLETE/UNVERIFIED counts are evidence; phase PASS is complete scoped accounting plus invariant preservation, not a post-hoc demand for 735 economic COMPLETE cells."
+    "Stage B will reuse the reviewed historical baseline/outcome pipeline for all five frozen horizons. Full-cohort COMPLETE/UNVERIFIED counts are evidence; phase PASS is complete scoped accounting plus invariant preservation, not a post-hoc demand for 735 economic COMPLETE cells.",
+    "Stage A implementation is a deterministic offline mapper over committed evidence only; it performs no RPC calls and no economic replay."
   ]
 }

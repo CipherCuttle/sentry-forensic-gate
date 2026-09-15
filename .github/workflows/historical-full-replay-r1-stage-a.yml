@@ -1,0 +1,54 @@
+name: historical-full-replay-r1-stage-a
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/HISTORICAL_FULL_REPLAY_R1.md'
+      - 'docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json'
+      - 'fixtures/historical-full-replay-scope-r1.json'
+      - 'fixtures/historical-full-replay-scope-r1.part-*.b64'
+      - 'fixtures/historical-compatibility-r1.json'
+      - 'scripts/historical-full-replay-scope-fixture.mjs'
+      - 'scripts/historical-full-replay-authority-map-r1.mjs'
+      - 'scripts/dev-spine-check.mjs'
+      - 'scripts/dev-spine-check-test.mjs'
+      - '.github/workflows/historical-full-replay-r1-stage-a.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-authority-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate fail-closed Stage A metadata
+        run: |
+          node scripts/dev-spine-check-test.mjs
+          node scripts/dev-spine-check.mjs
+      - name: Build deterministic 147-row authority map
+        env:
+          OUTPUT_PATH: historical-full-replay-authority-map-r1-live.json
+        run: node scripts/historical-full-replay-authority-map-r1.mjs
+      - name: Validate Stage A receipt
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const receipt=JSON.parse(fs.readFileSync('historical-full-replay-authority-map-r1-live.json','utf8'));
+          if(receipt.status!=='AUTHORITY_MAP_DISCOVERY_COMPLETE_NO_ECONOMIC_REPLAY') throw new Error('authority map status mismatch');
+          if(receipt.launchCount!==147||receipt.rows?.length!==147) throw new Error('authority map must contain exactly 147 rows');
+          if(receipt.cohortCount!==9) throw new Error('authority map must contain exactly nine cohorts');
+          if(!/^[0-9a-f]{64}$/.test(receipt.authorityMapSha256??'')) throw new Error('authority map digest missing');
+          if(receipt.sourceScopeIdentitySha256!=='b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211') throw new Error('source scope digest drift');
+          console.log(`HISTORICAL_FULL_REPLAY_STAGE_A=PASS launches=${receipt.launchCount} digest=${receipt.authorityMapSha256}`);
+          NODE
+      - name: Upload Stage A evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-full-replay-r1-authority-map
+          path: historical-full-replay-authority-map-r1-live.json
+          if-no-files-found: error
