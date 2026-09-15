@@ -40,7 +40,37 @@
     "full_147_replay": false,
     "fast_vet": false,
     "canary": false,
+    "signing": false,
+    "transaction_construction": false,
+    "transaction_broadcast": false,
+    "live_execution": false,
     "merge": false
+  },
+  "review_gate": {
+    "required": true,
+    "status": "REPAIRED_PENDING_TARGETED_REREVIEW",
+    "initial_review_id": 5204327465,
+    "initial_reviewed_head": "be0259b1845787b651ad8ffdad32b693bc2c76ce",
+    "initial_critical_high_count": 2,
+    "critical_high_findings": [
+      {
+        "comment_id": 4010865142,
+        "severity": "P1",
+        "summary": "Reject unrecognized authorization keys and explicitly represent live/execution capabilities as false.",
+        "repair_status": "FIXED_PENDING_TARGETED_REREVIEW"
+      },
+      {
+        "comment_id": 4010865149,
+        "severity": "P1",
+        "summary": "Require hostile-review closure evidence for the reviewed authorization head before AUTHORIZE is legal.",
+        "repair_status": "FIXED_PENDING_TARGETED_REREVIEW"
+      }
+    ],
+    "targeted_rereview_required": true,
+    "review_loop_limit": 1,
+    "targeted_review_id": null,
+    "targeted_reviewed_head": null,
+    "unresolved_critical_high": 2
   },
   "acceptance": {
     "frozen_historical_launch_count": 147,
@@ -93,6 +123,8 @@
   "decision_rules": [
     "AUTHORIZE only if the exact predecessor closure evidence remains internally consistent and all four exact-head predecessor workflows are SUCCESS.",
     "Before AUTHORIZE, recover exactly 147 canonical historical deployment identities, commit the full scope manifest, pin its SHA-256 identity digest, and verify a fresh live discovery matches it.",
+    "Before AUTHORIZE, the mandatory hostile review gate must be CLOSED_PASS with exact reviewed-head and review-id evidence and zero unresolved Critical/High findings.",
+    "The authorization object keyset is closed; unrecognized authority keys are invalid, and signing, transaction construction, transaction broadcast, and live execution must remain explicitly false.",
     "Authorization scope, if granted, is exactly the committed 147-launch manifest and the frozen five horizons under the existing historical baseline/outcome policies.",
     "Do not infer that the full replay will be 147/147 COMPLETE from representative 45/45 compatibility; full-cohort failures remain valid results.",
     "Do not change historical pricing, valuation, horizon, authority, notional, or failure semantics to improve replay completion.",
@@ -113,8 +145,9 @@
     "Do not change current R3 authority, EXECUTABLE_BASELINE_R1, FORWARD_OUTCOMES_R1, or reviewed historical baseline/outcome semantics.",
     "Do not fit oracle freshness thresholds or use retrospective off-chain prices.",
     "Do not silently shrink notionals or create alternate baseline/outcome algorithms.",
+    "Do not add unrecognized authorization keys or encode implicit live/execution authority outside the closed authorization keyset.",
     "Do not run FAST_VET meaningfully.",
-    "Do not authorize canary, signing, execution, or transaction broadcast.",
+    "Do not authorize canary, signing, transaction construction, transaction broadcast, live execution, or merge.",
     "Do not merge without explicit user authority.",
     "Do not reopen closed predecessor review cycles unless their evidence is invalidated."
   ],
@@ -151,12 +184,13 @@
     "src/tsunami/historicalRedstoneBaselineSource.ts",
     "mise.toml"
   ],
-  "next_action": "DECIDE_FULL_147_REPLAY_AUTHORIZATION",
+  "next_action": "TARGETED_REREVIEW_CRITICAL_HIGH_FIXES",
   "notes": [
     "The predecessor phase is closed PASS on exact head 28e598d738c633b0211bae914b8f92450ae61f90 with all four exact-head verification workflows green.",
     "Scope discovery run 34910384086 recovered exactly 147 unique canonical launch identities over blocks 39943476..49271598 using the isolated public QuickNode transport.",
     "The frozen identity digest is b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211. The committed payload is deterministic gzip+base64 split across five repository chunks; payload and compressed hashes are pinned and checked fail-closed.",
     "The committed frozen scope was freshly reverified against canonical chain logs on run 34912185853: 147/147 identities matched exactly with fixtureMatch=true.",
-    "The scope prerequisite is FROZEN_VERIFIED; the replay decision remains open and grants no replay authority until hostile review closes."
+    "Initial hostile Codex review 5204327465 reviewed be0259b1845787b651ad8ffdad32b693bc2c76ce and found two P1 governance defects: open authorization keysets and missing exact hostile-review closure binding.",
+    "Both P1s are repaired in the current changeset, but the review gate intentionally remains unresolved until the single targeted re-review closes them. Full replay authority remains false."
   ]
 }

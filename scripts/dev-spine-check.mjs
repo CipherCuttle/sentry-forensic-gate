@@ -4,20 +4,59 @@ import { loadFrozenScopeManifest } from './historical-full-replay-scope-fixture.
 
 const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json';
 const PREDECESSOR_HEAD = '28e598d738c633b0211bae914b8f92450ae61f90';
+const INITIAL_REVIEWED_HEAD = 'be0259b1845787b651ad8ffdad32b693bc2c76ce';
+const INITIAL_REVIEW_ID = 5204327465;
+const INITIAL_FINDING_IDS = [4010865142, 4010865149];
 const SCOPE_DIGEST = 'b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211';
 const SCOPE_PAYLOAD_SHA = 'c8188726b28e72a72ffc5c8233a416c2fb531d2e6e3229f8906969d9dc1609a0';
 const SCOPE_COMPRESSED_SHA = '72a2b881c88ed1219b35406b129e5ea58968b0466cafcbe10a4a42468cd85813';
 const BASELINE_POLICY = 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1';
 const OUTCOME_POLICY = 'HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1';
 const EXPECTED_HORIZONS = [{label:'1m',ms:60000},{label:'5m',ms:300000},{label:'30m',ms:1800000},{label:'2h',ms:7200000},{label:'24h',ms:86400000}];
-const SENSITIVE_AUTHORIZATION_KEYS = ['historical_compatibility_implementation','historical_baseline_policy_discovery','historical_baseline_policy_implementation','historical_outcome_policy_discovery','historical_outcome_policy_implementation','historical_all_horizon_compatibility_implementation','full_147_replay','fast_vet','canary','merge'];
-const ALL_FALSE_AUTHORIZATION = Object.fromEntries(SENSITIVE_AUTHORIZATION_KEYS.map((key) => [key, false]));
+const AUTHORIZATION_KEYS = [
+  'historical_compatibility_implementation','historical_baseline_policy_discovery','historical_baseline_policy_implementation',
+  'historical_outcome_policy_discovery','historical_outcome_policy_implementation','historical_all_horizon_compatibility_implementation',
+  'full_147_replay','fast_vet','canary','signing','transaction_construction','transaction_broadcast','live_execution','merge',
+];
+const ALL_FALSE_AUTHORIZATION = Object.fromEntries(AUTHORIZATION_KEYS.map((key) => [key, false]));
 const STATE_AUTHORIZATION = {
   HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN: { ...ALL_FALSE_AUTHORIZATION },
   HISTORICAL_FULL_REPLAY_AUTHORIZED: { ...ALL_FALSE_AUTHORIZATION, full_147_replay: true },
   HISTORICAL_FULL_REPLAY_AUTHORIZATION_REJECTED: { ...ALL_FALSE_AUTHORIZATION },
 };
 function invariant(condition, message) { if (!condition) throw new Error(message); }
+function exactKeys(value, expected, label) {
+  const actualKeys = Object.keys(value ?? {}).sort();
+  const expectedKeys = [...expected].sort();
+  invariant(JSON.stringify(actualKeys) === JSON.stringify(expectedKeys), `${label} keyset drift`);
+}
+function validateReviewGate(packet, authorized) {
+  const gate = packet.review_gate;
+  invariant(gate?.required === true, 'hostile review gate must be required');
+  invariant(gate?.initial_review_id === INITIAL_REVIEW_ID, 'initial hostile review id drift');
+  invariant(gate?.initial_reviewed_head === INITIAL_REVIEWED_HEAD, 'initial hostile reviewed head drift');
+  invariant(gate?.initial_critical_high_count === 2, 'initial hostile review Critical/High count drift');
+  invariant(Array.isArray(gate?.critical_high_findings) && gate.critical_high_findings.length === 2, 'hostile review must record exactly two Critical/High findings');
+  invariant(JSON.stringify(gate.critical_high_findings.map((f) => f.comment_id).sort((a,b)=>a-b)) === JSON.stringify([...INITIAL_FINDING_IDS].sort((a,b)=>a-b)), 'hostile review finding ids drift');
+  invariant(gate.critical_high_findings.every((f) => f.severity === 'P1'), 'hostile review finding severity drift');
+  invariant(gate.targeted_rereview_required === true, 'targeted re-review must remain required after P1 fixes');
+  invariant(gate.review_loop_limit === 1, 'review loop limit must remain one targeted re-review');
+  if (gate.status === 'REPAIRED_PENDING_TARGETED_REREVIEW') {
+    invariant(!authorized, 'authorized replay requires hostile review gate CLOSED_PASS');
+    invariant(gate.targeted_review_id === null && gate.targeted_reviewed_head === null, 'pending targeted re-review must not predeclare review evidence');
+    invariant(gate.unresolved_critical_high === 2, 'pending targeted re-review must retain two unresolved review findings');
+    invariant(gate.critical_high_findings.every((f) => f.repair_status === 'FIXED_PENDING_TARGETED_REREVIEW'), 'P1 repairs must remain pending targeted re-review');
+  } else if (gate.status === 'CLOSED_PASS') {
+    invariant(Number.isInteger(gate.targeted_review_id) && gate.targeted_review_id > 0, 'closed hostile review gate requires targeted review id');
+    invariant(/^[0-9a-f]{40}$/.test(gate.targeted_reviewed_head ?? ''), 'closed hostile review gate requires exact targeted reviewed head');
+    invariant(gate.targeted_reviewed_head !== INITIAL_REVIEWED_HEAD, 'targeted review must review the repaired head');
+    invariant(gate.unresolved_critical_high === 0, 'closed hostile review gate requires zero unresolved Critical/High findings');
+    invariant(gate.critical_high_findings.every((f) => f.repair_status === 'CLOSED'), 'closed hostile review gate requires both P1 findings closed');
+  } else {
+    throw new Error(`unsupported hostile review gate status: ${gate?.status}`);
+  }
+  if (authorized) invariant(gate.status === 'CLOSED_PASS', 'authorized replay requires hostile review gate CLOSED_PASS');
+}
 function validateScope(packet, authorized) {
   const scope = packet.acceptance?.full_replay_scope_manifest;
   invariant(scope?.required === true, 'full replay scope manifest must be required');
@@ -39,9 +78,9 @@ function validateScope(packet, authorized) {
   invariant(frozen.index.launchIdentitySha256 === scope.launch_identity_sha256, 'packet scope digest must match committed scope index');
   invariant(frozen.index.payloadSha256 === scope.payload_sha256, 'packet payload digest must match committed scope index');
   if (scope.status === 'FROZEN_VERIFIED') {
-    invariant(Number.isInteger(scope.live_verification_run) && scope.live_verification_run > 0, 'frozen verified scope requires live verification run');
-    invariant(Number.isInteger(scope.live_verification_artifact_id) && scope.live_verification_artifact_id > 0, 'frozen verified scope requires live verification artifact');
-    invariant(/^[0-9a-f]{64}$/.test(scope.live_verification_artifact_sha256 ?? ''), 'frozen verified scope requires live verification artifact digest');
+    invariant(scope.live_verification_run === 34912185853, 'frozen verified scope live verification run drift');
+    invariant(scope.live_verification_artifact_id === 10375315812, 'frozen verified scope live verification artifact drift');
+    invariant(scope.live_verification_artifact_sha256 === '8eb03c983121261f3c4ed8923bc826f1e02c8f2c79ceecbfe345646059cb870a', 'frozen verified scope live verification artifact digest drift');
   } else {
     invariant(scope.live_verification_run === null && scope.live_verification_artifact_id === null && scope.live_verification_artifact_sha256 === null, 'pending live verification must not predeclare verification provenance');
   }
@@ -55,13 +94,15 @@ export function validatePacket(packet) {
   invariant(Array.isArray(packet.context_files) && packet.context_files.length > 0, 'context_files must be non-empty');
   for (const path of new Set([...packet.authority_docs, ...packet.context_files])) invariant(fs.existsSync(path) && fs.statSync(path).isFile(), `authority/context file missing: ${path}`);
   const auth = packet.authorization;
+  exactKeys(auth, AUTHORIZATION_KEYS, 'authorization');
   const expected = STATE_AUTHORIZATION[packet.state];
   invariant(expected, `unsupported phase state: ${packet.state}`);
-  for (const key of SENSITIVE_AUTHORIZATION_KEYS) {
-    invariant(typeof auth?.[key] === 'boolean', `authorization.${key} must be boolean`);
+  for (const key of AUTHORIZATION_KEYS) {
+    invariant(typeof auth[key] === 'boolean', `authorization.${key} must be boolean`);
     invariant(auth[key] === expected[key], `state ${packet.state} requires authorization.${key}=${expected[key]}`);
   }
   const authorized = packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZED';
+  validateReviewGate(packet, authorized);
   invariant(packet.authority?.current_r3_behavior_must_remain_unchanged === true, 'current R3 invariant drift');
   invariant(packet.authority?.historical_authorization_granted === authorized, `state ${packet.state} requires authority.historical_authorization_granted=${authorized}`);
   invariant(packet.authority?.historical_baseline_policy_status === 'PASS' && packet.authority?.historical_outcome_policy_status === 'PASS' && packet.authority?.historical_all_horizon_compatibility_status === 'PASS', 'historical predecessor policy status drift');
@@ -69,9 +110,7 @@ export function validatePacket(packet) {
   invariant(p?.phase === 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1' && p?.closure_head === PREDECESSOR_HEAD && p?.verdict === 'HISTORICAL_ALL_HORIZON_COMPATIBILITY_PASS', 'predecessor identity/verdict drift');
   invariant(p?.representatives_attempted === 9 && p?.baseline_complete === 9 && p?.baseline_unverified === 0, 'predecessor baseline result drift');
   invariant(p?.outcomes_attempted === 45 && p?.outcomes_complete === 45 && p?.outcomes_unverified === 0, 'predecessor outcome result must remain 45 COMPLETE / 0 UNVERIFIED');
-  for (const [name,id] of Object.entries({ci:34908787242,historical_baseline_policy:34908787280,historical_outcome_policy:34908787225,historical_all_horizon_compatibility:34908787293})) {
-    invariant(p?.exact_head_runs?.[name]?.id === id && p?.exact_head_runs?.[name]?.status === 'SUCCESS', `predecessor exact-head run drift: ${name}`);
-  }
+  for (const [name,id] of Object.entries({ci:34908787242,historical_baseline_policy:34908787280,historical_outcome_policy:34908787225,historical_all_horizon_compatibility:34908787293})) invariant(p?.exact_head_runs?.[name]?.id === id && p?.exact_head_runs?.[name]?.status === 'SUCCESS', `predecessor exact-head run drift: ${name}`);
   const a = packet.acceptance;
   invariant(a?.frozen_historical_launch_count === 147 && a?.launch_producing_implementation_cohorts === 9 && a?.representative_cohorts_covered === 9, 'historical population/cohort prerequisite drift');
   invariant(a?.representative_baseline_complete === 9 && a?.representative_baseline_unverified === 0, 'representative baseline prerequisite drift');
@@ -86,12 +125,15 @@ export function validatePacket(packet) {
   invariant(h?.launch_count === 147 && h?.first_launch_block === 39943476 && h?.final_launch_block === 49271598 && h?.launch_producing_implementation_cohorts === 9, 'known historical state drift');
   invariant(h?.representative_fixture_status === 'CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT' && fs.existsSync(h?.representative_fixture_path), 'representative fixture prerequisite drift');
   if (packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN') {
-    invariant(['FREEZE_FULL_147_REPLAY_SCOPE_THEN_DECIDE','DECIDE_FULL_147_REPLAY_AUTHORIZATION'].includes(packet.next_action), 'open decision next action drift');
+    const expectedNext = packet.review_gate.status === 'CLOSED_PASS' ? 'DECIDE_FULL_147_REPLAY_AUTHORIZATION' : 'TARGETED_REREVIEW_CRITICAL_HIGH_FIXES';
+    invariant(packet.next_action === expectedNext, 'open decision next action drift');
     invariant(!packet.decision_result, 'decision result must not be predeclared while open');
   } else if (authorized) {
     invariant(packet.next_action === 'OPEN_HISTORICAL_FULL_REPLAY_R1_IMPLEMENTATION', 'authorized next action drift');
     invariant(packet.decision_result?.status === 'AUTHORIZE' && packet.decision_result?.basis_predecessor_head === PREDECESSOR_HEAD, 'authorized decision basis drift');
     invariant(packet.decision_result?.scope_identity_sha256 === packet.acceptance.full_replay_scope_manifest.launch_identity_sha256, 'authorized decision scope digest drift');
+    invariant(packet.decision_result?.hostile_review_id === packet.review_gate.targeted_review_id, 'authorized decision hostile review id drift');
+    invariant(packet.decision_result?.reviewed_authorization_head === packet.review_gate.targeted_reviewed_head, 'authorized decision reviewed head drift');
     invariant(typeof packet.decision_result?.rationale === 'string' && packet.decision_result.rationale.length > 0, 'authorized decision rationale required');
   } else {
     invariant(packet.next_action === 'STOP_FULL_147_REPLAY' && packet.decision_result?.status === 'REJECT' && packet.decision_result?.basis_predecessor_head === PREDECESSOR_HEAD, 'rejected decision basis/next action drift');
