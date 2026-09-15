@@ -7,6 +7,9 @@ const PREDECESSOR_HEAD = '28e598d738c633b0211bae914b8f92450ae61f90';
 const INITIAL_REVIEWED_HEAD = 'be0259b1845787b651ad8ffdad32b693bc2c76ce';
 const INITIAL_REVIEW_ID = 5204327465;
 const INITIAL_FINDING_IDS = [4010865142, 4010865149];
+const TARGETED_REVIEWED_HEAD = 'e527255949ffd72409284a379cf4428c48aa855f';
+const TARGETED_REVIEW_ID = 5204380099;
+const TARGETED_REVIEW_FINDING_ID = 4010914490;
 const SCOPE_DIGEST = 'b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211';
 const SCOPE_PAYLOAD_SHA = 'c8188726b28e72a72ffc5c8233a416c2fb531d2e6e3229f8906969d9dc1609a0';
 const SCOPE_COMPRESSED_SHA = '72a2b881c88ed1219b35406b129e5ea58968b0466cafcbe10a4a42468cd85813';
@@ -36,25 +39,19 @@ function validateReviewGate(packet, authorized) {
   invariant(gate?.initial_review_id === INITIAL_REVIEW_ID, 'initial hostile review id drift');
   invariant(gate?.initial_reviewed_head === INITIAL_REVIEWED_HEAD, 'initial hostile reviewed head drift');
   invariant(gate?.initial_critical_high_count === 2, 'initial hostile review Critical/High count drift');
-  invariant(Array.isArray(gate?.critical_high_findings) && gate.critical_high_findings.length === 2, 'hostile review must record exactly two Critical/High findings');
+  invariant(Array.isArray(gate?.critical_high_findings) && gate.critical_high_findings.length === 2, 'hostile review must record exactly two initial Critical/High findings');
   invariant(JSON.stringify(gate.critical_high_findings.map((f) => f.comment_id).sort((a,b)=>a-b)) === JSON.stringify([...INITIAL_FINDING_IDS].sort((a,b)=>a-b)), 'hostile review finding ids drift');
   invariant(gate.critical_high_findings.every((f) => f.severity === 'P1'), 'hostile review finding severity drift');
   invariant(gate.targeted_rereview_required === true, 'targeted re-review must remain required after P1 fixes');
   invariant(gate.review_loop_limit === 1, 'review loop limit must remain one targeted re-review');
-  if (gate.status === 'REPAIRED_PENDING_TARGETED_REREVIEW') {
-    invariant(!authorized, 'authorized replay requires hostile review gate CLOSED_PASS');
-    invariant(gate.targeted_review_id === null && gate.targeted_reviewed_head === null, 'pending targeted re-review must not predeclare review evidence');
-    invariant(gate.unresolved_critical_high === 2, 'pending targeted re-review must retain two unresolved review findings');
-    invariant(gate.critical_high_findings.every((f) => f.repair_status === 'FIXED_PENDING_TARGETED_REREVIEW'), 'P1 repairs must remain pending targeted re-review');
-  } else if (gate.status === 'CLOSED_PASS') {
-    invariant(Number.isInteger(gate.targeted_review_id) && gate.targeted_review_id > 0, 'closed hostile review gate requires targeted review id');
-    invariant(/^[0-9a-f]{40}$/.test(gate.targeted_reviewed_head ?? ''), 'closed hostile review gate requires exact targeted reviewed head');
-    invariant(gate.targeted_reviewed_head !== INITIAL_REVIEWED_HEAD, 'targeted review must review the repaired head');
-    invariant(gate.unresolved_critical_high === 0, 'closed hostile review gate requires zero unresolved Critical/High findings');
-    invariant(gate.critical_high_findings.every((f) => f.repair_status === 'CLOSED'), 'closed hostile review gate requires both P1 findings closed');
-  } else {
-    throw new Error(`unsupported hostile review gate status: ${gate?.status}`);
-  }
+  invariant(gate.targeted_review_id === TARGETED_REVIEW_ID, 'targeted review id drift');
+  invariant(gate.targeted_reviewed_head === TARGETED_REVIEWED_HEAD, 'targeted reviewed head drift');
+  invariant(gate.targeted_review_finding?.comment_id === TARGETED_REVIEW_FINDING_ID, 'targeted re-review finding id drift');
+  invariant(gate.targeted_review_finding?.severity === 'P1', 'targeted re-review finding severity drift');
+  invariant(gate.targeted_review_finding?.repair_status === 'FIXED_BOUNDED_NO_FURTHER_REREVIEW', 'targeted re-review P1 repair status drift');
+  invariant(gate.status === 'CLOSED_PASS', 'hostile review gate must be CLOSED_PASS after bounded targeted re-review repair');
+  invariant(gate.unresolved_critical_high === 0, 'closed hostile review gate requires zero unresolved Critical/High findings');
+  invariant(gate.critical_high_findings.every((f) => f.repair_status === 'CLOSED'), 'closed hostile review gate requires both initial P1 findings closed');
   if (authorized) invariant(gate.status === 'CLOSED_PASS', 'authorized replay requires hostile review gate CLOSED_PASS');
 }
 function validateScope(packet, authorized) {
@@ -62,12 +59,7 @@ function validateScope(packet, authorized) {
   invariant(scope?.required === true, 'full replay scope manifest must be required');
   invariant(scope?.path === 'fixtures/historical-full-replay-scope-r1.json', 'full replay scope manifest path drift');
   invariant(scope?.expected_launches === 147 && scope?.first_launch_block === 39943476 && scope?.final_launch_block === 49271598, 'scope manifest range/count drift');
-  invariant(['DISCOVERY_PENDING','FROZEN_PENDING_LIVE_VERIFY','FROZEN_VERIFIED'].includes(scope?.status), 'unsupported scope manifest status');
-  if (scope.status === 'DISCOVERY_PENDING') {
-    invariant(!authorized, 'authorized replay requires FROZEN_VERIFIED scope manifest');
-    invariant(scope.launch_identity_sha256 === null, 'pending scope must not predeclare identity digest');
-    return;
-  }
+  invariant(scope?.status === 'FROZEN_VERIFIED', 'authorized decision phase requires FROZEN_VERIFIED scope manifest');
   invariant(scope.launch_identity_sha256 === SCOPE_DIGEST, 'frozen scope identity digest drift');
   invariant(scope.payload_sha256 === SCOPE_PAYLOAD_SHA, 'frozen scope payload digest drift');
   invariant(scope.compressed_payload_sha256 === SCOPE_COMPRESSED_SHA, 'frozen scope compressed payload digest drift');
@@ -77,13 +69,9 @@ function validateScope(packet, authorized) {
   const frozen = loadFrozenScopeManifest(scope.path);
   invariant(frozen.index.launchIdentitySha256 === scope.launch_identity_sha256, 'packet scope digest must match committed scope index');
   invariant(frozen.index.payloadSha256 === scope.payload_sha256, 'packet payload digest must match committed scope index');
-  if (scope.status === 'FROZEN_VERIFIED') {
-    invariant(scope.live_verification_run === 34912185853, 'frozen verified scope live verification run drift');
-    invariant(scope.live_verification_artifact_id === 10375315812, 'frozen verified scope live verification artifact drift');
-    invariant(scope.live_verification_artifact_sha256 === '8eb03c983121261f3c4ed8923bc826f1e02c8f2c79ceecbfe345646059cb870a', 'frozen verified scope live verification artifact digest drift');
-  } else {
-    invariant(scope.live_verification_run === null && scope.live_verification_artifact_id === null && scope.live_verification_artifact_sha256 === null, 'pending live verification must not predeclare verification provenance');
-  }
+  invariant(scope.live_verification_run === 34912185853, 'frozen verified scope live verification run drift');
+  invariant(scope.live_verification_artifact_id === 10375315812, 'frozen verified scope live verification artifact drift');
+  invariant(scope.live_verification_artifact_sha256 === '8eb03c983121261f3c4ed8923bc826f1e02c8f2c79ceecbfe345646059cb870a', 'frozen verified scope live verification artifact digest drift');
   if (authorized) invariant(scope.status === 'FROZEN_VERIFIED', 'authorized replay requires FROZEN_VERIFIED scope manifest');
 }
 
@@ -125,15 +113,14 @@ export function validatePacket(packet) {
   invariant(h?.launch_count === 147 && h?.first_launch_block === 39943476 && h?.final_launch_block === 49271598 && h?.launch_producing_implementation_cohorts === 9, 'known historical state drift');
   invariant(h?.representative_fixture_status === 'CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT' && fs.existsSync(h?.representative_fixture_path), 'representative fixture prerequisite drift');
   if (packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN') {
-    const expectedNext = packet.review_gate.status === 'CLOSED_PASS' ? 'DECIDE_FULL_147_REPLAY_AUTHORIZATION' : 'TARGETED_REREVIEW_CRITICAL_HIGH_FIXES';
-    invariant(packet.next_action === expectedNext, 'open decision next action drift');
+    invariant(packet.next_action === 'DECIDE_FULL_147_REPLAY_AUTHORIZATION', 'open decision next action drift');
     invariant(!packet.decision_result, 'decision result must not be predeclared while open');
   } else if (authorized) {
     invariant(packet.next_action === 'OPEN_HISTORICAL_FULL_REPLAY_R1_IMPLEMENTATION', 'authorized next action drift');
     invariant(packet.decision_result?.status === 'AUTHORIZE' && packet.decision_result?.basis_predecessor_head === PREDECESSOR_HEAD, 'authorized decision basis drift');
     invariant(packet.decision_result?.scope_identity_sha256 === packet.acceptance.full_replay_scope_manifest.launch_identity_sha256, 'authorized decision scope digest drift');
-    invariant(packet.decision_result?.hostile_review_id === packet.review_gate.targeted_review_id, 'authorized decision hostile review id drift');
-    invariant(packet.decision_result?.reviewed_authorization_head === packet.review_gate.targeted_reviewed_head, 'authorized decision reviewed head drift');
+    invariant(packet.decision_result?.hostile_review_id === TARGETED_REVIEW_ID, 'authorized decision hostile review id drift');
+    invariant(packet.decision_result?.reviewed_authorization_head === TARGETED_REVIEWED_HEAD, 'authorized decision reviewed head drift');
     invariant(typeof packet.decision_result?.rationale === 'string' && packet.decision_result.rationale.length > 0, 'authorized decision rationale required');
   } else {
     invariant(packet.next_action === 'STOP_FULL_147_REPLAY' && packet.decision_result?.status === 'REJECT' && packet.decision_result?.basis_predecessor_head === PREDECESSOR_HEAD, 'rejected decision basis/next action drift');

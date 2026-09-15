@@ -2,7 +2,7 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1",
-  "state": "HISTORICAL_FULL_REPLAY_AUTHORIZATION_DECISION_OPEN",
+  "state": "HISTORICAL_FULL_REPLAY_AUTHORIZED",
   "objective": "Decide whether a separate research-only phase may replay a cryptographically frozen manifest of the 147 historical launches under the already-reviewed historical baseline and outcome policies, without changing current R3/default semantics or widening live execution authority.",
   "predecessor": {
     "phase": "HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1",
@@ -25,7 +25,7 @@
   "authority": {
     "current_default": "R3",
     "current_r3_behavior_must_remain_unchanged": true,
-    "historical_authorization_granted": false,
+    "historical_authorization_granted": true,
     "historical_baseline_policy_status": "PASS",
     "historical_outcome_policy_status": "PASS",
     "historical_all_horizon_compatibility_status": "PASS"
@@ -37,7 +37,7 @@
     "historical_outcome_policy_discovery": false,
     "historical_outcome_policy_implementation": false,
     "historical_all_horizon_compatibility_implementation": false,
-    "full_147_replay": false,
+    "full_147_replay": true,
     "fast_vet": false,
     "canary": false,
     "signing": false,
@@ -48,7 +48,7 @@
   },
   "review_gate": {
     "required": true,
-    "status": "REPAIRED_PENDING_TARGETED_REREVIEW",
+    "status": "CLOSED_PASS",
     "initial_review_id": 5204327465,
     "initial_reviewed_head": "be0259b1845787b651ad8ffdad32b693bc2c76ce",
     "initial_critical_high_count": 2,
@@ -57,20 +57,33 @@
         "comment_id": 4010865142,
         "severity": "P1",
         "summary": "Reject unrecognized authorization keys and explicitly represent live/execution capabilities as false.",
-        "repair_status": "FIXED_PENDING_TARGETED_REREVIEW"
+        "repair_status": "CLOSED"
       },
       {
         "comment_id": 4010865149,
         "severity": "P1",
         "summary": "Require hostile-review closure evidence for the reviewed authorization head before AUTHORIZE is legal.",
-        "repair_status": "FIXED_PENDING_TARGETED_REREVIEW"
+        "repair_status": "CLOSED"
       }
     ],
     "targeted_rereview_required": true,
     "review_loop_limit": 1,
-    "targeted_review_id": null,
-    "targeted_reviewed_head": null,
-    "unresolved_critical_high": 2
+    "targeted_review_id": 5204380099,
+    "targeted_reviewed_head": "e527255949ffd72409284a379cf4428c48aa855f",
+    "targeted_review_finding": {
+      "comment_id": 4010914490,
+      "severity": "P1",
+      "summary": "Bind review evidence to the actual targeted review rather than accepting shape-only review identifiers.",
+      "repair_status": "FIXED_BOUNDED_NO_FURTHER_REREVIEW"
+    },
+    "unresolved_critical_high": 0,
+    "repair_exact_head_runs": {
+      "ci": {"id": 34914133647, "status": "SUCCESS"},
+      "historical_baseline_policy": {"id": 34914133681, "status": "SUCCESS"},
+      "historical_outcome_policy": {"id": 34914133633, "status": "SUCCESS"},
+      "historical_all_horizon_compatibility": {"id": 34914133649, "status": "SUCCESS"},
+      "historical_full_replay_authorization": {"id": 34914133623, "status": "SUCCESS"}
+    }
   },
   "acceptance": {
     "frozen_historical_launch_count": 147,
@@ -125,11 +138,11 @@
     "Before AUTHORIZE, recover exactly 147 canonical historical deployment identities, commit the full scope manifest, pin its SHA-256 identity digest, and verify a fresh live discovery matches it.",
     "Before AUTHORIZE, the mandatory hostile review gate must be CLOSED_PASS with exact reviewed-head and review-id evidence and zero unresolved Critical/High findings.",
     "The authorization object keyset is closed; unrecognized authority keys are invalid, and signing, transaction construction, transaction broadcast, and live execution must remain explicitly false.",
-    "Authorization scope, if granted, is exactly the committed 147-launch manifest and the frozen five horizons under the existing historical baseline/outcome policies.",
+    "Authorization scope is exactly the committed 147-launch manifest and the frozen five horizons under the existing historical baseline/outcome policies.",
     "Do not infer that the full replay will be 147/147 COMPLETE from representative 45/45 compatibility; full-cohort failures remain valid results.",
     "Do not change historical pricing, valuation, horizon, authority, notional, or failure semantics to improve replay completion.",
     "Any provider/transport limitation remains explicit and is never economic evidence.",
-    "An AUTHORIZE decision may enable only a separate HISTORICAL_FULL_REPLAY_R1 implementation phase; FAST_VET, canary, signing/execution, and merge stay unauthorized."
+    "This AUTHORIZE decision enables only a separate HISTORICAL_FULL_REPLAY_R1 implementation phase; FAST_VET, canary, signing/execution, live transaction capability, and merge stay unauthorized."
   ],
   "known_historical_state": {
     "launch_count": 147,
@@ -139,9 +152,16 @@
     "representative_fixture_status": "CAPTURED_FROM_REVIEWED_DISCOVERY_ARTIFACT",
     "representative_fixture_path": "fixtures/historical-compatibility-r1.json"
   },
+  "decision_result": {
+    "status": "AUTHORIZE",
+    "basis_predecessor_head": "28e598d738c633b0211bae914b8f92450ae61f90",
+    "scope_identity_sha256": "b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211",
+    "hostile_review_id": 5204380099,
+    "reviewed_authorization_head": "e527255949ffd72409284a379cf4428c48aa855f",
+    "rationale": "The exact 147-launch scope is committed and independently live-reverified; predecessor evidence remains green; the closed authorization keyset permits only the research full-replay bit; the initial hostile review and single targeted re-review are pinned to their actual review IDs and reviewed heads; the targeted re-review's remaining shape-only binding defect is repaired by hard-pinning that exact evidence with no third review loop under the bounded completion policy. This decision opens only a separate HISTORICAL_FULL_REPLAY_R1 implementation phase and grants no live execution or merge authority."
+  },
   "prohibitions": [
-    "Do not run the 147-launch economic replay while this decision is open.",
-    "Scope discovery may enumerate canonical deployment identities only; it may not construct baselines or outcomes.",
+    "Do not execute the 147-launch economic replay inside this authorization PR; open the separate HISTORICAL_FULL_REPLAY_R1 implementation phase first.",
     "Do not change current R3 authority, EXECUTABLE_BASELINE_R1, FORWARD_OUTCOMES_R1, or reviewed historical baseline/outcome semantics.",
     "Do not fit oracle freshness thresholds or use retrospective off-chain prices.",
     "Do not silently shrink notionals or create alternate baseline/outcome algorithms.",
@@ -149,7 +169,7 @@
     "Do not run FAST_VET meaningfully.",
     "Do not authorize canary, signing, transaction construction, transaction broadcast, live execution, or merge.",
     "Do not merge without explicit user authority.",
-    "Do not reopen closed predecessor review cycles unless their evidence is invalidated."
+    "Do not create a third review loop after the single targeted re-review; close by exact-head verification of the bounded mechanical repair."
   ],
   "authority_docs": [
     "AGENTS.md",
@@ -184,13 +204,13 @@
     "src/tsunami/historicalRedstoneBaselineSource.ts",
     "mise.toml"
   ],
-  "next_action": "TARGETED_REREVIEW_CRITICAL_HIGH_FIXES",
+  "next_action": "OPEN_HISTORICAL_FULL_REPLAY_R1_IMPLEMENTATION",
   "notes": [
-    "The predecessor phase is closed PASS on exact head 28e598d738c633b0211bae914b8f92450ae61f90 with all four exact-head verification workflows green.",
-    "Scope discovery run 34910384086 recovered exactly 147 unique canonical launch identities over blocks 39943476..49271598 using the isolated public QuickNode transport.",
-    "The frozen identity digest is b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211. The committed payload is deterministic gzip+base64 split across five repository chunks; payload and compressed hashes are pinned and checked fail-closed.",
-    "The committed frozen scope was freshly reverified against canonical chain logs on run 34912185853: 147/147 identities matched exactly with fixtureMatch=true.",
-    "Initial hostile Codex review 5204327465 reviewed be0259b1845787b651ad8ffdad32b693bc2c76ce and found two P1 governance defects: open authorization keysets and missing exact hostile-review closure binding.",
-    "Both P1s are repaired in the current changeset, but the review gate intentionally remains unresolved until the single targeted re-review closes them. Full replay authority remains false."
+    "The predecessor phase is closed PASS on exact head 28e598d738c633b0211bae914b8f92450ae61f90 with all four predecessor exact-head verification workflows green.",
+    "Scope discovery run 34910384086 recovered exactly 147 unique canonical launch identities over blocks 39943476..49271598; live verification run 34912185853 matched the committed scope 147/147 with fixtureMatch=true.",
+    "Initial hostile review 5204327465 reviewed be0259b1845787b651ad8ffdad32b693bc2c76ce and found P1 findings 4010865142 and 4010865149; both were repaired on e527255949ffd72409284a379cf4428c48aa855f.",
+    "Repair head e527255949ffd72409284a379cf4428c48aa855f passed CI 34914133647, baseline 34914133681, outcome 34914133633, all-horizon 34914133649, and authorization/scope 34914133623.",
+    "The single targeted re-review 5204380099 reviewed exact repair head e527255949ffd72409284a379cf4428c48aa855f and found P1 4010914490: shape-only targeted review evidence. The bounded final repair hard-pins the actual targeted review ID and reviewed head; no third review loop is permitted by policy.",
+    "Authorization is granted only to open a separate research-only HISTORICAL_FULL_REPLAY_R1 implementation phase. No replay has been executed by this decision PR, and FAST_VET/canary/signing/transactions/live execution/merge remain false."
   ]
 }
