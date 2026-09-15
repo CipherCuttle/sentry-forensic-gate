@@ -1,30 +1,56 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { validatePacket } from './dev-spine-check.mjs';
+import { validateFastVetAuthorization } from './dev-spine-check.mjs';
 
-const packet=JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json','utf8'));
-validatePacket(packet);
-assert.equal(packet.state,'HISTORICAL_FULL_REPLAY_AUTHORITY_MAP_FROZEN');
-assert.equal(packet.next_action,'EXECUTE_FULL_147_X_5_REPLAY');
-assert.equal(packet.authority_map_gate.status,'FROZEN_VERIFIED');
-assert.equal(packet.authority_map_gate.authority_map_sha256,'c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e6022275');
-assert.equal(packet.authorization.full_147_replay,true);
-for (const key of ['fast_vet','canary','signing','transaction_construction','transaction_broadcast','live_execution','merge']) assert.equal(packet.authorization[key],false);
+const packet = JSON.parse(fs.readFileSync('docs/agent-packets/FAST_VET_R0_AUTHORIZATION_R1.json', 'utf8'));
+validateFastVetAuthorization(packet);
 
-const extra=structuredClone(packet); extra.authorization.live_execution_bypass=true;
-assert.throws(()=>validatePacket(extra),/authorization keyset drift/);
-const live=structuredClone(packet); live.authorization.live_execution=true;
-assert.throws(()=>validatePacket(live),/authorization\.live_execution=false/);
-const mapDigest=structuredClone(packet); mapDigest.authority_map_gate.authority_map_sha256='f'.repeat(64);
-assert.throws(()=>validatePacket(mapDigest),/authority map digest drift/);
-const mapRun=structuredClone(packet); mapRun.authority_map_gate.discovery_run=1;
-assert.throws(()=>validatePacket(mapRun),/authority map discovery run drift/);
-const scope=structuredClone(packet); scope.frozen_scope.launch_identity_sha256='a'.repeat(64);
-assert.throws(()=>validatePacket(scope),/frozen scope digest drift/);
-const horizon=structuredClone(packet); horizon.frozen_policies.horizons[4].ms+=1;
-assert.throws(()=>validatePacket(horizon),/frozen horizon set drift/);
-const back=structuredClone(packet); back.next_action='BUILD_AND_VERIFY_147_LAUNCH_AUTHORITY_MAP';
-assert.throws(()=>validatePacket(back),/Stage B replay must be next/);
-const allComplete=structuredClone(packet); allComplete.replay_contract.economic_complete_required_for_phase_pass=true;
-assert.throws(()=>validatePacket(allComplete),/must not require all economic cells COMPLETE/);
+assert.equal(packet.state, 'FAST_VET_R0_AUTHORIZATION_PENDING_REVIEW');
+assert.equal(packet.next_action, 'RUN_ONE_INDEPENDENT_HOSTILE_REVIEW');
+for (const value of Object.values(packet.authorization)) assert.equal(value, false);
+assert.equal(packet.frozen_smoke_rule.unknown_action, 'SKIP');
+assert.equal(packet.frozen_smoke_rule.primary_notional_usd_micros, 1_000_000);
+assert.equal(packet.frozen_smoke_rule.target_horizon_ms, 86_400_000);
+assert.equal(packet.adapter_contract.old_sqlite_runner_authorized, false);
+
+const smoke = structuredClone(packet);
+smoke.authorization.fast_vet_smoke = true;
+assert.throws(() => validateFastVetAuthorization(smoke), /authorization\.fast_vet_smoke=false/);
+
+const broad = structuredClone(packet);
+broad.authorization.fast_vet = true;
+assert.throws(() => validateFastVetAuthorization(broad), /authorization\.fast_vet=false/);
+
+const live = structuredClone(packet);
+live.authorization.live_execution = true;
+assert.throws(() => validateFastVetAuthorization(live), /authorization\.live_execution=false/);
+
+const extra = structuredClone(packet);
+extra.authorization.fast_vet_magic = false;
+assert.throws(() => validateFastVetAuthorization(extra), /authorization keyset drift/);
+
+const source = structuredClone(packet);
+source.frozen_smoke_rule.source_head = '0'.repeat(40);
+assert.throws(() => validateFastVetAuthorization(source), /frozen smoke source drift/);
+
+const tuned = structuredClone(packet);
+tuned.frozen_smoke_rule.primary_notional_usd_micros = 2_000_000;
+assert.throws(() => validateFastVetAuthorization(tuned), /primary notional drift/);
+
+const horizon = structuredClone(packet);
+horizon.adapter_contract.target_horizon_ms = 7_200_000;
+assert.throws(() => validateFastVetAuthorization(horizon), /adapter horizon drift/);
+
+const sqlite = structuredClone(packet);
+sqlite.adapter_contract.old_sqlite_runner_authorized = true;
+assert.throws(() => validateFastVetAuthorization(sqlite), /SQLite runner must remain unauthorized/);
+
+const prefilled = structuredClone(packet);
+prefilled.review_gate.initial_review_id = 1;
+assert.throws(() => validateFastVetAuthorization(prefilled), /review evidence cannot be pre-filled/);
+
+const premature = structuredClone(packet);
+premature.decision_result.status = 'AUTHORIZE_SMOKE';
+assert.throws(() => validateFastVetAuthorization(premature), /decision result must remain pending/);
+
 console.log('DEV_SPINE_CHECK_TEST=PASS');

@@ -1,0 +1,115 @@
+{
+  "schema": "fast-vet-r0-frozen-rule/v1",
+  "source": {
+    "pr": 13,
+    "head": "22fcce4c301e791a59c68b19b198bd1bea104138",
+    "ci_run": 34772418456,
+    "ci_status": "SUCCESS",
+    "blobs": {
+      "docs/FAST_VET_R0.md": "1ea7ac524803e621947d076e120860bade3df780",
+      "src/evaluation/fastVet.ts": "0ca384e142a8f1c898f7041fff87811e2f136225",
+      "src/evaluation/fastVetShadow.ts": "de2a993b93b9b60669acd09a60e1589cdc96e572",
+      "scripts/fast-vet-check.mjs": "2417b03a449bf305a89d0a7196b5db89ef4216bc"
+    },
+    "review_history": {
+      "initial_review_id": 5191567270,
+      "initial_reviewed_head": "916a5b7580c6aa44d62614444eb46939b3aabdad",
+      "initial_findings": [
+        {
+          "comment_id": 4000326538,
+          "severity": "P1",
+          "summary": "Require exact 24h outcome horizon."
+        },
+        {
+          "comment_id": 4000326541,
+          "severity": "P2",
+          "summary": "Validate creator-feature binding before baseline-derived early returns."
+        }
+      ],
+      "targeted_review_id": 5191597289,
+      "targeted_reviewed_head": "1178ce62af9b21164dd877e893583e7c972143ea",
+      "targeted_finding": {
+        "comment_id": 4000342099,
+        "severity": "P1",
+        "summary": "Restrict retention and outcome-coverage denominators to COMPLETE baselines."
+      },
+      "final_repair_head": "22fcce4c301e791a59c68b19b198bd1bea104138",
+      "review_loop_closed_without_third_cycle": true
+    }
+  },
+  "decision_semantics": {
+    "policy_version": "FAST_VET_R0",
+    "primary_notional_usd_micros": 1000000,
+    "decisions": [
+      "PASS",
+      "REJECT",
+      "UNKNOWN"
+    ],
+    "pass_action": "BUY_ELIGIBLE",
+    "reject_action": "SKIP",
+    "unknown_action": "SKIP",
+    "reject_when": [
+      "PRIMARY_ENTRY_NOT_EXECUTABLE",
+      "PRIMARY_REVERSE_NOT_EXECUTABLE",
+      "KNOWN_PRIOR_ADVERSE_CREATOR"
+    ],
+    "known_prior_adverse_classes": [
+      "CATASTROPHIC_LOSS",
+      "EXIT_FAILURE",
+      "LIQUIDITY_COLLAPSE"
+    ],
+    "unknown_when": [
+      "BASELINE_MISSING_OR_UNVERIFIED",
+      "PRIMARY_LEG_MISSING",
+      "CREATOR_FEATURE_MISSING",
+      "CREATOR_HISTORY_UNKNOWN_OR_PARTIAL_WITHOUT_KNOWN_ADVERSE"
+    ],
+    "pass_requires": [
+      "COMPLETE_BASELINE",
+      "EXECUTABLE_PRIMARY_ENTRY",
+      "EXECUTABLE_PRIMARY_INDEPENDENT_REVERSE",
+      "CREATOR_COVERAGE_NO_HISTORY_OR_COMPLETE",
+      "NO_KNOWN_PRIOR_ADVERSE_CREATOR"
+    ],
+    "independent_reverse_semantics": "INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL",
+    "recovery_bps_threshold": null
+  },
+  "shadow_semantics": {
+    "receipt_version": "FAST_VET_SHADOW_R0",
+    "status": "SMOKE_ONLY",
+    "strategy_label": "EDGE_UNPROVEN",
+    "target_horizon_ms": 86400000,
+    "control_cohort": "COMPLETE_BASELINE_ONLY",
+    "candidate_exposure": "PASS_ONLY",
+    "metrics": [
+      "trade_retention_bps",
+      "outcome_coverage_bps",
+      "adverse_exposure_reduction_bps",
+      "win_retention_bps",
+      "upside_capture_bps"
+    ],
+    "adverse_classes": [
+      "CATASTROPHIC_LOSS",
+      "EXIT_FAILURE",
+      "LIQUIDITY_COLLAPSE"
+    ],
+    "win_class": "NORMAL_WIN",
+    "no_sample_adequacy_claim": true,
+    "no_probability_or_p_value": true,
+    "no_threshold_tuning": true
+  },
+  "historical_adapter_contract": {
+    "input_artifact_id": 10410898359,
+    "input_artifact_sha256": "ebeb0ff5d6c3fecc9dac2dde4397e8592f72a3501aa3b9980662c3bd8c71fb6a",
+    "input_receipt_sha256": "916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825",
+    "input_baseline_policy": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
+    "input_outcome_policy": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
+    "required_target_horizon_ms": 86400000,
+    "adapter_may_change_shape_not_semantics": true,
+    "must_preserve_source_policy_identity": true,
+    "must_preserve_classification_and_executable_value": true,
+    "must_reconstruct_creator_history_point_in_time_only": true,
+    "must_not_use_post_decision_information": true,
+    "old_sqlite_runner_is_not_authority_for_this_run": true
+  }
+}

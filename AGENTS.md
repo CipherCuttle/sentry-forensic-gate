@@ -6,7 +6,7 @@ This repository is point-in-time adverse-selection research for newly launched S
 
 Use `PLAN -> CHANGESET -> VERIFY -> VERDICT`. Prefer the smallest coherent diff. Rehydrate from the exact Git state and relevant PR stack rather than chat memory.
 
-Universal Dev Spine entrypoint: run `mise run context` first when `mise` is available. The machine-readable active state packet is `docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json`. It is a navigation/state artifact only and must not broaden repository authority. Stage A has frozen and verified the 147-row historical mapping; follow the packet's current next action and frozen-policy constraints. Use `mise run pack` only from a clean worktree; it emits a SHA-bound context pack from the checked-out files and fails closed when local changes are present.
+Universal Dev Spine entrypoint: run `mise run context` first when `mise` is available. The machine-readable active state packet is `docs/agent-packets/FAST_VET_R0_AUTHORIZATION_R1.json`. It is a navigation/state artifact only and must not broaden repository authority. Historical replay is closed PASS; this successor only decides whether the frozen pre-existing FAST_VET_R0 smoke may run. Until review closure, every FAST_VET/canary/live/merge authorization bit remains false. Use `mise run pack` only from a clean worktree; it emits a SHA-bound context pack from the checked-out files and fails closed when local changes are present.
 
 For remote GitHub work, group related multi-file edits into one coherent commit when possible, keep unrelated work unchanged, and record the exact commit SHA plus verification result in the PR.
 

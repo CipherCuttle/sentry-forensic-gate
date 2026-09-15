@@ -2,14 +2,13 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { join } from 'node:path';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json';
+const PACKET_PATH = 'docs/agent-packets/FAST_VET_R0_AUTHORIZATION_R1.json';
 const OUTPUT_DIR = '.dev-spine';
 
 function fail(message) {
   console.error(`DEV_SPINE_PACK=FAIL ${message}`);
   process.exit(1);
 }
-
 const testedSha = process.env.DEV_SPINE_TESTED_SHA;
 const sourceHeadSha = process.env.DEV_SPINE_SOURCE_SHA ?? testedSha;
 const dirtyRaw = process.env.DEV_SPINE_DIRTY;
@@ -22,7 +21,6 @@ for (const path of packet.context_files) {
   if (!fs.existsSync(path)) fail(`context file missing: ${path}`);
   sections.push(`===== BEGIN FILE: ${path} =====\n${fs.readFileSync(path, 'utf8')}\n===== END FILE: ${path} =====`);
 }
-
 const contextContent = sections.join('\n\n');
 const contextContentSha256 = createHash('sha256').update(contextContent).digest('hex');
 const metadata = {
@@ -38,7 +36,6 @@ const metadata = {
   phase_state: packet.state,
   next_action: packet.next_action,
 };
-
 const output = [
   '# Sentry Forensic Gate — SHA-bound Dev Spine Context Pack',
   '',
@@ -51,12 +48,10 @@ const output = [
   '````',
   '',
 ].join('\n');
-
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 const safePhase = packet.phase.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
 const outputPath = join(OUTPUT_DIR, `context-${safePhase}-${testedSha.slice(0, 12)}.md`);
 fs.writeFileSync(outputPath, output, 'utf8');
-
 console.log(`DEV_SPINE_CONTEXT_PACK=${outputPath}`);
 console.log(`TESTED_SHA=${testedSha}`);
 console.log(`SOURCE_HEAD_SHA=${sourceHeadSha}`);

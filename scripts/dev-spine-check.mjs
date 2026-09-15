@@ -1,79 +1,136 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { loadFrozenScopeManifest } from './historical-full-replay-scope-fixture.mjs';
-import { loadFrozenAuthorityMap } from './historical-full-replay-authority-map-fixture.mjs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json';
-const SCOPE_DIGEST = 'b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211';
-const MAP_DIGEST = 'c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e6022275';
-const PAYLOAD_SHA = '839c8ebd16589387b2e08888484962f0cf8d1389837f9045a7a9a4ef1eb97623';
-const COMPRESSED_SHA = 'b140ffbfd3460de5a03c749d011ec8101323cc21f71af8c3c14826d5882b0893';
-const EXPECTED_HORIZONS = [{label:'1m',ms:60000},{label:'5m',ms:300000},{label:'30m',ms:1800000},{label:'2h',ms:7200000},{label:'24h',ms:86400000}];
-const AUTHORIZATION_KEYS = [
-  'historical_compatibility_implementation','historical_baseline_policy_discovery','historical_baseline_policy_implementation',
-  'historical_outcome_policy_discovery','historical_outcome_policy_implementation','historical_all_horizon_compatibility_implementation',
-  'full_147_replay','fast_vet','canary','signing','transaction_construction','transaction_broadcast','live_execution','merge',
+const PACKET_PATH = 'docs/agent-packets/FAST_VET_R0_AUTHORIZATION_R1.json';
+const RULE_PATH = 'fixtures/fast-vet-r0-authorization-r1.json';
+const RULE_SHA = '48704fd4692016a7fae73bcd63841686788f837d3001d43c9cf5cb3841172665';
+const REPLAY_HEAD = '75588056de53b94f92b5cf3b40e89e2b5521031a';
+const SMOKE_HEAD = '22fcce4c301e791a59c68b19b198bd1bea104138';
+const REPLAY_ARTIFACT_SHA = 'ebeb0ff5d6c3fecc9dac2dde4397e8592f72a3501aa3b9980662c3bd8c71fb6a';
+const REPLAY_RECEIPT_SHA = '916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825';
+const AUTH_KEYS = [
+  'historical_full_replay','fast_vet','fast_vet_smoke','fast_vet_osint','canary',
+  'signing','transaction_construction','transaction_broadcast','live_execution','merge'
 ];
-function invariant(condition,message){ if(!condition) throw new Error(message); }
-function exactKeys(value,expected,label){
-  invariant(JSON.stringify(Object.keys(value??{}).sort())===JSON.stringify([...expected].sort()),`${label} keyset drift`);
+
+function invariant(condition, message) {
+  if (!condition) throw new Error(message);
+}
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+function exactKeys(value, expected, label) {
+  invariant(JSON.stringify(Object.keys(value ?? {}).sort()) === JSON.stringify([...expected].sort()), `${label} keyset drift`);
 }
 
-export function validatePacket(packet) {
-  invariant(packet.schema==='dev-spine-phase/v1' && packet.repo==='CipherCuttle/sentry-forensic-gate' && packet.phase==='HISTORICAL_FULL_REPLAY_R1','unexpected packet identity');
-  invariant(packet.state==='HISTORICAL_FULL_REPLAY_AUTHORITY_MAP_FROZEN','unexpected phase state');
-  invariant(packet.next_action==='EXECUTE_FULL_147_X_5_REPLAY','Stage B replay must be next after frozen authority map');
-  invariant(Array.isArray(packet.authority_docs)&&packet.authority_docs.length>0,'authority_docs required');
-  invariant(Array.isArray(packet.context_files)&&packet.context_files.length>0,'context_files required');
-  for(const path of new Set([...packet.authority_docs,...packet.context_files])) invariant(fs.existsSync(path)&&fs.statSync(path).isFile(),`authority/context file missing: ${path}`);
+export function validateFastVetAuthorization(packet, ruleRaw = fs.readFileSync(RULE_PATH)) {
+  invariant(packet.schema === 'dev-spine-phase/v1', 'unexpected packet schema');
+  invariant(packet.repo === 'CipherCuttle/sentry-forensic-gate', 'unexpected repo');
+  invariant(packet.phase === 'FAST_VET_R0_AUTHORIZATION_R1', 'unexpected phase');
+  invariant(packet.state === 'FAST_VET_R0_AUTHORIZATION_PENDING_REVIEW', 'unexpected phase state');
+  invariant(packet.next_action === 'RUN_ONE_INDEPENDENT_HOSTILE_REVIEW', 'hostile review must be next');
 
-  exactKeys(packet.authorization,AUTHORIZATION_KEYS,'authorization');
-  for(const key of AUTHORIZATION_KEYS){
-    const expected=key==='full_147_replay';
-    invariant(packet.authorization[key]===expected,`frozen-map state requires authorization.${key}=${expected}`);
+  exactKeys(packet.authorization, AUTH_KEYS, 'authorization');
+  for (const key of AUTH_KEYS) invariant(packet.authorization[key] === false, `pending authorization requires authorization.${key}=false`);
+
+  invariant(packet.authority?.current_default === 'R3', 'current default authority drift');
+  invariant(packet.authority?.current_r3_behavior_must_remain_unchanged === true, 'current R3 behavior must remain unchanged');
+  invariant(packet.authority?.historical_full_replay_status === 'PASS', 'historical replay predecessor must be PASS');
+  invariant(packet.authority?.research_only === true, 'authorization must remain research-only');
+  invariant(packet.authority?.fast_vet_authorization_status === 'PENDING_REVIEW', 'FAST_VET authorization must remain pending');
+
+  const predecessor = packet.predecessor;
+  invariant(predecessor?.phase === 'HISTORICAL_FULL_REPLAY_R1' && predecessor?.pr === 23, 'predecessor identity drift');
+  invariant(predecessor?.closure_head === REPLAY_HEAD && predecessor?.verdict === 'CLOSED_PASS', 'predecessor closure drift');
+  invariant(predecessor?.closure_comment_id === 5688792266, 'predecessor closure comment drift');
+  invariant(predecessor?.full_replay?.run_id === 35001582697, 'full replay run drift');
+  invariant(predecessor?.full_replay?.artifact_id === 10410898359, 'full replay artifact id drift');
+  invariant(predecessor?.full_replay?.artifact_sha256 === REPLAY_ARTIFACT_SHA, 'full replay artifact digest drift');
+  invariant(predecessor?.full_replay?.receipt_sha256 === REPLAY_RECEIPT_SHA, 'full replay receipt digest drift');
+  invariant(predecessor?.full_replay?.launches_accounted === 147, 'full replay launch count drift');
+  invariant(predecessor?.full_replay?.baseline_complete === 147 && predecessor?.full_replay?.baseline_unverified === 0, 'full replay baseline accounting drift');
+  invariant(predecessor?.full_replay?.horizon_cells_accounted === 735, 'full replay horizon accounting drift');
+  invariant(predecessor?.full_replay?.outcomes_complete === 735 && predecessor?.full_replay?.outcomes_unverified === 0, 'full replay outcome accounting drift');
+  invariant(predecessor?.review_closure?.repair_head === REPLAY_HEAD, 'predecessor review repair head drift');
+  invariant(predecessor?.review_closure?.targeted_reviewed_head === REPLAY_HEAD, 'predecessor targeted review head drift');
+  invariant(predecessor?.review_closure?.targeted_clean_comment_id === 5688765850, 'predecessor clean targeted review evidence drift');
+  invariant(predecessor?.review_closure?.unresolved_critical_high === 0, 'predecessor unresolved Critical/High');
+
+  const frozen = packet.frozen_smoke_rule;
+  invariant(frozen?.source_pr === 13 && frozen?.source_head === SMOKE_HEAD, 'frozen smoke source drift');
+  invariant(frozen?.source_ci_run === 34772418456 && frozen?.source_ci_status === 'SUCCESS', 'frozen smoke source CI drift');
+  invariant(frozen?.fixture_path === RULE_PATH && frozen?.fixture_sha256 === RULE_SHA, 'frozen smoke fixture identity drift');
+  invariant(frozen?.decision_policy_version === 'FAST_VET_R0', 'decision policy drift');
+  invariant(frozen?.shadow_receipt_version === 'FAST_VET_SHADOW_R0', 'shadow receipt version drift');
+  invariant(frozen?.status === 'SMOKE_ONLY' && frozen?.strategy_label === 'EDGE_UNPROVEN', 'smoke status/strategy drift');
+  invariant(frozen?.primary_notional_usd_micros === 1_000_000, 'primary notional drift');
+  invariant(frozen?.target_horizon_ms === 86_400_000, 'target horizon drift');
+  invariant(frozen?.unknown_action === 'SKIP', 'UNKNOWN must remain SKIP');
+  invariant(frozen?.control_cohort === 'COMPLETE_BASELINE_ONLY', 'control cohort drift');
+
+  invariant(sha256(ruleRaw) === RULE_SHA, 'frozen rule fixture sha drift');
+  const rule = JSON.parse(ruleRaw.toString('utf8'));
+  invariant(rule.schema === 'fast-vet-r0-frozen-rule/v1', 'frozen rule schema drift');
+  invariant(rule.source?.pr === 13 && rule.source?.head === SMOKE_HEAD, 'frozen rule source identity drift');
+  invariant(rule.source?.ci_run === 34772418456 && rule.source?.ci_status === 'SUCCESS', 'frozen rule source CI drift');
+  const blobs = rule.source?.blobs ?? {};
+  invariant(blobs['docs/FAST_VET_R0.md'] === '1ea7ac524803e621947d076e120860bade3df780', 'FAST_VET doc blob drift');
+  invariant(blobs['src/evaluation/fastVet.ts'] === '0ca384e142a8f1c898f7041fff87811e2f136225', 'FAST_VET decision blob drift');
+  invariant(blobs['src/evaluation/fastVetShadow.ts'] === 'de2a993b93b9b60669acd09a60e1589cdc96e572', 'FAST_VET shadow blob drift');
+  invariant(blobs['scripts/fast-vet-check.mjs'] === '2417b03a449bf305a89d0a7196b5db89ef4216bc', 'FAST_VET test blob drift');
+
+  const decision = rule.decision_semantics;
+  invariant(decision?.policy_version === 'FAST_VET_R0', 'rule decision version drift');
+  invariant(decision?.primary_notional_usd_micros === 1_000_000, 'rule $1 notional drift');
+  invariant(JSON.stringify(decision?.decisions) === JSON.stringify(['PASS','REJECT','UNKNOWN']), 'rule decisions drift');
+  invariant(decision?.pass_action === 'BUY_ELIGIBLE' && decision?.reject_action === 'SKIP' && decision?.unknown_action === 'SKIP', 'rule action semantics drift');
+  invariant(decision?.independent_reverse_semantics === 'INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL', 'independent reverse semantics drift');
+  invariant(decision?.recovery_bps_threshold === null, 'recovery threshold tuning is forbidden');
+
+  const shadow = rule.shadow_semantics;
+  invariant(shadow?.receipt_version === 'FAST_VET_SHADOW_R0', 'shadow rule version drift');
+  invariant(shadow?.status === 'SMOKE_ONLY' && shadow?.strategy_label === 'EDGE_UNPROVEN', 'shadow authority drift');
+  invariant(shadow?.target_horizon_ms === 86_400_000, 'shadow horizon drift');
+  invariant(shadow?.control_cohort === 'COMPLETE_BASELINE_ONLY' && shadow?.candidate_exposure === 'PASS_ONLY', 'shadow cohort semantics drift');
+  invariant(shadow?.no_sample_adequacy_claim === true && shadow?.no_probability_or_p_value === true && shadow?.no_threshold_tuning === true, 'shadow non-promotion invariants drift');
+
+  const adapter = packet.adapter_contract;
+  invariant(adapter?.source === 'HISTORICAL_FULL_REPLAY_R1_REPAIRED_AGGREGATE_ONLY', 'adapter source drift');
+  invariant(adapter?.source_artifact_id === 10410898359 && adapter?.source_artifact_sha256 === REPLAY_ARTIFACT_SHA, 'adapter artifact drift');
+  invariant(adapter?.source_receipt_sha256 === REPLAY_RECEIPT_SHA, 'adapter receipt drift');
+  invariant(adapter?.baseline_policy === 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1', 'adapter baseline policy drift');
+  invariant(adapter?.outcome_policy === 'HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1', 'adapter outcome policy drift');
+  invariant(adapter?.target_horizon_ms === 86_400_000, 'adapter horizon drift');
+  for (const key of ['shape_adaptation_only','preserve_source_policy_identity','preserve_classification_and_executable_value','creator_history_point_in_time_only']) {
+    invariant(adapter?.[key] === true, `adapter_contract.${key} must remain true`);
   }
-  invariant(packet.authority?.current_default==='R3'&&packet.authority?.current_r3_behavior_must_remain_unchanged===true,'current R3 authority drift');
-  invariant(packet.authority?.historical_full_replay_authorized===true&&packet.authority?.research_only===true,'research replay authority drift');
+  invariant(adapter?.old_sqlite_runner_authorized === false, 'old SQLite runner must remain unauthorized');
 
-  invariant(packet.predecessor?.phase==='HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1'&&packet.predecessor?.pr===22,'authorization predecessor identity drift');
-  invariant(packet.predecessor?.closure_head==='efade9f625aeffc3f6e88494e13ac058c9ffb1ae'&&packet.predecessor?.verdict==='CLOSED_AUTHORIZE','authorization predecessor closure drift');
-  invariant(packet.predecessor?.scope_identity_sha256===SCOPE_DIGEST,'authorization predecessor scope digest drift');
+  const review = packet.review_gate;
+  invariant(review?.required === true && review?.status === 'PENDING', 'review gate must remain pending');
+  invariant(review?.review_loop_limit === 1, 'review loop limit drift');
+  invariant(review?.initial_review_id === null && review?.initial_reviewed_head === null, 'review evidence cannot be pre-filled');
+  invariant(review?.unresolved_critical_high === null, 'unresolved finding count must remain unknown before review');
 
-  const scope=packet.frozen_scope;
-  invariant(scope?.manifest_path==='fixtures/historical-full-replay-scope-r1.json','frozen scope path drift');
-  invariant(scope?.expected_launches===147&&scope?.first_launch_block===39943476&&scope?.final_launch_block===49271598,'frozen scope range/count drift');
-  invariant(scope?.launch_identity_sha256===SCOPE_DIGEST,'frozen scope digest drift');
-  const frozenScope=loadFrozenScopeManifest(scope.manifest_path);
-  invariant(frozenScope.index.launchIdentitySha256===SCOPE_DIGEST&&frozenScope.manifest.launches.length===147,'committed frozen scope drift');
+  invariant(packet.decision_result?.status === 'PENDING_REVIEW', 'decision result must remain pending');
+  invariant(packet.decision_result?.authorized_bit_if_closed === 'fast_vet_smoke', 'only fast_vet_smoke may be authorized by this phase');
 
-  const policy=packet.frozen_policies;
-  invariant(policy?.baseline_policy_version==='HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1'&&policy?.outcome_policy_version==='HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1','historical policy version drift');
-  invariant(policy?.decision_delay_blocks===2,'decision delay drift');
-  invariant(JSON.stringify(policy?.horizons)===JSON.stringify(EXPECTED_HORIZONS),'frozen horizon set drift');
-  invariant(policy?.weth_valuation_kind==='WETH_REDSTONE_ETH_USD_OUTCOME_ASOF_V1'&&policy?.freshness_rejection_threshold_seconds===null,'historical valuation/freshness drift');
-
-  const gate=packet.authority_map_gate;
-  invariant(gate?.required===true&&gate?.status==='FROZEN_VERIFIED','Stage B requires FROZEN_VERIFIED authority map');
-  invariant(gate?.output_path==='fixtures/historical-full-replay-authority-map-r1.json','authority map path drift');
-  invariant(gate?.authority_map_sha256===MAP_DIGEST,'authority map digest drift');
-  invariant(gate?.discovery_run===34917993958,'authority map discovery run drift');
-  invariant(gate?.discovery_artifact_id===10376329939,'authority map artifact id drift');
-  invariant(gate?.discovery_artifact_sha256==='64ff2b9915cd0c449ac4edca8da96dfae773bd0de49e3225eac6720a1ac619c1','authority map artifact digest drift');
-  invariant(gate?.fixture_content_sha256===PAYLOAD_SHA,'authority map fixture content digest drift');
-  const frozenMap=loadFrozenAuthorityMap(gate.output_path);
-  invariant(frozenMap.index.payloadSha256===PAYLOAD_SHA&&frozenMap.index.compressedPayloadSha256===COMPRESSED_SHA,'authority map storage digest drift');
-  invariant(frozenMap.index.authorityMapSha256===MAP_DIGEST&&frozenMap.manifest.rows.length===147,'authority map decoded payload drift');
-  for(let i=0;i<147;i+=1){
-    const scopeRow=frozenScope.manifest.launches[i], mapRow=frozenMap.manifest.rows[i];
-    for(const key of ['ordinal','event','blockNumber','blockHash','transactionHash','logIndex','tokenId','token','creator'])
-      invariant(mapRow[key]===scopeRow[key],`authority map launch identity mismatch:ordinal=${i+1}:field=${key}`);
+  invariant(Array.isArray(packet.authority_docs) && packet.authority_docs.length > 0, 'authority_docs required');
+  invariant(Array.isArray(packet.context_files) && packet.context_files.length > 0, 'context_files required');
+  for (const path of new Set([...packet.authority_docs, ...packet.context_files])) {
+    invariant(fs.existsSync(path) && fs.statSync(path).isFile(), `authority/context file missing: ${path}`);
   }
-
-  const replay=packet.replay_contract;
-  invariant(replay?.expected_launch_receipts===147&&replay?.expected_horizon_cells===735,'replay accounting contract drift');
-  invariant(replay?.economic_complete_required_for_phase_pass===false,'phase PASS must not require all economic cells COMPLETE');
-  for(const key of ['accounting_complete_required_for_phase_pass','baseline_unverified_is_valid_evidence','outcome_unverified_is_valid_evidence','provider_transport_failure_is_not_market_evidence','per_launch_per_horizon_receipts_required','no_policy_mutation_after_observing_results'])
-    invariant(replay?.[key]===true,`replay_contract.${key} must remain true`);
 }
-function main(){try{const packet=JSON.parse(fs.readFileSync(PACKET_PATH,'utf8'));validatePacket(packet);console.log(`DEV_SPINE_CHECK=PASS phase=${packet.phase} state=${packet.state}`)}catch(error){console.error(`DEV_SPINE_CHECK=FAIL ${error.message}`);process.exit(1)}}
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) main();
+
+function main() {
+  try {
+    const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
+    validateFastVetAuthorization(packet);
+    console.log(`DEV_SPINE_CHECK=PASS phase=${packet.phase} state=${packet.state}`);
+  } catch (error) {
+    console.error(`DEV_SPINE_CHECK=FAIL ${error.message}`);
+    process.exit(1);
+  }
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
