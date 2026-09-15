@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.json';
+const PACKET_PATH = 'docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json';
 const OUTPUT_PATH = '.dev-spine/receipt.json';
 
 function fail(message) {
@@ -18,6 +18,11 @@ const dirty = dirtyRaw === 'true';
 
 const ciStatus = String(process.env.DEV_SPINE_CI_STATUS ?? 'unknown').toLowerCase();
 const repositoryVerification = ciStatus === 'success' ? 'PASS' : ciStatus === 'failure' || ciStatus === 'cancelled' ? 'FAIL' : 'UNKNOWN';
+const decision = packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZED'
+  ? 'AUTHORIZED'
+  : packet.state === 'HISTORICAL_FULL_REPLAY_AUTHORIZATION_REJECTED'
+    ? 'REJECTED'
+    : 'NOT_EVALUATED';
 
 const receipt = {
   schema: 'dev-spine-receipt/v1',
@@ -32,23 +37,24 @@ const receipt = {
     verdict: repositoryVerification,
   },
   phase_evidence: {
-    all_horizon_live_gate: 'NOT_EVALUATED',
-    live_archive_rpc: 'NOT_RUN',
-    representatives_attempted: 0,
-    baseline_complete: 0,
-    outcomes_attempted: 0,
-    outcomes_complete: 0,
-    outcomes_unverified: 0,
+    predecessor_phase: packet.predecessor.phase,
+    predecessor_closure_head: packet.predecessor.closure_head,
+    predecessor_verdict: packet.predecessor.verdict,
+    representative_baseline_complete: packet.predecessor.baseline_complete,
+    representative_outcomes_complete: packet.predecessor.outcomes_complete,
+    representative_outcomes_unverified: packet.predecessor.outcomes_unverified,
+    full_replay_authorization_decision: decision,
+    replay_executed: false,
   },
   authorization: packet.authorization,
   phase_state: packet.state,
   next_action: packet.next_action,
   verdict:
     repositoryVerification === 'PASS' && !dirty
-      ? 'REPO_VERIFICATION_PASS_PHASE_NOT_EVALUATED'
+      ? `REPO_VERIFICATION_PASS_DECISION_${decision}`
       : repositoryVerification === 'FAIL'
-        ? 'REPO_VERIFICATION_FAIL_PHASE_NOT_EVALUATED'
-        : 'REPO_VERIFICATION_UNKNOWN_PHASE_NOT_EVALUATED',
+        ? `REPO_VERIFICATION_FAIL_DECISION_${decision}`
+        : `REPO_VERIFICATION_UNKNOWN_DECISION_${decision}`,
 };
 
 fs.mkdirSync('.dev-spine', { recursive: true });

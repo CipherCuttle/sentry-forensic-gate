@@ -1,0 +1,61 @@
+name: historical-full-replay-authorization-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.md'
+      - 'docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json'
+      - 'fixtures/historical-full-replay-scope-r1.json'
+      - 'fixtures/historical-full-replay-scope-r1.part-*.b64'
+      - 'scripts/historical-full-replay-scope-fixture.mjs'
+      - 'scripts/historical-full-replay-scope-r1.mjs'
+      - 'scripts/dev-spine-check.mjs'
+      - 'scripts/dev-spine-check-test.mjs'
+      - '.github/workflows/historical-full-replay-authorization-r1.yml'
+permissions:
+  contents: read
+jobs:
+  historical-full-replay-authorization-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+      - name: Validate fail-closed decision metadata
+        run: |
+          node scripts/dev-spine-check-test.mjs
+          node scripts/dev-spine-check.mjs
+      - name: Discover and verify frozen 147-launch scope
+        env:
+          INK_RPC_URL: https://rpc-qnd.inkonchain.com
+          OUTPUT_PATH: historical-full-replay-scope-r1-live.json
+          EXPECTED_SCOPE_PATH: fixtures/historical-full-replay-scope-r1.json
+        run: node scripts/historical-full-replay-scope-r1.mjs
+      - name: Validate scope receipt against decision packet
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const receipt=JSON.parse(fs.readFileSync('historical-full-replay-scope-r1-live.json','utf8'));
+          const packet=JSON.parse(fs.readFileSync('docs/agent-packets/HISTORICAL_FULL_REPLAY_AUTHORIZATION_R1.json','utf8'));
+          if(receipt.status!=='SCOPE_DISCOVERY_COMPLETE_NO_REPLAY_AUTHORITY') throw new Error('scope discovery status mismatch');
+          if(receipt.sourceRange.observedLaunches!==147||receipt.uniqueIdentityCount!==147) throw new Error('scope must contain exactly 147 unique launches');
+          const scope=packet.acceptance?.full_replay_scope_manifest;
+          if(!scope?.required) throw new Error('decision packet must require scope manifest');
+          if(scope.status==='DISCOVERY_PENDING') { if(receipt.fixturePresent) throw new Error('pending scope unexpectedly has fixture'); }
+          else if(scope.status==='FROZEN_PENDING_LIVE_VERIFY'||scope.status==='FROZEN_VERIFIED') {
+            if(!receipt.fixturePresent||receipt.fixtureMatch!==true) throw new Error('frozen scope fixture must match live canonical discovery');
+            if(scope.launch_identity_sha256!==receipt.launchIdentitySha256) throw new Error('packet scope digest does not match live discovery');
+          } else throw new Error(`unsupported scope manifest status: ${scope?.status}`);
+          console.log(`HISTORICAL_FULL_REPLAY_SCOPE_CHECK=PASS launches=${receipt.sourceRange.observedLaunches} digest=${receipt.launchIdentitySha256} fixtureMatch=${receipt.fixtureMatch}`);
+          NODE
+      - name: Upload scope evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-full-replay-authorization-r1-scope
+          path: historical-full-replay-scope-r1-live.json
+          if-no-files-found: warn
