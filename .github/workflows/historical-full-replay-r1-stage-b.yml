@@ -1,0 +1,96 @@
+name: historical-full-replay-r1-stage-b
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/HISTORICAL_FULL_REPLAY_R1.md'
+      - 'docs/agent-packets/HISTORICAL_FULL_REPLAY_R1.json'
+      - 'fixtures/historical-full-replay-authority-map-r1.json'
+      - 'fixtures/historical-full-replay-authority-map-r1.part-*.b64'
+      - 'scripts/historical-full-replay-authority-map-fixture.mjs'
+      - 'scripts/historical-full-replay-authority-map-materialize.mjs'
+      - 'scripts/historical-full-replay-r1-aggregate.mjs'
+      - 'src/historicalFullReplayCli.ts'
+      - 'src/runtime/executableBaseline.ts'
+      - 'src/outcome/historicalRedstoneOutcomeSource.ts'
+      - 'src/tsunami/historicalRedstoneBaselineSource.ts'
+      - 'src/outcome/horizons.ts'
+      - '.github/workflows/historical-full-replay-r1-stage-b.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  replay-shards:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - { id: s01, start: 1, end: 2 }
+          - { id: s02, start: 3, end: 7 }
+          - { id: s03, start: 8, end: 29 }
+          - { id: s04, start: 30, end: 58 }
+          - { id: s05, start: 59, end: 62 }
+          - { id: s06, start: 63, end: 84 }
+          - { id: s07, start: 85, end: 86 }
+          - { id: s08, start: 87, end: 88 }
+          - { id: s09, start: 89, end: 108 }
+          - { id: s10, start: 109, end: 128 }
+          - { id: s11, start: 129, end: 147 }
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+      - name: Validate frozen Stage B authority
+        run: |
+          node scripts/dev-spine-check-test.mjs
+          node scripts/dev-spine-check.mjs
+      - name: Build
+        run: pnpm build
+      - name: Materialize verified authority map
+        env:
+          OUTPUT_PATH: historical-full-replay-authority-map-r1-decoded.json
+        run: node scripts/historical-full-replay-authority-map-materialize.mjs
+      - name: Replay frozen shard
+        env:
+          SHADOW_ONLY: 'true'
+          AUTHORITY_MAP_PATH: historical-full-replay-authority-map-r1-decoded.json
+          SHARD_START_ORDINAL: ${{ matrix.start }}
+          SHARD_END_ORDINAL: ${{ matrix.end }}
+          OUTPUT_PATH: historical-full-replay-r1-shard-${{ matrix.id }}.json
+        run: node dist/historicalFullReplayCli.js
+      - name: Upload shard evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-full-replay-r1-${{ matrix.id }}
+          path: historical-full-replay-r1-shard-${{ matrix.id }}.json
+          if-no-files-found: error
+
+  aggregate:
+    needs: replay-shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: historical-full-replay-r1-s*
+          path: replay-shards
+          merge-multiple: true
+      - name: Aggregate and enforce 147 × 5 accounting
+        env:
+          INPUT_DIR: replay-shards
+          OUTPUT_PATH: historical-full-replay-r1-live-receipt.json
+        run: node scripts/historical-full-replay-r1-aggregate.mjs
+      - name: Upload full replay evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-full-replay-r1-evidence
+          path: historical-full-replay-r1-live-receipt.json
+          if-no-files-found: error
