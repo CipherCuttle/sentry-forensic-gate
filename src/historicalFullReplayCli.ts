@@ -132,6 +132,7 @@ for (const expected of rows) {
     baselineId: baseline.baselineId,
     baselinePolicyVersion: baseline.policyVersion,
     baselineStatus: baseline.status,
+    baseline,
     outcomes: outcomeRows
   };
 
@@ -164,9 +165,7 @@ for (const expected of rows) {
       authorizeExecutableBlock
     );
     if (!outcome) {
-      outcomesUnverified += 1;
-      outcomeRows.push({ horizonLabel: horizon.label, horizonMs: horizon.ms, status: 'UNVERIFIED', reason: 'UNEXPECTED_NULL' });
-      continue;
+      throw new Error(`HISTORICAL_FULL_REPLAY_OUTCOME_PENDING:ordinal=${expected.ordinal}:horizon=${horizon.label}:confirmedHead=${confirmedHeadPoint.blockNumber}`);
     }
     if (outcome.horizonMs !== horizon.ms || outcome.policyVersion !== HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1) {
       throw new Error(`HISTORICAL_FULL_REPLAY_OUTCOME_POLICY_DRIFT:ordinal=${expected.ordinal}:horizon=${horizon.label}`);

@@ -8,6 +8,7 @@ const MAP_DIGEST = 'c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e602
 const BASELINE_POLICY = 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1';
 const OUTCOME_POLICY = 'HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1';
 const EXPECTED_HORIZONS = [60000,300000,1800000,7200000,86400000];
+const EXPECTED_NOTIONALS = ['250000','500000','1000000','2000000','5000000'];
 
 function invariant(condition, message) { if (!condition) throw new Error(message); }
 const files = fs.readdirSync(INPUT_DIR).filter((name) => name.endsWith('.json')).sort();
@@ -37,9 +38,26 @@ let horizonCellsAccounted = 0;
 const statusCounts = {};
 
 for (const row of rows) {
-  if (row.baselineStatus === 'COMPLETE') baselineComplete += 1;
-  else if (row.baselineStatus === 'UNVERIFIED') baselineUnverified += 1;
-  else throw new Error(`unexpected baseline status:ordinal=${row.ordinal}:status=${row.baselineStatus}`);
+  const baseline = row.baseline;
+  invariant(baseline && typeof baseline === 'object', `full baseline receipt required:ordinal=${row.ordinal}`);
+  invariant(baseline.baselineId === row.baselineId, `baseline id drift:ordinal=${row.ordinal}`);
+  invariant(baseline.policyVersion === BASELINE_POLICY && baseline.policyVersion === row.baselinePolicyVersion, `baseline policy drift:ordinal=${row.ordinal}`);
+  invariant(baseline.status === row.baselineStatus, `baseline status drift:ordinal=${row.ordinal}`);
+  invariant(typeof baseline.decisionBlock === 'string' && typeof baseline.decisionBlockHash === 'string', `baseline decision point missing:ordinal=${row.ordinal}`);
+  invariant(typeof baseline.authorityDigest === 'string' && baseline.authorityDigest.length > 0, `baseline authority digest missing:ordinal=${row.ordinal}`);
+
+  if (row.baselineStatus === 'COMPLETE') {
+    baselineComplete += 1;
+    invariant(baseline.market && typeof baseline.market === 'object', `complete baseline market missing:ordinal=${row.ordinal}`);
+    invariant(Array.isArray(baseline.legs) && baseline.legs.length === 5, `complete baseline must retain five quote legs:ordinal=${row.ordinal}`);
+    invariant(JSON.stringify(baseline.legs.map((leg) => String(leg.notionalUsdMicros))) === JSON.stringify(EXPECTED_NOTIONALS), `baseline notional set/order drift:ordinal=${row.ordinal}`);
+    invariant(baseline.legs.every((leg) => leg.calibration && leg.entry), `baseline quote evidence missing:ordinal=${row.ordinal}`);
+  } else if (row.baselineStatus === 'UNVERIFIED') {
+    baselineUnverified += 1;
+    invariant(Array.isArray(baseline.legs) && baseline.legs.length === 0, `unverified baseline quote legs drift:ordinal=${row.ordinal}`);
+    invariant(typeof baseline.reason === 'string' && baseline.reason.length > 0, `unverified baseline reason missing:ordinal=${row.ordinal}`);
+  } else throw new Error(`unexpected baseline status:ordinal=${row.ordinal}:status=${row.baselineStatus}`);
+
   invariant(Array.isArray(row.outcomes) && row.outcomes.length === 5, `launch must account for five horizons:ordinal=${row.ordinal}`);
   const actualHorizons = row.outcomes.map((cell) => cell.horizonMs);
   invariant(JSON.stringify(actualHorizons) === JSON.stringify(EXPECTED_HORIZONS), `horizon set/order drift:ordinal=${row.ordinal}`);

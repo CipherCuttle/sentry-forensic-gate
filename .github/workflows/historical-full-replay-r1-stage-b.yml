@@ -10,11 +10,7 @@ on:
       - 'scripts/historical-full-replay-authority-map-fixture.mjs'
       - 'scripts/historical-full-replay-authority-map-materialize.mjs'
       - 'scripts/historical-full-replay-r1-aggregate.mjs'
-      - 'src/historicalFullReplayCli.ts'
-      - 'src/runtime/executableBaseline.ts'
-      - 'src/outcome/historicalRedstoneOutcomeSource.ts'
-      - 'src/tsunami/historicalRedstoneBaselineSource.ts'
-      - 'src/outcome/horizons.ts'
+      - 'src/**'
       - '.github/workflows/historical-full-replay-r1-stage-b.yml'
 
 permissions:
