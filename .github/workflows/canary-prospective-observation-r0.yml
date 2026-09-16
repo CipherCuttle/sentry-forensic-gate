@@ -1,0 +1,118 @@
+name: canary-prospective-observation-r0
+
+on:
+  push:
+    branches:
+      - agent/canary-prospective-observation-r0
+    paths:
+      - '.github/workflows/canary-prospective-observation-r0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-observation:
+    if: github.ref == 'refs/heads/agent/canary-prospective-observation-r0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+
+      - name: Derive bounded fresh observation window
+        shell: bash
+        run: |
+          set -euo pipefail
+          RPC='https://rpc-gel.inkonchain.com'
+          HEAD_HEX="$(curl -fsSL \
+            -H 'content-type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
+            "$RPC" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const x=JSON.parse(d);if(typeof x.result!=='string')process.exit(1);process.stdout.write(x.result)})")"
+          HEAD=$((16#${HEAD_HEX#0x}))
+          START=$(( HEAD > 32 ? HEAD - 32 : HEAD ))
+          echo "OBSERVED_HEAD=$HEAD" >> "$GITHUB_ENV"
+          echo "SENTRY_START_BLOCK=$START" >> "$GITHUB_ENV"
+          echo "INK_RPC_URL=$RPC" >> "$GITHUB_ENV"
+          echo "CANARY_SNIPER_R0_ENABLED=true" >> "$GITHUB_ENV"
+          echo "CANARY_LIVE=false" >> "$GITHUB_ENV"
+          echo "DB_PATH=$RUNNER_TEMP/canary-prospective-observation-r0.sqlite" >> "$GITHUB_ENV"
+          echo "CANARY_CANDIDATE_MAX_AGE_BLOCKS=10" >> "$GITHUB_ENV"
+          echo "CANARY_CANDIDATE_SCAN_LIMIT=25" >> "$GITHUB_ENV"
+          echo "SENTRY_CONFIRMATIONS=0" >> "$GITHUB_ENV"
+          echo "BASELINE_CONFIRMATIONS=0" >> "$GITHUB_ENV"
+          echo "OUTCOME_CONFIRMATIONS=2" >> "$GITHUB_ENV"
+          printf 'OBSERVATION_WINDOW head=%s start=%s\n' "$HEAD" "$START"
+
+      - name: Assert no wallet secret is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${CANARY_PRIVATE_KEY:-}"
+          test "${CANARY_LIVE}" = 'false'
+          echo 'CANARY_NO_KEY_BOUNDARY=PASS'
+
+      - name: Run one prospective dry cycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          node dist/canarySniperCli.js --once | tee canary-prospective-observation-r0.jsonl
+
+      - name: Verify and seal dry observation receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { createHash } from 'node:crypto';
+
+          const lines = fs.readFileSync('canary-prospective-observation-r0.jsonl', 'utf8')
+            .split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+          const jsonLines = lines.filter((x) => x.startsWith('{'));
+          if (jsonLines.length !== 1) throw new Error(`OBSERVATION_JSON_COUNT:${jsonLines.length}`);
+          const report = JSON.parse(jsonLines[0]);
+          if (report.runtimeVersion !== 'CANARY_SNIPER_R0') throw new Error('OBSERVATION_RUNTIME_DRIFT');
+          if (report.live !== false) throw new Error('OBSERVATION_NOT_DRY');
+          const action = report.canary?.action;
+          if (!['NONE', 'DRY_PASS', 'BLOCKED_UNRESOLVED', 'BLOCKED_SETUP'].includes(action)) {
+            throw new Error(`OBSERVATION_UNEXPECTED_ACTION:${action}`);
+          }
+          if (action === 'SUBMITTED' || action === 'INCLUDED' || report.canary?.transactionHash) {
+            throw new Error('OBSERVATION_MONEY_MOVING_SIGNAL');
+          }
+          const core = {
+            schema: 'canary-prospective-observation-r0-receipt/v1',
+            sourceHead: process.env.GITHUB_SHA,
+            branch: process.env.GITHUB_REF_NAME,
+            live: false,
+            privateKeyPresent: Boolean(process.env.CANARY_PRIVATE_KEY),
+            observedHead: process.env.OBSERVED_HEAD,
+            startBlock: process.env.SENTRY_START_BLOCK,
+            candidateMaxAgeBlocks: process.env.CANARY_CANDIDATE_MAX_AGE_BLOCKS,
+            report
+          };
+          const canonical = JSON.stringify(core);
+          const evidenceDigest = createHash('sha256').update(canonical).digest('hex');
+          fs.writeFileSync('canary-prospective-observation-r0-receipt.json', JSON.stringify({ ...core, evidenceDigest }, null, 2) + '\n');
+          console.log(JSON.stringify({
+            verdict: 'CANARY_PROSPECTIVE_OBSERVATION_R0_COMPLETE',
+            evidenceDigest,
+            action,
+            pass: report.canary?.pass,
+            reject: report.canary?.reject,
+            unknown: report.canary?.unknown,
+            candidatesConsidered: report.canary?.candidatesConsidered
+          }, null, 2));
+          NODE
+
+      - name: Upload dry observation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-prospective-observation-r0-evidence
+          path: canary-prospective-observation-r0-receipt.json
+          if-no-files-found: error
