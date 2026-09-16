@@ -187,10 +187,14 @@ export class CanaryApprovalStore {
   }
 
   markIncluded(actionId: string, observedAllowanceAfter: bigint): void {
-    const row = this.db.prepare('SELECT state, intent_json FROM canary_approval_actions WHERE action_id = ?').get(actionId) as { state: CanaryApprovalState; intent_json: string } | undefined;
+    const row = this.db.prepare(`
+      SELECT state, intent_json, transaction_hash, serialized_transaction
+      FROM canary_approval_actions WHERE action_id = ?
+    `).get(actionId) as ReconcileRow | undefined;
     if (!row || !['SIGNED', 'SUBMITTED', 'SAFE_HALT'].includes(row.state)) {
       throw new Error(`CANARY_APPROVAL_INCLUDED_INVALID_STATE:${row?.state ?? 'MISSING'}`);
     }
+    this.assertSignedProvenance(row, actionId);
     const intent = reviveApprovalIntent(row.intent_json);
     if (observedAllowanceAfter !== intent.amount) {
       throw new Error(`CANARY_APPROVAL_POST_ALLOWANCE_NOT_EXACT:${observedAllowanceAfter}:${intent.amount}`);
@@ -200,10 +204,14 @@ export class CanaryApprovalStore {
   }
 
   markReverted(actionId: string): void {
-    const row = this.db.prepare('SELECT state FROM canary_approval_actions WHERE action_id = ?').get(actionId) as { state: CanaryApprovalState } | undefined;
+    const row = this.db.prepare(`
+      SELECT state, intent_json, transaction_hash, serialized_transaction
+      FROM canary_approval_actions WHERE action_id = ?
+    `).get(actionId) as ReconcileRow | undefined;
     if (!row || !['SIGNED', 'SUBMITTED', 'SAFE_HALT'].includes(row.state)) {
       throw new Error(`CANARY_APPROVAL_REVERTED_INVALID_STATE:${row?.state ?? 'MISSING'}`);
     }
+    this.assertSignedProvenance(row, actionId);
     this.db.prepare('UPDATE canary_approval_actions SET state = ?, updated_at_ms = ? WHERE action_id = ?')
       .run('REVERTED', Date.now(), actionId);
   }
@@ -224,6 +232,16 @@ export class CanaryApprovalStore {
     if (record.intent.parentExitActionId !== record.parentExitActionId) throw new Error('CANARY_APPROVAL_PARENT_EXIT_ID_MISMATCH');
     if (record.intent.launchId !== record.launchId || record.intent.baselineId !== record.baselineId) {
       throw new Error('CANARY_APPROVAL_INTENT_IDENTITY_MISMATCH');
+    }
+  }
+
+  private assertSignedProvenance(row: ReconcileRow, actionId: string): void {
+    if (!row.transaction_hash || !row.serialized_transaction) {
+      throw new Error(`CANARY_APPROVAL_RECONCILE_SIGNED_PROVENANCE_MISSING:${actionId}`);
+    }
+    const derivedHash = keccak256(row.serialized_transaction);
+    if (derivedHash.toLowerCase() !== row.transaction_hash.toLowerCase()) {
+      throw new Error(`CANARY_APPROVAL_RECONCILE_SIGNED_IDENTITY_MISMATCH:${actionId}`);
     }
   }
 
@@ -256,6 +274,13 @@ type ExistingApprovalRow = {
   parent_exit_action_id: string;
   launch_id: string;
   baseline_id: string;
+};
+
+type ReconcileRow = {
+  state: CanaryApprovalState;
+  intent_json: string;
+  transaction_hash: Hex | null;
+  serialized_transaction: Hex | null;
 };
 
 type ApprovalRow = ExistingApprovalRow & {
