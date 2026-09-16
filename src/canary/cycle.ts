@@ -1,10 +1,12 @@
-import type { Address, Hex } from 'viem';
+import { getAddress, type Address, type Hex } from 'viem';
 import type { SqliteStore } from '../db/sqliteStore.js';
 import { evaluateFastVet } from '../evaluation/fastVet.js';
 import { projectCreatorOutcomeFeatures } from '../forensic/creatorOutcome.js';
 import type { ViemExecutableBaselineSource } from '../tsunami/viemBaselineSource.js';
+import { advanceCanaryE0EntryApproval, reconcileCanaryE0EntryApproval } from './entryApprovalRuntime.js';
+import { CanaryEntryApprovalStore } from './entryApprovalStore.js';
 import { applyHistoricalCreatorSeed } from './historicalCreatorSeed.js';
-import { buildCanarySwapIntent, CANARY_PRIMARY_NOTIONAL_USD_MICROS, deriveCanaryActionId } from './swapIntent.js';
+import { buildCanarySwapIntent, CANARY_PRIMARY_NOTIONAL_USD_MICROS, deriveCanaryActionId, INK_SWAP_ROUTER_02 } from './swapIntent.js';
 import { CanaryStore } from './store.js';
 import type { CanaryActionRecord } from './types.js';
 import { assertCanaryQuoteBlockHash, type ViemCanaryExecutor } from './viemCanaryExecutor.js';
@@ -24,7 +26,7 @@ export interface CanaryCycleReport {
   pass: number;
   reject: number;
   unknown: number;
-  action: 'NONE' | 'DRY_PASS' | 'SUBMITTED' | 'INCLUDED' | 'BLOCKED_UNRESOLVED' | 'BLOCKED_SETUP';
+  action: 'NONE' | 'DRY_PASS' | 'ENTRY_APPROVAL_SUBMITTED' | 'ENTRY_APPROVAL_INCLUDED' | 'SUBMITTED' | 'INCLUDED' | 'BLOCKED_UNRESOLVED' | 'BLOCKED_SETUP';
   launchId?: string;
   transactionHash?: Hex;
   reason?: string;
@@ -33,6 +35,7 @@ export interface CanaryCycleReport {
 export async function syncCanarySniper(params: {
   store: SqliteStore;
   canaryStore: CanaryStore;
+  entryApprovalStore?: CanaryEntryApprovalStore | null;
   baselineSource: ViemExecutableBaselineSource;
   executor: ViemCanaryExecutor | null;
   options: CanaryCycleOptions;
@@ -45,10 +48,64 @@ export async function syncCanarySniper(params: {
     return { headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0, ...result };
   }
 
+  if (params.options.live && params.entryApprovalStore) {
+    const unresolvedEntryApprovals = params.entryApprovalStore.listUnresolved();
+    if (unresolvedEntryApprovals.length) {
+      if (!params.executor) {
+        return {
+          headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+          action: 'BLOCKED_UNRESOLVED', launchId: unresolvedEntryApprovals[0]!.launchId,
+          reason: 'CANARY_E0_ENTRY_APPROVAL_UNRESOLVED_REQUIRES_EXECUTOR'
+        };
+      }
+      const reconciled = await reconcileCanaryE0EntryApproval({ store: params.entryApprovalStore, executor: params.executor });
+      if (reconciled) {
+        return {
+          headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+          action: mapEntryApprovalAction(reconciled.action),
+          launchId: unresolvedEntryApprovals[0]!.launchId,
+          transactionHash: reconciled.transactionHash,
+          reason: reconciled.reason
+        };
+      }
+    }
+  }
+
   const minDecisionBlock = headBlock > params.options.candidateMaxAgeBlocks
     ? headBlock - params.options.candidateMaxAgeBlocks
     : 0n;
-  const baselines = params.canaryStore.listPendingBaselines(minDecisionBlock, params.options.candidateScanLimit);
+  const committedEntry = params.options.live && params.entryApprovalStore
+    ? params.entryApprovalStore.getCommitted()
+    : null;
+  if (committedEntry?.state === 'REVERTED' || committedEntry?.state === 'SKIPPED') {
+    return {
+      headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+      action: 'BLOCKED_SETUP', launchId: committedEntry.launchId,
+      reason: `CANARY_E0_ENTRY_APPROVAL_TERMINAL_STATE:${committedEntry.state}`
+    };
+  }
+
+  let baselines;
+  if (committedEntry) {
+    const frozen = params.canaryStore.getCompleteBaseline(committedEntry.launchId, committedEntry.baselineId);
+    if (!frozen) {
+      return {
+        headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+        action: 'BLOCKED_SETUP', launchId: committedEntry.launchId,
+        reason: 'CANARY_E0_ENTRY_APPROVAL_BASELINE_MISSING'
+      };
+    }
+    if (frozen.decisionBlock < minDecisionBlock) {
+      return {
+        headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+        action: 'BLOCKED_SETUP', launchId: committedEntry.launchId,
+        reason: 'CANARY_E0_ENTRY_APPROVAL_CANDIDATE_EXPIRED'
+      };
+    }
+    baselines = [frozen];
+  } else {
+    baselines = params.canaryStore.listPendingBaselines(minDecisionBlock, params.options.candidateScanLimit);
+  }
   if (!baselines.length) return { headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0, action: 'NONE' };
 
   const features = await projectCreatorOutcomeFeatures(
@@ -74,7 +131,22 @@ export async function syncCanarySniper(params: {
     else unknown += 1;
     const actionId = await deriveCanaryActionId(baseline.launchId, baseline.baselineId);
 
+    if (committedEntry && committedEntry.parentBuyActionId !== actionId) {
+      return {
+        headBlock, candidatesConsidered: considered, pass, reject, unknown,
+        action: 'BLOCKED_SETUP', launchId: baseline.launchId,
+        reason: 'CANARY_E0_ENTRY_APPROVAL_PARENT_BUY_IDENTITY_DRIFT'
+      };
+    }
+
     if (vet.decision !== 'PASS') {
+      if (committedEntry) {
+        return {
+          headBlock, candidatesConsidered: considered, pass, reject, unknown,
+          action: 'BLOCKED_SETUP', launchId: baseline.launchId,
+          reason: `CANARY_E0_ENTRY_APPROVAL_CANDIDATE_NO_LONGER_PASS:${vet.decision}`
+        };
+      }
       params.canaryStore.insert(makeRecord({
         actionId, baseline, decision: vet.decision, reasons: vet.reasons, state: 'SKIPPED'
       }));
@@ -92,6 +164,13 @@ export async function syncCanarySniper(params: {
     // Advisory fast path only. The database partial UNIQUE index is the actual
     // one-buy authority and closes count/insert races across processes.
     if (params.canaryStore.countCommittedBuys() >= params.options.buyLimit) {
+      if (committedEntry) {
+        return {
+          headBlock, candidatesConsidered: considered, pass, reject, unknown,
+          action: 'BLOCKED_SETUP', launchId: baseline.launchId,
+          reason: 'CANARY_E0_ENTRY_APPROVAL_BUY_SLOT_ALREADY_CONSUMED'
+        };
+      }
       params.canaryStore.insert(makeRecord({
         actionId, baseline, decision: 'PASS', reasons: ['CANARY_BUY_LIMIT_REACHED'], state: 'SKIPPED'
       }));
@@ -108,9 +187,29 @@ export async function syncCanarySniper(params: {
         launch, market, decisionBlock: quoteBlockNumber, decisionBlockHash: quoteBlockHash,
         notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS
       });
+
+      let amountIn = calibration.baseAmount;
+      if (committedEntry) {
+        if (getAddress(committedEntry.intent.owner) !== getAddress(params.executor.walletAddress)) {
+          throw new Error('CANARY_E0_ENTRY_APPROVAL_OWNER_DRIFT');
+        }
+        if (getAddress(committedEntry.intent.token) !== getAddress(market.baseToken as Address)) {
+          throw new Error('CANARY_E0_ENTRY_APPROVAL_BASE_TOKEN_DRIFT');
+        }
+        if (getAddress(committedEntry.intent.buyTokenOut) !== getAddress(market.launchedToken as Address)) {
+          throw new Error('CANARY_E0_ENTRY_APPROVAL_LAUNCHED_TOKEN_DRIFT');
+        }
+        if (committedEntry.intent.buyFee !== market.fee) throw new Error('CANARY_E0_ENTRY_APPROVAL_FEE_DRIFT');
+        if (getAddress(committedEntry.intent.spender) !== INK_SWAP_ROUTER_02) throw new Error('CANARY_E0_ENTRY_APPROVAL_ROUTER_DRIFT');
+        if (committedEntry.intent.amount > calibration.baseAmount) {
+          throw new Error(`CANARY_E0_ENTRY_APPROVAL_EXCEEDS_FRESH_DOLLAR_CAP:${committedEntry.intent.amount}:${calibration.baseAmount}`);
+        }
+        amountIn = committedEntry.intent.amount;
+      }
+
       const entry = await params.baselineSource.quoteEntry({
         launch, market, decisionBlock: quoteBlockNumber, decisionBlockHash: quoteBlockHash,
-        notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS, amountIn: calibration.baseAmount
+        notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS, amountIn
       });
       if (!entry.executable || entry.amountOut <= 0n) throw new Error('CANARY_FRESH_ENTRY_NOT_EXECUTABLE');
       const reverse = await params.baselineSource.quoteIndependentReverse({
@@ -119,13 +218,9 @@ export async function syncCanarySniper(params: {
       });
       if (!reverse.executable || reverse.amountOut <= 0n) throw new Error('CANARY_FRESH_REVERSE_NOT_EXECUTABLE');
 
-      // All historical-at-block reads above must still refer to the same
-      // canonical block after the last quote. A tip reorg invalidates the whole
-      // evidence bundle rather than mixing forks.
       const quoteBlockHashAfter = await params.baselineSource.getBlockHash(quoteBlockNumber);
       assertCanaryQuoteBlockHash(quoteBlockHash, quoteBlockHashAfter);
 
-      // Deadline authority comes from Ink's block clock, never the host clock.
       const chainClock = await params.executor.getChainClock();
       const intent = await buildCanarySwapIntent({
         launchId: baseline.launchId,
@@ -137,13 +232,34 @@ export async function syncCanarySniper(params: {
         fee: market.fee,
         recipient: params.executor.walletAddress,
         notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS,
-        amountIn: calibration.baseAmount,
+        amountIn,
         quotedAmountOut: entry.amountOut,
         slippageBps: params.options.slippageBps,
         chainTimestampSeconds: chainClock.timestampSeconds,
         deadlineSeconds: params.options.deadlineSeconds
       });
+
+      if (params.entryApprovalStore) {
+        const entryApproval = await advanceCanaryE0EntryApproval({
+          plannedBuy: intent,
+          store: params.entryApprovalStore,
+          executor: params.executor
+        });
+        if (entryApproval.action !== 'READY_TO_BUY') {
+          return {
+            headBlock, candidatesConsidered: considered, pass, reject, unknown,
+            action: mapEntryApprovalAction(entryApproval.action),
+            launchId: baseline.launchId,
+            transactionHash: entryApproval.transactionHash,
+            reason: entryApproval.reason
+          };
+        }
+      }
+
       const preflight = await params.executor.preflight(intent);
+      if (params.entryApprovalStore && preflight.inputAllowance !== intent.amountIn) {
+        throw new Error(`CANARY_E0_ENTRY_APPROVAL_BUY_ALLOWANCE_NOT_EXACT:${preflight.inputAllowance}:${intent.amountIn}`);
+      }
       const now = Date.now();
       const reservation = params.canaryStore.insert(makeRecord({
         actionId: intent.actionId,
@@ -196,6 +312,11 @@ export async function syncCanarySniper(params: {
   }
 
   return { headBlock, candidatesConsidered: considered, pass, reject, unknown, action: 'NONE' };
+}
+
+function mapEntryApprovalAction(action: 'ENTRY_APPROVAL_INCLUDED' | 'ENTRY_APPROVAL_SUBMITTED' | 'READY_TO_BUY' | 'BLOCKED_UNRESOLVED' | 'BLOCKED_SETUP'): CanaryCycleReport['action'] {
+  if (action === 'READY_TO_BUY') throw new Error('CANARY_E0_ENTRY_APPROVAL_READY_MAPPING_INVALID');
+  return action;
 }
 
 async function reconcileOne(action: CanaryActionRecord, store: CanaryStore, executor: ViemCanaryExecutor | null): Promise<Pick<CanaryCycleReport, 'action' | 'launchId' | 'transactionHash' | 'reason'>> {

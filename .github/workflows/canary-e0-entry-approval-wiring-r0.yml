@@ -1,0 +1,61 @@
+name: canary-e0-entry-approval-wiring-r0
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/canary/cycle.ts'
+      - 'src/canary/entryApproval.ts'
+      - 'src/canary/entryApprovalStore.ts'
+      - 'src/canary/entryApprovalRuntime.ts'
+      - 'src/canary/store.ts'
+      - 'src/canarySniperCli.ts'
+      - 'scripts/canary-e0-entry-approval-wiring-r0-check.mjs'
+      - '.github/workflows/canary-e0-entry-approval-wiring-r0.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-entry-approval-wiring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+      - name: Preserve narrow canary wallet authority
+        run: node scripts/canary-boundary-check.mjs
+      - name: Preserve research-only boundary outside executor
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+      - name: Assert no live wallet secret or live mode in CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${CANARY_PRIVATE_KEY:-}"
+          test "${CANARY_LIVE:-false}" = "false"
+          echo 'CANARY_E0_ENTRY_APPROVAL_WIRING_NO_SECRET=PASS'
+      - name: Qualify entry approval to BUY wiring offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/canary-e0-entry-approval-wiring-r0-check.mjs | tee canary-e0-entry-approval-wiring-r0.json
+          grep -q '"verdict": "CANARY_E0_ENTRY_APPROVAL_WIRING_R0_PASS"' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"approvalAndBuySeparatedAcrossPolls": true' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"exactApprovedAmountBoundToBuy": true' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"widenedAllowanceBlocked": true' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"freshDollarCapCannotBeExceeded": true' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"exactBaselineRehydrationRequired": true' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"candidateReevaluationFailClosed": true' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"cliLiveEntryApprovalKillSwitch": true' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"cleanupRevokeQualified": false' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"networkBroadcastInvoked": false' canary-e0-entry-approval-wiring-r0.json
+          grep -q '"liveEntryApprovalReachable": false' canary-e0-entry-approval-wiring-r0.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canary-e0-entry-approval-wiring-r0-evidence
+          path: canary-e0-entry-approval-wiring-r0.json
+          if-no-files-found: error

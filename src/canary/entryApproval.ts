@@ -23,6 +23,8 @@ export interface CanaryEntryApprovalIntent {
   baselineId: string;
   owner: Address;
   token: Address;
+  buyTokenOut: Address;
+  buyFee: number;
   spender: Address;
   amount: bigint;
   sourceQuoteBlockNumber: bigint;
@@ -37,6 +39,8 @@ export async function deriveCanaryEntryApprovalActionId(params: {
   baselineId: string;
   owner: Address;
   token: Address;
+  buyTokenOut: Address;
+  buyFee: number;
   spender: Address;
   amount: bigint;
   sourceQuoteBlockNumber: bigint;
@@ -46,6 +50,9 @@ export async function deriveCanaryEntryApprovalActionId(params: {
     throw new Error('CANARY_ENTRY_APPROVAL_IDENTITY_REQUIRED');
   }
   assertEntryApprovalAmount(params.amount);
+  if (!Number.isInteger(params.buyFee) || params.buyFee < 0 || params.buyFee > 1_000_000) {
+    throw new Error(`CANARY_ENTRY_APPROVAL_BUY_FEE_INVALID:${params.buyFee}`);
+  }
   if (params.sourceQuoteBlockNumber < 0n) throw new Error('CANARY_ENTRY_APPROVAL_QUOTE_BLOCK_INVALID');
   const spender = getAddress(params.spender);
   if (spender !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_ENTRY_APPROVAL_SPENDER_MUST_EQUAL_ROUTER:${spender}`);
@@ -56,6 +63,8 @@ export async function deriveCanaryEntryApprovalActionId(params: {
     baselineId: params.baselineId,
     owner: getAddress(params.owner),
     token: getAddress(params.token),
+    buyTokenOut: getAddress(params.buyTokenOut),
+    buyFee: params.buyFee,
     spender,
     amount: params.amount,
     sourceQuoteBlockNumber: params.sourceQuoteBlockNumber,
@@ -72,6 +81,7 @@ export async function buildCanaryEntryApprovalIntent(buyIntent: CanarySwapIntent
 
   const owner = getAddress(buyIntent.recipient);
   const token = getAddress(buyIntent.tokenIn);
+  const buyTokenOut = getAddress(buyIntent.tokenOut);
   const spender = getAddress(buyIntent.router);
   if (spender !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_ENTRY_APPROVAL_SPENDER_MUST_EQUAL_ROUTER:${spender}`);
 
@@ -81,6 +91,8 @@ export async function buildCanaryEntryApprovalIntent(buyIntent: CanarySwapIntent
     baselineId: buyIntent.baselineId,
     owner,
     token,
+    buyTokenOut,
+    buyFee: buyIntent.fee,
     spender,
     amount: buyIntent.amountIn,
     sourceQuoteBlockNumber: buyIntent.quoteBlockNumber,
@@ -103,6 +115,8 @@ export async function buildCanaryEntryApprovalIntent(buyIntent: CanarySwapIntent
     baselineId: buyIntent.baselineId,
     owner,
     token,
+    buyTokenOut,
+    buyFee: buyIntent.fee,
     spender,
     amount: buyIntent.amountIn,
     sourceQuoteBlockNumber: buyIntent.quoteBlockNumber,
@@ -117,6 +131,24 @@ export function assertCanaryEntryApprovalCalldata(
 ): void {
   assertEntryApprovalAmount(intent.amount);
   assertCanaryApprovalCalldata(intent);
+}
+
+export function assertCanaryEntryApprovalCoversBuy(
+  approval: CanaryEntryApprovalIntent,
+  buy: CanarySwapIntent
+): void {
+  assertCanonicalBuy(buy);
+  if (approval.parentBuyActionId !== buy.actionId) throw new Error('CANARY_ENTRY_APPROVAL_BUY_ACTION_ID_MISMATCH');
+  if (approval.launchId !== buy.launchId || approval.baselineId !== buy.baselineId) {
+    throw new Error('CANARY_ENTRY_APPROVAL_BUY_IDENTITY_MISMATCH');
+  }
+  if (getAddress(approval.owner) !== getAddress(buy.recipient)) throw new Error('CANARY_ENTRY_APPROVAL_BUY_OWNER_MISMATCH');
+  if (getAddress(approval.token) !== getAddress(buy.tokenIn)) throw new Error('CANARY_ENTRY_APPROVAL_BUY_TOKEN_IN_MISMATCH');
+  if (getAddress(approval.buyTokenOut) !== getAddress(buy.tokenOut)) throw new Error('CANARY_ENTRY_APPROVAL_BUY_TOKEN_OUT_MISMATCH');
+  if (approval.buyFee !== buy.fee) throw new Error('CANARY_ENTRY_APPROVAL_BUY_FEE_MISMATCH');
+  if (getAddress(approval.spender) !== getAddress(buy.router)) throw new Error('CANARY_ENTRY_APPROVAL_BUY_ROUTER_MISMATCH');
+  if (approval.amount !== buy.amountIn) throw new Error(`CANARY_ENTRY_APPROVAL_BUY_AMOUNT_MISMATCH:${approval.amount}:${buy.amountIn}`);
+  if (approval.notionalUsdMicros !== buy.notionalUsdMicros) throw new Error('CANARY_ENTRY_APPROVAL_BUY_NOTIONAL_MISMATCH');
 }
 
 function assertEntryApprovalAmount(amount: bigint): void {

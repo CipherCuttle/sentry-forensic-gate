@@ -57,6 +57,16 @@ export class CanaryStore {
     return rows.map((row) => reviveBaselineBatch(row.payload_json));
   }
 
+  getCompleteBaseline(launchId: string, baselineId: string): ExecutableBaselineBatch | null {
+    const row = this.db.prepare(`
+      SELECT payload_json
+      FROM baseline_batches
+      WHERE launch_id = ? AND baseline_id = ? AND status = 'COMPLETE'
+      LIMIT 1
+    `).get(launchId, baselineId) as { payload_json: string } | undefined;
+    return row ? reviveBaselineBatch(row.payload_json) : null;
+  }
+
   countCommittedBuys(): number {
     const row = this.db.prepare(`
       SELECT COUNT(*) AS count

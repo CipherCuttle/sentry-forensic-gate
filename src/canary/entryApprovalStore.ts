@@ -194,6 +194,8 @@ export class CanaryEntryApprovalStore {
       baselineId: record.baselineId,
       owner: record.intent.owner,
       token: record.intent.token,
+      buyTokenOut: record.intent.buyTokenOut,
+      buyFee: record.intent.buyFee,
       spender: record.intent.spender,
       amount: record.intent.amount,
       sourceQuoteBlockNumber: record.intent.sourceQuoteBlockNumber,
