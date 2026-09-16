@@ -279,6 +279,7 @@ export class ViemCanaryExecutor {
   }
 
   async broadcastExact(signed: SignedCanaryTransaction): Promise<Hex> {
+    await assertSignedCanaryTransactionEnvelope(signed, this.account.address, this.caps);
     const returnedHash = await this.walletClient.sendRawTransaction({ serializedTransaction: signed.serializedTransaction });
     if (returnedHash.toLowerCase() !== signed.transactionHash.toLowerCase()) {
       throw new Error(`CANARY_BROADCAST_HASH_MISMATCH:${returnedHash}:${signed.transactionHash}`);
@@ -325,28 +326,38 @@ export class ViemCanaryExecutor {
   }
 }
 
+export async function assertSignedCanaryTransactionEnvelope(
+  signed: SignedCanaryTransaction,
+  expectedWallet: Address,
+  caps?: CanaryExecutorCaps
+): Promise<void> {
+  const derivedHash = keccak256(signed.serializedTransaction);
+  if (
+    derivedHash.toLowerCase() !== signed.transactionHash.toLowerCase() ||
+    derivedHash.toLowerCase() !== signed.serializedTransactionKeccak256.toLowerCase()
+  ) throw new Error('CANARY_BROADCAST_SIGNED_IDENTITY_MISMATCH');
+  const parsed = parseTransaction(signed.serializedTransaction);
+  if (parsed.chainId !== INK_CHAIN_ID) throw new Error(`CANARY_BROADCAST_CHAIN_ID_MISMATCH:${parsed.chainId}`);
+  if ((parsed.value ?? 0n) !== 0n) throw new Error('CANARY_BROADCAST_VALUE_NONZERO');
+  if (parsed.nonce !== signed.nonce) throw new Error('CANARY_BROADCAST_NONCE_MISMATCH');
+  if (parsed.gas !== signed.gas) throw new Error('CANARY_BROADCAST_GAS_MISMATCH');
+  if (parsed.maxFeePerGas !== signed.maxFeePerGas) throw new Error('CANARY_BROADCAST_MAX_FEE_MISMATCH');
+  if (parsed.maxPriorityFeePerGas !== signed.maxPriorityFeePerGas) throw new Error('CANARY_BROADCAST_PRIORITY_FEE_MISMATCH');
+  if (caps) assertFeeAndGasCaps(signed.gas, signed.maxFeePerGas, signed.maxPriorityFeePerGas, caps);
+  const recovered = await recoverTransactionAddress({ serializedTransaction: signed.serializedTransaction });
+  if (getAddress(recovered) !== getAddress(expectedWallet)) throw new Error('CANARY_BROADCAST_SIGNER_MISMATCH');
+}
+
 export async function assertSignedApprovalTransaction(
   intent: CanaryApprovalIntent,
   signed: SignedCanaryTransaction,
   expectedWallet: Address
 ): Promise<void> {
   if (signed.actionId !== intent.actionId) throw new Error('CANARY_APPROVAL_SIGNED_ACTION_ID_MISMATCH');
-  const derivedHash = keccak256(signed.serializedTransaction);
-  if (
-    derivedHash.toLowerCase() !== signed.transactionHash.toLowerCase() ||
-    derivedHash.toLowerCase() !== signed.serializedTransactionKeccak256.toLowerCase()
-  ) throw new Error('CANARY_APPROVAL_SIGNED_HASH_MISMATCH');
+  await assertSignedCanaryTransactionEnvelope(signed, expectedWallet);
   const parsed = parseTransaction(signed.serializedTransaction);
-  if (parsed.chainId !== INK_CHAIN_ID) throw new Error(`CANARY_APPROVAL_SIGNED_CHAIN_ID_MISMATCH:${parsed.chainId}`);
   if (!parsed.to || getAddress(parsed.to) !== getAddress(intent.token)) throw new Error('CANARY_APPROVAL_SIGNED_TO_MISMATCH');
-  if ((parsed.value ?? 0n) !== 0n) throw new Error('CANARY_APPROVAL_SIGNED_VALUE_NONZERO');
   if ((parsed.data ?? '0x').toLowerCase() !== intent.calldata.toLowerCase()) throw new Error('CANARY_APPROVAL_SIGNED_CALLDATA_MISMATCH');
-  if (parsed.nonce !== signed.nonce) throw new Error('CANARY_APPROVAL_SIGNED_NONCE_MISMATCH');
-  if (parsed.gas !== signed.gas) throw new Error('CANARY_APPROVAL_SIGNED_GAS_MISMATCH');
-  if (parsed.maxFeePerGas !== signed.maxFeePerGas) throw new Error('CANARY_APPROVAL_SIGNED_MAX_FEE_MISMATCH');
-  if (parsed.maxPriorityFeePerGas !== signed.maxPriorityFeePerGas) throw new Error('CANARY_APPROVAL_SIGNED_PRIORITY_FEE_MISMATCH');
-  const recovered = await recoverTransactionAddress({ serializedTransaction: signed.serializedTransaction });
-  if (getAddress(recovered) !== getAddress(expectedWallet)) throw new Error('CANARY_APPROVAL_SIGNED_WALLET_MISMATCH');
 }
 
 export function assertCanaryQuoteBlockHash(expected: Hex, actual: Hex): void {
