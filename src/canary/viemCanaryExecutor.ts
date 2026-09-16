@@ -101,7 +101,8 @@ export interface ViemCanaryExecutorOptions {
 }
 
 export class ViemCanaryExecutor {
-  readonly account: LocalAccount;
+  readonly walletAddress: Address;
+  private readonly account: LocalAccount;
   private readonly publicClient: PublicClient;
   private readonly walletClient: WalletClient;
   private readonly caps: CanaryExecutorCaps;
@@ -109,6 +110,7 @@ export class ViemCanaryExecutor {
   constructor(options: ViemCanaryExecutorOptions) {
     if (!/^0x[0-9a-fA-F]{64}$/.test(options.privateKey)) throw new Error('CANARY_PRIVATE_KEY_FORMAT_INVALID');
     this.account = privateKeyToAccount(options.privateKey);
+    this.walletAddress = this.account.address;
     const transport = http(options.rpcUrl ?? DEFAULT_INK_RPC_URL);
     this.publicClient = options.publicClient ?? createPublicClient({ chain: ink, transport });
     this.walletClient = createWalletClient({ account: this.account, chain: ink, transport });
