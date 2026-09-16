@@ -244,6 +244,9 @@ async function executeExit(params: {
     });
     if (intent.actionId !== params.approval.parentExitActionId) throw new Error('CANARY_E0_EXIT_APPROVAL_IDENTITY_MISMATCH');
     preflight = await params.executor.preflight(intent);
+    if (preflight.inputAllowance !== params.acquired) {
+      throw new Error(`CANARY_E0_EXIT_ALLOWANCE_NOT_EXACT:${preflight.inputAllowance}:${params.acquired}`);
+    }
   } catch (error) {
     return report(params.buyActionId, 'BLOCKED_SETUP', {
       approvalActionId: params.approval.actionId,

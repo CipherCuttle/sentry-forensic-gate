@@ -46,6 +46,7 @@ jobs:
           node scripts/canary-e0-roundtrip-runtime-r0-check.mjs | tee canary-e0-roundtrip-runtime-r0.json
           grep -q '"verdict": "CANARY_E0_ROUNDTRIP_RUNTIME_R0_PASS"' canary-e0-roundtrip-runtime-r0.json
           grep -q '"oneSideEffectingChildPerAdvance": true' canary-e0-roundtrip-runtime-r0.json
+          grep -q '"exactExitAllowanceRequired": true' canary-e0-roundtrip-runtime-r0.json
           grep -q '"ambiguousExitNoRebroadcast": true' canary-e0-roundtrip-runtime-r0.json
           grep -q '"reservedApprovalRestartSafeHalt": true' canary-e0-roundtrip-runtime-r0.json
           grep -q '"networkBroadcastInvoked": false' canary-e0-roundtrip-runtime-r0.json

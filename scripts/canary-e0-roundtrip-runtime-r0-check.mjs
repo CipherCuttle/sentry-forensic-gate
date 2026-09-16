@@ -108,7 +108,7 @@ const executor = {
     assert.equal(getAddress(intent.tokenIn), getAddress(LAUNCHED));
     assert.equal(getAddress(intent.tokenOut), getAddress(WETH9));
     assert.equal(intent.amountIn, ACQUIRED);
-    assert.equal(allowance, ACQUIRED, 'exit requires exact included approval before preflight');
+    assert.ok(allowance >= ACQUIRED, 'generic swap preflight accepts sufficient allowance; coordinator must require exact E0 allowance');
     exitActionId = intent.actionId;
     return {
       wallet: WALLET,
@@ -179,6 +179,17 @@ try {
   assert.equal(broadcastCalls, 1, 'forged exit quote must fail before side effect');
   assert.equal(exitStore.getByParentBuyActionId(buy.actionId), null);
 
+  allowance = ACQUIRED + 1n;
+  const widenedAllowance = await advanceCanaryE0RoundTrip({
+    buyActionId: buy.actionId, buyStore, approvalStore, exitStore, executor, options, exitQuote
+  });
+  assert.equal(widenedAllowance.action, 'BLOCKED_SETUP');
+  assert.match(widenedAllowance.reason ?? '', /CANARY_E0_EXIT_ALLOWANCE_NOT_EXACT/);
+  assert.equal(exitSignCalls, 0, 'widened allowance must fail before exit signing');
+  assert.equal(broadcastCalls, 1, 'widened allowance must fail before side effect');
+  assert.equal(exitStore.getByParentBuyActionId(buy.actionId), null);
+  allowance = ACQUIRED;
+
   const exitSubmit = await advanceCanaryE0RoundTrip({
     buyActionId: buy.actionId, buyStore, approvalStore, exitStore, executor, options, exitQuote
   });
@@ -220,8 +231,6 @@ try {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
-// Independent crash fixture: RESERVED approval after restart becomes SAFE_HALT and
-// can never be signed/retried by the coordinator.
 const crashDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-e0-roundtrip-crash-r0-'));
 const crashDb = path.join(crashDir, 'canary.sqlite');
 const crashBuyStore = new CanaryStore(crashDb);
@@ -280,6 +289,7 @@ console.log(JSON.stringify({
   broadcastBoundaryCalls: broadcastCalls,
   oneSideEffectingChildPerAdvance: true,
   forgedExitQuoteBlockedBeforeSideEffect: true,
+  exactExitAllowanceRequired: true,
   ambiguousExitNoResign: true,
   ambiguousExitNoRebroadcast: true,
   reservedApprovalRestartSafeHalt: true,
