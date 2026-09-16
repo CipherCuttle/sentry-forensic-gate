@@ -14,10 +14,13 @@ const files = walk('src').filter((file) => /\.(?:ts|tsx)$/.test(file));
 const findings = [];
 for (const file of files) {
   const source = fs.readFileSync(file, 'utf8');
+  const normalized = path.normalize(file);
+  if (normalized !== allowedWalletAuthorityFile && source.includes('executor.account')) {
+    findings.push(`raw-local-account-exposure:${file}`);
+  }
   for (const identifier of forbiddenIdentifiers) {
     const regex = new RegExp(`\\b${identifier}\\b`, 'g');
     if (!regex.test(source)) continue;
-    const normalized = path.normalize(file);
     if (!normalized.startsWith(`${canaryDir}${path.sep}`)) {
       findings.push(`${identifier}:outside-canary:${file}`);
       continue;
@@ -30,6 +33,8 @@ for (const file of files) {
 
 const executor = fs.readFileSync(allowedWalletAuthorityFile, 'utf8');
 for (const required of [
+  'readonly walletAddress: Address',
+  'private readonly account: LocalAccount',
   'CANARY_PRIVATE_KEY_FORMAT_INVALID',
   'CANARY_ROUTER_MISMATCH',
   'CANARY_CHAIN_ID_MISMATCH',
