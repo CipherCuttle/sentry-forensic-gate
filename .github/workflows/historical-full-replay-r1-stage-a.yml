@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   freeze-authority-map:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'agent/historical-full-replay-r1'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

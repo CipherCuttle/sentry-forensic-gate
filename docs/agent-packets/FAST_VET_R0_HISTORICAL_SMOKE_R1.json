@@ -1,0 +1,131 @@
+{
+  "schema": "dev-spine-phase/v1",
+  "repo": "CipherCuttle/sentry-forensic-gate",
+  "phase": "FAST_VET_R0_HISTORICAL_SMOKE_R1",
+  "state": "FAST_VET_R0_HISTORICAL_SMOKE_EXECUTION_AUTHORIZED",
+  "objective": "Execute the frozen pre-existing FAST_VET_R0 smoke exactly once against the pinned repaired 147-launch historical replay aggregate, adapting shape only while preserving source policy identity, point-in-time creator history, classifications, executable values, $1, exact 24h, UNKNOWN->SKIP, and COMPLETE-baseline control denominators.",
+  "predecessor": {
+    "phase": "FAST_VET_R0_AUTHORIZATION_R1",
+    "pr": 24,
+    "closure_head": "eedd320c7745c855d5830133d4686f65b47e57a2",
+    "verdict": "CLOSED_AUTHORIZE_SMOKE"
+  },
+  "replay_source": {
+    "phase": "HISTORICAL_FULL_REPLAY_R1",
+    "pr": 23,
+    "closure_head": "75588056de53b94f92b5cf3b40e89e2b5521031a",
+    "run_id": 35001582697,
+    "artifact_id": 10410898359,
+    "artifact_sha256": "ebeb0ff5d6c3fecc9dac2dde4397e8592f72a3501aa3b9980662c3bd8c71fb6a",
+    "receipt_sha256": "916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825",
+    "launches_accounted": 147,
+    "baseline_complete": 147,
+    "baseline_unverified": 0,
+    "horizon_cells_accounted": 735,
+    "outcomes_complete": 735,
+    "outcomes_unverified": 0,
+    "baseline_policy": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
+    "outcome_policy": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1"
+  },
+  "frozen_smoke_rule": {
+    "source_pr": 13,
+    "source_head": "22fcce4c301e791a59c68b19b198bd1bea104138",
+    "source_ci_run": 34772418456,
+    "source_ci_status": "SUCCESS",
+    "decision_policy_version": "FAST_VET_R0",
+    "shadow_receipt_version": "FAST_VET_SHADOW_R0",
+    "status": "SMOKE_ONLY",
+    "strategy_label": "EDGE_UNPROVEN",
+    "primary_notional_usd_micros": 1000000,
+    "target_horizon_ms": 86400000,
+    "unknown_action": "SKIP",
+    "control_cohort": "COMPLETE_BASELINE_ONLY",
+    "source_blobs": {
+      "docs/FAST_VET_R0.md": "1ea7ac524803e621947d076e120860bade3df780",
+      "src/evaluation/fastVet.ts": "0ca384e142a8f1c898f7041fff87811e2f136225",
+      "src/evaluation/fastVetShadow.ts": "de2a993b93b9b60669acd09a60e1589cdc96e572",
+      "scripts/fast-vet-check.mjs": "2417b03a449bf305a89d0a7196b5db89ef4216bc",
+      "src/forensic/creatorOutcome.ts": "2d9b15481df64e69016c236a6374c96657d31cc0",
+      "src/outcome/forwardTypes.ts": "8c9682b671a7c185dbca416594c8eacd4b0c282e"
+    },
+    "materialization": "DEDICATED_WORKFLOW_FETCH_EXACT_SOURCE_HEAD_NOT_COMMITTED"
+  },
+  "adapter_contract": {
+    "source": "PINNED_REPAIRED_HISTORICAL_REPLAY_AGGREGATE_ONLY",
+    "shape_adaptation_only": true,
+    "no_chain_refetch": true,
+    "no_sqlite_runner": true,
+    "preserve_source_policy_identity": true,
+    "preserve_classification_and_executable_value": true,
+    "creator_history_point_in_time_only": true,
+    "creator_history_order": "FROZEN_CANONICAL_REPLAY_ORDINAL",
+    "creator_outcome_available_rule": "24H_COMPLETE_AND_OBSERVED_BLOCK_LTE_TARGET_DECISION_BLOCK",
+    "shadow_target_projection": "HISTORICAL_OUTCOME_TO_FROZEN_FORWARD_OUTCOMES_R1_ANALYZER_SHAPE_ONLY",
+    "shadow_projection_is_evidence_authority": false
+  },
+  "authorization": {
+    "historical_full_replay": false,
+    "fast_vet": false,
+    "fast_vet_smoke": true,
+    "fast_vet_osint": false,
+    "canary": false,
+    "signing": false,
+    "transaction_construction": false,
+    "transaction_broadcast": false,
+    "live_execution": false,
+    "merge": false
+  },
+  "review_gate": {
+    "required": true,
+    "status": "PENDING_IMPLEMENTATION_HOSTILE_REVIEW",
+    "review_loop_limit": 1,
+    "unresolved_critical_high": null
+  },
+  "acceptance": {
+    "predecessor_authorization_exact_head_required": true,
+    "source_replay_receipt_sha256_required": true,
+    "source_rule_exact_blobs_required": true,
+    "launches_must_equal_147": true,
+    "horizon_cells_must_equal_735": true,
+    "baseline_complete_must_equal_147": true,
+    "outcomes_complete_must_equal_735": true,
+    "unknown_must_map_to_skip": true,
+    "primary_notional_must_remain_one_usd": true,
+    "target_horizon_must_remain_24h": true,
+    "control_denominator_must_be_complete_baselines_only": true,
+    "no_post_hoc_threshold_or_rule_tuning": true,
+    "no_new_network_or_osint_collectors": true,
+    "current_r3_must_remain_unchanged": true,
+    "no_live_authority": true
+  },
+  "decision_rules": [
+    "Execute only the frozen FAST_VET_R0 historical smoke on the pinned replay aggregate.",
+    "Do not reinterpret historical outcome policy as current FORWARD_OUTCOMES_R1 evidence; any compatibility projection exists only inside the frozen shadow analyzer and source identity remains explicit in the outer receipt.",
+    "No smoke metric authorizes canary, signing, transaction construction, broadcast, live execution, or merge.",
+    "Do not tune rules or thresholds after seeing the smoke result."
+  ],
+  "prohibitions": [
+    "Do not rerun the 147x5 chain replay.",
+    "Do not use the old PR #13 SQLite runner.",
+    "Do not add RPC, HTTP, social, domain, Telegram, X, GitHub, funding, identity, RekTrace, or other OSINT collectors.",
+    "Do not alter the frozen FAST_VET evaluator or shadow metric semantics.",
+    "Do not promote the strategy beyond EDGE_UNPROVEN from this smoke.",
+    "Do not merge without explicit user authority."
+  ],
+  "authority_docs": [
+    "AGENTS.md",
+    "docs/FAST_VET_R0_HISTORICAL_SMOKE_R1.md",
+    "docs/FAST_VET_R0_AUTHORIZATION_R1.md",
+    "docs/PRD.md"
+  ],
+  "context_files": [
+    "AGENTS.md",
+    "docs/agent-packets/FAST_VET_R0_HISTORICAL_SMOKE_R1.json",
+    "docs/FAST_VET_R0_HISTORICAL_SMOKE_R1.md",
+    "docs/FAST_VET_R0_AUTHORIZATION_R1.md",
+    "docs/PRD.md",
+    "scripts/fast-vet-r0-historical-smoke-r1.mjs",
+    ".github/workflows/fast-vet-r0-historical-smoke-r1.yml"
+  ],
+  "next_action": "RUN_FAST_VET_R0_HISTORICAL_SMOKE_R1_ON_PINNED_ARTIFACT"
+}

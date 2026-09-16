@@ -35,6 +35,7 @@ permissions:
 
 jobs:
   historical-all-horizon-gate:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'agent/historical-all-horizon-compatibility-r1'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

@@ -1,0 +1,129 @@
+name: fast-vet-r0-historical-smoke-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'docs/FAST_VET_R0_HISTORICAL_SMOKE_R1.md'
+      - 'docs/agent-packets/FAST_VET_R0_HISTORICAL_SMOKE_R1.json'
+      - 'scripts/dev-spine-check.mjs'
+      - 'scripts/dev-spine-check-test.mjs'
+      - 'scripts/dev-spine-context.mjs'
+      - 'scripts/dev-spine-pack.mjs'
+      - 'scripts/dev-spine-receipt.mjs'
+      - 'scripts/fast-vet-r0-historical-smoke-r1.mjs'
+      - 'scripts/fast-vet-r0-historical-smoke-r1-check.mjs'
+      - '.github/workflows/fast-vet-r0-historical-smoke-r1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  historical-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - name: Validate active phase and adapter invariants
+        run: |
+          node scripts/dev-spine-check-test.mjs
+          node scripts/dev-spine-check.mjs
+          node scripts/fast-vet-r0-historical-smoke-r1-check.mjs
+      - name: Fetch and verify frozen PR13 analyzer source
+        run: |
+          set -euo pipefail
+          SOURCE=22fcce4c301e791a59c68b19b198bd1bea104138
+          ROOT=.fast-vet-smoke
+          mkdir -p "$ROOT"
+          git fetch --no-tags --depth=1 origin "$SOURCE"
+          test "$(git rev-parse FETCH_HEAD)" = "$SOURCE"
+          git worktree add --detach "$ROOT/pr13" "$SOURCE"
+          verify_blob() {
+            path="$1" expected="$2"
+            actual="$(git -C "$ROOT/pr13" rev-parse "HEAD:$path")"
+            test "$actual" = "$expected" || { echo "FROZEN_BLOB_DRIFT $path actual=$actual expected=$expected"; exit 1; }
+          }
+          verify_blob docs/FAST_VET_R0.md 1ea7ac524803e621947d076e120860bade3df780
+          verify_blob src/evaluation/fastVet.ts 0ca384e142a8f1c898f7041fff87811e2f136225
+          verify_blob src/evaluation/fastVetShadow.ts de2a993b93b9b60669acd09a60e1589cdc96e572
+          verify_blob scripts/fast-vet-check.mjs 2417b03a449bf305a89d0a7196b5db89ef4216bc
+          verify_blob src/forensic/creatorOutcome.ts 2d9b15481df64e69016c236a6374c96657d31cc0
+          verify_blob src/outcome/forwardTypes.ts 8c9682b671a7c185dbca416594c8eacd4b0c282e
+          cd "$ROOT/pr13"
+          pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+          pnpm build
+          node scripts/fast-vet-check.mjs
+      - name: Download and verify pinned replay artifact
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ROOT=.fast-vet-smoke/predecessor
+          mkdir -p "$ROOT/unzipped"
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          AUTH="Authorization: Bearer ${GITHUB_TOKEN}"
+          VERSION="X-GitHub-Api-Version: 2022-11-28"
+          curl -fsSL -H "$AUTH" -H "$VERSION" "$API/actions/runs/35001582697" > "$ROOT/run.json"
+          curl -fsSL -H "$AUTH" -H "$VERSION" "$API/actions/artifacts/10410898359" > "$ROOT/artifact.json"
+          curl -fsSL -L -H "$AUTH" -H "$VERSION" "$API/actions/artifacts/10410898359/zip" -o "$ROOT/artifact.zip"
+          unzip -q "$ROOT/artifact.zip" -d "$ROOT/unzipped"
+          python3 - "$ROOT" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          root=Path(sys.argv[1]); run=json.loads((root/'run.json').read_text()); art=json.loads((root/'artifact.json').read_text())
+          def req(c,m):
+            if not c: raise SystemExit('FAST_VET_SMOKE_PREDECESSOR=FAIL '+m)
+          head='75588056de53b94f92b5cf3b40e89e2b5521031a'; rid=35001582697; aid=10410898359
+          req(run.get('id')==rid and run.get('head_sha')==head and run.get('conclusion')=='success','run identity/head/status drift')
+          req(art.get('id')==aid and art.get('name')=='historical-full-replay-r1-evidence' and art.get('expired') is False,'artifact identity/expiry drift')
+          req(art.get('digest')=='sha256:ebeb0ff5d6c3fecc9dac2dde4397e8592f72a3501aa3b9980662c3bd8c71fb6a','artifact digest drift')
+          files=sorted(p for p in (root/'unzipped').rglob('*') if p.is_file())
+          req(len(files)==1 and files[0].name=='historical-full-replay-r1-live-receipt.json','artifact contents drift')
+          b=files[0].read_bytes(); req(hashlib.sha256(b).hexdigest()=='916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825','receipt SHA-256 drift')
+          x=json.loads(b)
+          req(x.get('launchesAccounted')==147 and x.get('baselineComplete')==147 and x.get('baselineUnverified')==0,'baseline accounting drift')
+          req(x.get('horizonCellsAccounted')==735 and x.get('outcomesComplete')==735 and x.get('outcomesUnverified')==0,'outcome accounting drift')
+          req(x.get('baselinePolicyVersion')=='HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1','baseline policy drift')
+          req(x.get('outcomePolicyVersion')=='HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1','outcome policy drift')
+          print('FAST_VET_SMOKE_PREDECESSOR=PASS')
+          PY
+      - name: Execute frozen FAST_VET historical smoke
+        env:
+          INPUT_PATH: .fast-vet-smoke/predecessor/unzipped/historical-full-replay-r1-live-receipt.json
+          PR13_DIST: .fast-vet-smoke/pr13/dist
+          OUTPUT_PATH: fast-vet-r0-historical-smoke-r1-receipt.json
+        run: node scripts/fast-vet-r0-historical-smoke-r1.mjs
+      - name: Verify smoke receipt boundary
+        run: |
+          python3 - <<'PY'
+          import json
+          p='fast-vet-r0-historical-smoke-r1-receipt.json'; x=json.load(open(p))
+          def req(c,m):
+            if not c: raise SystemExit('FAST_VET_SMOKE_RECEIPT=FAIL '+m)
+          req(x.get('schema')=='fast-vet-r0-historical-smoke-r1-receipt/v1','schema drift')
+          req(x.get('phase')=='FAST_VET_R0_HISTORICAL_SMOKE_R1','phase drift')
+          req(x.get('status')=='SMOKE_ONLY' and x.get('strategyLabel')=='EDGE_UNPROVEN','scientific boundary drift')
+          req(x.get('verdict')=='FAST_VET_R0_HISTORICAL_SMOKE_R1_COMPLETE','verdict drift')
+          req(x.get('source',{}).get('replayReceiptSha256')=='916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825','source receipt drift')
+          req(x.get('source',{}).get('replayOutcomePolicyVersion')=='HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1','source policy drift')
+          req(x.get('adapter',{}).get('projectionIsEvidenceAuthority') is False,'projection authority drift')
+          decisions=x.get('decisions') or []; req(len(decisions)==147,'decision count drift')
+          metrics=(x.get('frozenShadowReceipt') or {}).get('metrics') or {}
+          req(metrics.get('launchCount')==147,'control denominator drift')
+          req(metrics.get('passCount',0)+metrics.get('rejectCount',0)+metrics.get('unknownCount',0)==147,'decision accounting drift')
+          req(all(d.get('action')=='SKIP' for d in decisions if d.get('decision')=='UNKNOWN'),'UNKNOWN not SKIP')
+          print('FAST_VET_SMOKE_RECEIPT=PASS')
+          PY
+      - name: Upload historical smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-vet-r0-historical-smoke-r1-evidence
+          path: fast-vet-r0-historical-smoke-r1-receipt.json
+          if-no-files-found: error
