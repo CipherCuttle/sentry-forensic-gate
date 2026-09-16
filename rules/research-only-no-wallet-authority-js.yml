@@ -2,7 +2,9 @@ id: research-only-no-wallet-authority-js
 language: JavaScript
 severity: error
 message: "Research-only boundary: wallet authority, signing, writes, deployment, and transaction broadcast identifiers are forbidden."
-note: "Use read-only public-client calls and shadow/counterfactual execution only."
+note: "Use read-only public-client calls and shadow/counterfactual execution only. The canary boundary checker is excluded because it contains these identifiers as data while enforcing the narrower canary boundary."
+ignores:
+  - scripts/canary-boundary-check.mjs
 rule:
   any:
     - all:
