@@ -7,7 +7,7 @@ import {
   type CanaryApprovalIntent
 } from './approval.js';
 import { deriveCanaryExitActionId } from './roundTrip.js';
-import { deriveCanaryActionId, type CanarySwapIntent } from './swapIntent.js';
+import { deriveCanaryActionId, INK_SWAP_ROUTER_02, type CanarySwapIntent } from './swapIntent.js';
 
 export type CanaryApprovalState = 'RESERVED' | 'SIGNED' | 'SUBMITTED' | 'INCLUDED' | 'REVERTED' | 'SAFE_HALT';
 export type CanaryApprovalInsertResult = 'INSERTED' | 'DUPLICATE';
@@ -67,6 +67,7 @@ export class CanaryApprovalStore {
     if (record.observedAllowanceBefore !== 0n) throw new Error(`CANARY_APPROVAL_DIRTY_ALLOWANCE:${record.observedAllowanceBefore}`);
     this.assertRecordIntentIdentity(record);
     assertCanaryApprovalCalldata(record.intent);
+    if (getAddress(record.intent.spender) !== INK_SWAP_ROUTER_02) throw new Error('CANARY_APPROVAL_SPENDER_NOT_CANONICAL');
 
     const expectedParentBuyActionId = await deriveCanaryActionId(record.launchId, record.baselineId);
     if (record.parentBuyActionId !== expectedParentBuyActionId) throw new Error('CANARY_APPROVAL_PARENT_BUY_IDENTITY_DRIFT');
@@ -81,6 +82,7 @@ export class CanaryApprovalStore {
       parentExitActionId: record.parentExitActionId,
       launchId: record.launchId,
       baselineId: record.baselineId,
+      owner: record.intent.owner,
       token: record.intent.token,
       spender: record.intent.spender,
       amount: record.intent.amount
@@ -114,7 +116,9 @@ export class CanaryApprovalStore {
         parentIntent.launchId !== parent.launch_id ||
         parentIntent.baselineId !== parent.baseline_id
       ) throw new Error('CANARY_APPROVAL_PERSISTED_PARENT_IDENTITY_INVALID');
+      if (getAddress(parentIntent.router) !== INK_SWAP_ROUTER_02) throw new Error('CANARY_APPROVAL_PERSISTED_PARENT_ROUTER_INVALID');
       if (
+        getAddress(record.intent.owner) !== getAddress(parentIntent.recipient) ||
         getAddress(record.intent.token) !== getAddress(parentIntent.tokenOut) ||
         getAddress(record.intent.spender) !== getAddress(parentIntent.router)
       ) {
