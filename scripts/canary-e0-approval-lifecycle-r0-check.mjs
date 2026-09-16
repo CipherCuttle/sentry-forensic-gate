@@ -65,56 +65,56 @@ assert.equal(classifyCanaryApprovalAllowance(ACQUIRED + 1n, ACQUIRED), 'BLOCKED_
 await assert.rejects(() => buildCanaryApprovalIntent({ buyIntent: buy, acquiredAmount: ERC20_MAX_UINT256 }), /CANARY_APPROVAL_INFINITE_ALLOWANCE_FORBIDDEN/);
 await assert.rejects(() => buildCanaryApprovalIntent({ buyIntent: { ...buy, router: OTHER_ROUTER }, acquiredAmount: ACQUIRED }), /CANARY_APPROVAL_PARENT_ROUTER_INVALID/);
 
+const now = 1_700_000_000_000;
+const parentRecord = {
+  actionId: buy.actionId,
+  launchId: buy.launchId,
+  baselineId: buy.baselineId,
+  decision: 'PASS',
+  reasons: [],
+  state: 'INCLUDED',
+  originDecisionBlock: 100n,
+  originDecisionBlockHash: HASH,
+  intent: buy,
+  nonce: 7,
+  transactionHash: `0x${'66'.repeat(32)}`,
+  serializedTransaction: '0x01',
+  lastError: null,
+  outputBalanceBefore: 10_000n,
+  outputBalanceAfter: 2_010_000n,
+  createdAtMs: now,
+  updatedAtMs: now
+};
+const approvalRecord = {
+  actionId: approval.actionId,
+  parentBuyActionId: buy.actionId,
+  parentExitActionId: approval.parentExitActionId,
+  launchId: buy.launchId,
+  baselineId: buy.baselineId,
+  state: 'RESERVED',
+  intent: approval,
+  observedAllowanceBefore: 0n,
+  observedAllowanceAfter: null,
+  nonce: null,
+  transactionHash: null,
+  serializedTransaction: null,
+  lastError: null,
+  createdAtMs: now + 1,
+  updatedAtMs: now + 1
+};
+
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-e0-approval-r0-'));
 const dbPath = path.join(tempDir, 'approval.sqlite');
 const buyStore = new CanaryStore(dbPath);
 const approvalStoreA = new CanaryApprovalStore(dbPath);
 const approvalStoreB = new CanaryApprovalStore(dbPath);
 try {
-  const now = 1_700_000_000_000;
-  assert.equal(buyStore.insert({
-    actionId: buy.actionId,
-    launchId: buy.launchId,
-    baselineId: buy.baselineId,
-    decision: 'PASS',
-    reasons: [],
-    state: 'INCLUDED',
-    originDecisionBlock: 100n,
-    originDecisionBlockHash: HASH,
-    intent: buy,
-    nonce: 7,
-    transactionHash: `0x${'66'.repeat(32)}`,
-    serializedTransaction: '0x01',
-    lastError: null,
-    outputBalanceBefore: 10_000n,
-    outputBalanceAfter: 2_010_000n,
-    createdAtMs: now,
-    updatedAtMs: now
-  }), 'INSERTED');
-
-  const record = {
-    actionId: approval.actionId,
-    parentBuyActionId: buy.actionId,
-    parentExitActionId: approval.parentExitActionId,
-    launchId: buy.launchId,
-    baselineId: buy.baselineId,
-    state: 'RESERVED',
-    intent: approval,
-    observedAllowanceBefore: 0n,
-    observedAllowanceAfter: null,
-    nonce: null,
-    transactionHash: null,
-    serializedTransaction: null,
-    lastError: null,
-    createdAtMs: now + 1,
-    updatedAtMs: now + 1
-  };
-
-  await assert.rejects(() => approvalStoreA.insertReserved({ ...record, observedAllowanceBefore: 1n }), /CANARY_APPROVAL_DIRTY_ALLOWANCE/);
+  assert.equal(buyStore.insert(parentRecord), 'INSERTED');
+  await assert.rejects(() => approvalStoreA.insertReserved({ ...approvalRecord, observedAllowanceBefore: 1n }), /CANARY_APPROVAL_DIRTY_ALLOWANCE/);
 
   const partialApproval = await buildCanaryApprovalIntent({ buyIntent: buy, acquiredAmount: ACQUIRED - 1n });
   await assert.rejects(() => approvalStoreA.insertReserved({
-    ...record,
+    ...approvalRecord,
     actionId: partialApproval.actionId,
     parentExitActionId: partialApproval.parentExitActionId,
     intent: partialApproval
@@ -124,7 +124,7 @@ try {
   assert.equal(tamperedBuy.actionId, buy.actionId);
   const tamperedApproval = await buildCanaryApprovalIntent({ buyIntent: tamperedBuy, acquiredAmount: ACQUIRED });
   await assert.rejects(() => approvalStoreA.insertReserved({
-    ...record,
+    ...approvalRecord,
     actionId: tamperedApproval.actionId,
     parentExitActionId: tamperedApproval.parentExitActionId,
     intent: tamperedApproval
@@ -142,7 +142,7 @@ try {
   });
   const tamperedOwnerApproval = { ...approval, owner: OTHER_WALLET, actionId: tamperedOwnerActionId };
   await assert.rejects(() => approvalStoreA.insertReserved({
-    ...record,
+    ...approvalRecord,
     actionId: tamperedOwnerActionId,
     intent: tamperedOwnerApproval
   }), /CANARY_APPROVAL_PERSISTED_PARENT_INTENT_BINDING_MISMATCH/);
@@ -153,20 +153,16 @@ try {
     args: [INK_SWAP_ROUTER_02, ACQUIRED + 1n]
   });
   await assert.rejects(() => approvalStoreA.insertReserved({
-    ...record,
+    ...approvalRecord,
     intent: { ...approval, calldata: malformedCalldata }
   }), /CANARY_APPROVAL_CALLDATA_AMOUNT_MISMATCH/);
 
-  assert.equal(await approvalStoreA.insertReserved(record), 'INSERTED');
-  assert.equal(await approvalStoreB.insertReserved(record), 'DUPLICATE', 'concurrent observers must converge on one approval action');
+  assert.equal(await approvalStoreA.insertReserved(approvalRecord), 'INSERTED');
+  assert.equal(await approvalStoreB.insertReserved(approvalRecord), 'DUPLICATE', 'concurrent observers must converge on one approval action');
   assert.equal(approvalStoreA.listUnresolved().length, 1);
 
   const serializedTransaction = '0x02';
-  const signed = {
-    nonce: 8,
-    transactionHash: keccak256(serializedTransaction),
-    serializedTransaction
-  };
+  const signed = { nonce: 8, transactionHash: keccak256(serializedTransaction), serializedTransaction };
   assert.throws(() => approvalStoreA.markSigned(approval.actionId, { ...signed, transactionHash: `0x${'77'.repeat(32)}` }), /CANARY_APPROVAL_SIGNED_IDENTITY_MISMATCH/);
   approvalStoreA.markSigned(approval.actionId, signed);
   assert.equal(approvalStoreA.listUnresolved()[0].state, 'SIGNED');
@@ -185,6 +181,30 @@ try {
   approvalStoreA.close();
   buyStore.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
+}
+
+// A halt before signing has no Sentry-owned transaction provenance. Even if an
+// external actor later creates the exact allowance, Sentry must not claim its
+// action succeeded or reverted without persisted signed bytes/hash.
+const crashDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-e0-approval-presign-halt-r0-'));
+const crashDbPath = path.join(crashDir, 'approval.sqlite');
+const crashBuyStore = new CanaryStore(crashDbPath);
+const crashApprovalStore = new CanaryApprovalStore(crashDbPath);
+try {
+  assert.equal(crashBuyStore.insert(parentRecord), 'INSERTED');
+  assert.equal(await crashApprovalStore.insertReserved(approvalRecord), 'INSERTED');
+  crashApprovalStore.markSafeHalt(approval.actionId, 'SIMULATED_CRASH_BEFORE_SIGN');
+  assert.throws(() => crashApprovalStore.markIncluded(approval.actionId, ACQUIRED), /CANARY_APPROVAL_RECONCILE_SIGNED_PROVENANCE_MISSING/);
+  assert.throws(() => crashApprovalStore.markReverted(approval.actionId), /CANARY_APPROVAL_RECONCILE_SIGNED_PROVENANCE_MISSING/);
+  const unresolved = crashApprovalStore.listUnresolved();
+  assert.equal(unresolved.length, 1);
+  assert.equal(unresolved[0].state, 'SAFE_HALT');
+  assert.equal(unresolved[0].transactionHash, null);
+  assert.equal(unresolved[0].serializedTransaction, null);
+} finally {
+  crashApprovalStore.close();
+  crashBuyStore.close();
+  fs.rmSync(crashDir, { recursive: true, force: true });
 }
 
 // Read-only chain qualification only. This proves the configured Ink RPC can
@@ -216,6 +236,7 @@ console.log(JSON.stringify({
   dirtyAllowancePolicy: 'FAIL_CLOSED',
   infiniteAllowance: 'FORBIDDEN',
   persistedBeforeBroadcast: ['actionId', 'nonce', 'transactionHash', 'serializedTransaction'],
+  preSignHaltPolicy: 'CANNOT_RECONCILE_WITHOUT_SIGNED_PROVENANCE',
   ambiguousOutcomePolicy: 'SAFE_HALT_RECONCILE_KNOWN_HASH_NO_RETRY',
   live: false,
   walletAuthorityUsed: false
