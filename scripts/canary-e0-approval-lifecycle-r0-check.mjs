@@ -8,7 +8,8 @@ import {
   defineChain,
   encodeFunctionData,
   getAddress,
-  http
+  http,
+  keccak256
 } from 'viem';
 import {
   buildCanaryApprovalIntent,
@@ -138,11 +139,13 @@ try {
   assert.equal(await approvalStoreB.insertReserved(record), 'DUPLICATE', 'concurrent observers must converge on one approval action');
   assert.equal(approvalStoreA.listUnresolved().length, 1);
 
+  const serializedTransaction = '0x02';
   const signed = {
     nonce: 8,
-    transactionHash: `0x${'77'.repeat(32)}`,
-    serializedTransaction: '0x02'
+    transactionHash: keccak256(serializedTransaction),
+    serializedTransaction
   };
+  assert.throws(() => approvalStoreA.markSigned(approval.actionId, { ...signed, transactionHash: `0x${'77'.repeat(32)}` }), /CANARY_APPROVAL_SIGNED_IDENTITY_MISMATCH/);
   approvalStoreA.markSigned(approval.actionId, signed);
   assert.equal(approvalStoreA.listUnresolved()[0].state, 'SIGNED');
   approvalStoreA.markSubmitted(approval.actionId);
