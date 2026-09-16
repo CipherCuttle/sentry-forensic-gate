@@ -88,7 +88,7 @@ assert.equal(params.amountOutMinimum, 855_000n);
 const forgedBuy = { ...buy, actionId: 'forged-buy-id' };
 await assert.rejects(() => buildCanaryExitIntent({
   buyIntent: forgedBuy, quoteBlockNumber: 101n, quoteBlockHash: OTHER_HASH,
-  amountIn: 1n, quotedAmountOut: 1n, slippageBps: 100,
+  amountIn: 1n, quotedAmountOut: 100n, slippageBps: 100,
   chainTimestampSeconds: 1_700_000_001, deadlineSeconds: 30
 }), /CANARY_EXIT_PARENT_BUY_IDENTITY_DRIFT/);
 
@@ -144,7 +144,7 @@ try {
 
   const tooLarge = await buildCanaryExitIntent({
     buyIntent: buy, quoteBlockNumber: 102n, quoteBlockHash: OTHER_HASH,
-    amountIn: 2_000_001n, quotedAmountOut: 1n, slippageBps: 100,
+    amountIn: 2_000_001n, quotedAmountOut: 100n, slippageBps: 100,
     chainTimestampSeconds: 1_700_000_002, deadlineSeconds: 30
   });
   assert.throws(() => exitStoreA.insertReserved({
@@ -153,7 +153,7 @@ try {
     intent: tooLarge,
     createdAtMs: now + 2,
     updatedAtMs: now + 2
-  }), /CANARY_EXIT_AMOUNT_EXCEEDS_ACQUIRED|CANARY_EXIT_IDENTITY_CONFLICT/);
+  }), /CANARY_EXIT_AMOUNT_EXCEEDS_ACQUIRED/);
 } finally {
   exitStoreB.close();
   exitStoreA.close();
