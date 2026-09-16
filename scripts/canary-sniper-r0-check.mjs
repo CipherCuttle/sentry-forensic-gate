@@ -5,6 +5,11 @@ import path from 'node:path';
 import { decodeFunctionData } from 'viem';
 import { CanaryStore } from '../dist/canary/store.js';
 import {
+  applyHistoricalCreatorSeed,
+  historicalCreatorSeedSummary
+} from '../dist/canary/historicalCreatorSeed.js';
+import { evaluateFastVet } from '../dist/evaluation/fastVet.js';
+import {
   buildCanarySwapIntent,
   CANARY_PRIMARY_NOTIONAL_USD_MICROS,
   INK_SWAP_ROUTER_02,
@@ -20,6 +25,26 @@ const OTHER_HASH = `0x${'33'.repeat(32)}`;
 const TOKEN_IN = '0x4200000000000000000000000000000000000006';
 const TOKEN_OUT = '0x1111111111111111111111111111111111111111';
 const RECIPIENT = '0x2222222222222222222222222222222222222222';
+
+const seedSummary = historicalCreatorSeedSummary();
+assert.deepEqual(seedSummary, { creators: 25, launches: 147, adverseCreators: 8 });
+const freshFeature = creatorFeature('seed-launch', 'seed-baseline');
+const seededBad = applyHistoricalCreatorSeed(freshFeature, '0x797dd748f4b1e28ff46f0ff4aa306ee99140b49a');
+assert.equal(seededBad.coverage, 'COMPLETE');
+assert.equal(seededBad.priorLaunchCount, 94);
+assert.equal(seededBad.catastrophicLossCount + seededBad.exitFailureCount + seededBad.liquidityCollapseCount, 87);
+const seedBaseline = executableBaseline('seed-launch', 'seed-baseline');
+const badVet = evaluateFastVet({ baseline: seedBaseline, creatorFeature: seededBad });
+assert.equal(badVet.decision, 'REJECT');
+assert.deepEqual(badVet.reasons, ['KNOWN_PRIOR_ADVERSE_CREATOR']);
+
+const seededClean = applyHistoricalCreatorSeed(freshFeature, '0x0ac3805f575af9c28e2cdb1e388d66e75be8ee7a');
+assert.equal(seededClean.coverage, 'COMPLETE');
+assert.equal(seededClean.priorLaunchCount, 2);
+assert.equal(evaluateFastVet({ baseline: seedBaseline, creatorFeature: seededClean }).decision, 'PASS');
+const unseen = applyHistoricalCreatorSeed(freshFeature, '0x1111111111111111111111111111111111111111');
+assert.strictEqual(unseen, freshFeature);
+assert.equal(evaluateFastVet({ baseline: seedBaseline, creatorFeature: unseen }).decision, 'PASS');
 
 const first = await buildCanarySwapIntent({
   launchId: 'launch-1', baselineId: 'baseline-1', quoteBlockNumber: 100n, quoteBlockHash: HASH,
@@ -105,6 +130,51 @@ try {
 }
 
 console.log('canary-sniper-r0-check: PASS');
+
+function creatorFeature(launchId, baselineId) {
+  return {
+    receiptId: 'seed-test',
+    derivationVersion: 'CREATOR_OUTCOME_JOIN_V0',
+    chainId: 57073,
+    launchId,
+    creator: '0x1111111111111111111111111111111111111111',
+    baselineId,
+    decisionBlock: 100n,
+    decisionBlockHash: HASH,
+    horizonMs: 86_400_000,
+    coverage: 'NO_HISTORY',
+    priorLaunchCount: 0,
+    outcomeReceiptCount: 0,
+    classifiedOutcomeCount: 0,
+    unresolvedOutcomeCount: 0,
+    unsellableOutcomeCount: 0,
+    catastrophicLossCount: 0,
+    exitFailureCount: 0,
+    liquidityCollapseCount: 0,
+    normalLossCount: 0,
+    normalWinCount: 0,
+    fatTailWinCount: 0,
+    sourceFactIds: [],
+    sourceOutcomeIds: [],
+    inputDigest: 'x',
+    outputDigest: 'x',
+    evidenceDigest: 'x'
+  };
+}
+
+function executableBaseline(launchId, baselineId) {
+  return {
+    launchId,
+    baselineId,
+    status: 'COMPLETE',
+    legs: [{
+      notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS,
+      entry: { executable: true },
+      reverse: { executable: true },
+      independentReverseRecoveryBps: 10_000n
+    }]
+  };
+}
 
 function canaryRecord(actionId, launchId, baselineId, state) {
   const now = 1_700_000_000_000;
