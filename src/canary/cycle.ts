@@ -172,7 +172,10 @@ export async function syncCanarySniper(params: {
 }
 
 async function reconcileOne(action: CanaryActionRecord, store: CanaryStore, executor: ViemCanaryExecutor | null): Promise<Pick<CanaryCycleReport, 'action' | 'launchId' | 'transactionHash' | 'reason'>> {
-  if (!executor) return { action: 'BLOCKED_UNRESOLVED', launchId: action.launchId, transactionHash: action.transactionHash ?? undefined, reason: 'CANARY_UNRESOLVED_REQUIRES_EXECUTOR' };
+  if (!executor) {
+    const base = { action: 'BLOCKED_UNRESOLVED' as const, launchId: action.launchId, reason: 'CANARY_UNRESOLVED_REQUIRES_EXECUTOR' };
+    return action.transactionHash ? { ...base, transactionHash: action.transactionHash } : base;
+  }
   if (action.state === 'RESERVED' && !action.transactionHash) {
     store.markSafeHalt(action.actionId, 'CANARY_RESTART_AFTER_RESERVATION_NO_RETRY');
     return { action: 'BLOCKED_UNRESOLVED', launchId: action.launchId, reason: 'CANARY_RESTART_AFTER_RESERVATION_NO_RETRY' };
