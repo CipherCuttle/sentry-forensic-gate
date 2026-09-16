@@ -47,9 +47,7 @@ export async function syncCanarySniper(params: {
   const minDecisionBlock = headBlock > params.options.candidateMaxAgeBlocks
     ? headBlock - params.options.candidateMaxAgeBlocks
     : 0n;
-  const baselines = params.canaryStore.listPendingBaselines(Math.max(params.options.candidateScanLimit, 200))
-    .filter((baseline) => baseline.decisionBlock >= minDecisionBlock)
-    .slice(0, params.options.candidateScanLimit);
+  const baselines = params.canaryStore.listPendingBaselines(minDecisionBlock, params.options.candidateScanLimit);
   if (!baselines.length) return { headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0, action: 'NONE' };
 
   const features = await projectCreatorOutcomeFeatures(
