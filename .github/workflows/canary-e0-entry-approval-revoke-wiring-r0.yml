@@ -1,0 +1,67 @@
+name: canary-e0-entry-approval-revoke-wiring-r0
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/canary/cycle.ts'
+      - 'src/canary/entryApprovalStore.ts'
+      - 'src/canary/entryApprovalRevokeWiring.ts'
+      - 'src/canary/entryApprovalRevokeRuntime.ts'
+      - 'src/canary/entryApprovalRevokeStore.ts'
+      - 'src/canary/viemCanaryExecutor.ts'
+      - 'src/canarySniperCli.ts'
+      - 'scripts/canary-e0-entry-approval-revoke-wiring-r0-check.mjs'
+      - '.github/workflows/canary-e0-entry-approval-revoke-wiring-r0.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-entry-approval-revoke-wiring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+      - name: Preserve narrow canary wallet authority
+        run: node scripts/canary-boundary-check.mjs
+      - name: Preserve research-only boundary outside executor
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+      - name: Assert no live wallet secret or live mode in CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${CANARY_PRIVATE_KEY:-}"
+          test "${CANARY_LIVE:-false}" = "false"
+          echo 'CANARY_E0_ENTRY_APPROVAL_REVOKE_WIRING_NO_SECRET=PASS'
+      - name: Qualify deterministic cleanup wiring offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/canary-e0-entry-approval-revoke-wiring-r0-check.mjs | tee canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"verdict": "CANARY_E0_ENTRY_APPROVAL_REVOKE_WIRING_R0_PASS"' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"deterministicTriggersOnly": true' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"candidateUnknownDoesNotRevoke": true' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"transientQuoteFailureDoesNotRevoke": true' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"parentBuyTerminalizedBeforeCleanup": true' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"alreadyZeroNoSign": true' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"exactRevokeSignCalls": 1' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"exactRevokeBroadcastCalls": 1' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"recoveryNoResignRebroadcast": true' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"cleanupTerminalState": "SKIPPED"' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"cleanupObservedAllowance": "0"' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"cliLiveRevokeKillSwitch": true' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"liveCleanupReachable": false' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"networkBroadcastInvoked": false' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"realWalletSecretUsed": false' canary-e0-entry-approval-revoke-wiring-r0.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canary-e0-entry-approval-revoke-wiring-r0-evidence
+          path: canary-e0-entry-approval-revoke-wiring-r0.json
+          if-no-files-found: error
