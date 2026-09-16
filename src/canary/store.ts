@@ -36,16 +36,19 @@ export class CanaryStore {
 
   close(): void { this.db.close(); }
 
-  listPendingBaselines(limit: number): ExecutableBaselineBatch[] {
+  listPendingBaselines(minDecisionBlock: bigint, limit: number): ExecutableBaselineBatch[] {
+    if (minDecisionBlock < 0n) throw new Error('CANARY_MIN_DECISION_BLOCK_INVALID');
     if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('CANARY_CANDIDATE_LIMIT_INVALID');
     const rows = this.db.prepare(`
       SELECT b.payload_json
       FROM baseline_batches b
       LEFT JOIN canary_actions a ON a.launch_id = b.launch_id
-      WHERE b.status = 'COMPLETE' AND a.action_id IS NULL
+      WHERE b.status = 'COMPLETE'
+        AND a.action_id IS NULL
+        AND CAST(b.decision_block AS INTEGER) >= CAST(? AS INTEGER)
       ORDER BY CAST(b.decision_block AS INTEGER), b.launch_id
       LIMIT ?
-    `).all(limit) as Array<{ payload_json: string }>;
+    `).all(minDecisionBlock.toString(), limit) as Array<{ payload_json: string }>;
     return rows.map((row) => reviveBaselineBatch(row.payload_json));
   }
 
