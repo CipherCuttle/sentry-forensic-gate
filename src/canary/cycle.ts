@@ -4,7 +4,14 @@ import { evaluateFastVet } from '../evaluation/fastVet.js';
 import { projectCreatorOutcomeFeatures } from '../forensic/creatorOutcome.js';
 import type { ViemExecutableBaselineSource } from '../tsunami/viemBaselineSource.js';
 import { advanceCanaryE0EntryApproval, reconcileCanaryE0EntryApproval } from './entryApprovalRuntime.js';
-import { CanaryEntryApprovalStore } from './entryApprovalStore.js';
+import { CanaryEntryApprovalStore, type CanaryEntryApprovalActionRecord } from './entryApprovalStore.js';
+import { reconcileCanaryE0EntryApprovalRevoke } from './entryApprovalRevokeRuntime.js';
+import { CanaryEntryApprovalRevokeStore } from './entryApprovalRevokeStore.js';
+import {
+  cleanupCanaryE0EntryApproval,
+  type CanaryEntryApprovalCleanupAction,
+  type CanaryEntryApprovalCleanupTrigger
+} from './entryApprovalRevokeWiring.js';
 import { applyHistoricalCreatorSeed } from './historicalCreatorSeed.js';
 import { buildCanarySwapIntent, CANARY_PRIMARY_NOTIONAL_USD_MICROS, deriveCanaryActionId, INK_SWAP_ROUTER_02 } from './swapIntent.js';
 import { CanaryStore } from './store.js';
@@ -26,7 +33,18 @@ export interface CanaryCycleReport {
   pass: number;
   reject: number;
   unknown: number;
-  action: 'NONE' | 'DRY_PASS' | 'ENTRY_APPROVAL_SUBMITTED' | 'ENTRY_APPROVAL_INCLUDED' | 'SUBMITTED' | 'INCLUDED' | 'BLOCKED_UNRESOLVED' | 'BLOCKED_SETUP';
+  action:
+    | 'NONE'
+    | 'DRY_PASS'
+    | 'ENTRY_APPROVAL_SUBMITTED'
+    | 'ENTRY_APPROVAL_INCLUDED'
+    | 'ENTRY_APPROVAL_CLEANED'
+    | 'ENTRY_APPROVAL_REVOKE_SUBMITTED'
+    | 'ENTRY_APPROVAL_REVOKE_INCLUDED'
+    | 'SUBMITTED'
+    | 'INCLUDED'
+    | 'BLOCKED_UNRESOLVED'
+    | 'BLOCKED_SETUP';
   launchId?: string | undefined;
   transactionHash?: Hex | undefined;
   reason?: string | undefined;
@@ -36,6 +54,7 @@ export async function syncCanarySniper(params: {
   store: SqliteStore;
   canaryStore: CanaryStore;
   entryApprovalStore?: CanaryEntryApprovalStore | null;
+  entryApprovalRevokeStore?: CanaryEntryApprovalRevokeStore | null;
   baselineSource: ViemExecutableBaselineSource;
   executor: ViemCanaryExecutor | null;
   options: CanaryCycleOptions;
@@ -46,6 +65,58 @@ export async function syncCanarySniper(params: {
   if (unresolved.length) {
     const result = await reconcileOne(unresolved[0]!, params.canaryStore, params.executor);
     return { headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0, ...result };
+  }
+
+  if (params.options.live && params.entryApprovalRevokeStore) {
+    const unresolvedRevokes = params.entryApprovalRevokeStore.listUnresolved();
+    if (unresolvedRevokes.length) {
+      if (!params.executor) {
+        return {
+          headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+          action: 'BLOCKED_UNRESOLVED', launchId: unresolvedRevokes[0]!.launchId,
+          reason: 'CANARY_E0_ENTRY_APPROVAL_REVOKE_UNRESOLVED_REQUIRES_EXECUTOR'
+        };
+      }
+      if (!params.entryApprovalStore) {
+        return {
+          headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+          action: 'BLOCKED_SETUP', launchId: unresolvedRevokes[0]!.launchId,
+          reason: 'CANARY_E0_ENTRY_APPROVAL_REVOKE_PARENT_STORE_REQUIRED'
+        };
+      }
+      const reconciled = await reconcileCanaryE0EntryApprovalRevoke({
+        store: params.entryApprovalRevokeStore,
+        executor: params.executor
+      });
+      if (reconciled?.action === 'ENTRY_APPROVAL_REVOKE_INCLUDED') {
+        const parent = params.entryApprovalStore.getCommitted();
+        if (!parent || parent.actionId !== reconciled.parentEntryApprovalActionId) {
+          return {
+            headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+            action: 'BLOCKED_SETUP', launchId: unresolvedRevokes[0]!.launchId,
+            transactionHash: reconciled.transactionHash,
+            reason: 'CANARY_E0_ENTRY_APPROVAL_REVOKE_RECONCILE_PARENT_IDENTITY_MISMATCH'
+          };
+        }
+        const finalized = await cleanupCanaryE0EntryApproval({
+          trigger: 'REVOKE_RECOVERY',
+          parentApproval: parent,
+          entryApprovalStore: params.entryApprovalStore,
+          revokeStore: params.entryApprovalRevokeStore,
+          executor: params.executor
+        });
+        return cleanupReport(headBlock, 0, 0, 0, 0, parent.launchId, finalized);
+      }
+      if (reconciled) {
+        return {
+          headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+          action: mapCleanupAction(reconciled.action),
+          launchId: unresolvedRevokes[0]!.launchId,
+          transactionHash: reconciled.transactionHash,
+          reason: reconciled.reason
+        };
+      }
+    }
   }
 
   if (params.options.live && params.entryApprovalStore) {
@@ -85,6 +156,30 @@ export async function syncCanarySniper(params: {
     };
   }
 
+  if (committedEntry?.state === 'INCLUDED') {
+    const committedRevoke = params.entryApprovalRevokeStore?.getCommitted() ?? null;
+    if (committedRevoke?.state === 'INCLUDED') {
+      const recovery = await runCleanup({
+        trigger: 'REVOKE_RECOVERY', committedEntry, params, headBlock,
+        candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0
+      });
+      return recovery;
+    }
+
+    const parentBuy = params.canaryStore.getAction(committedEntry.parentBuyActionId);
+    if (parentBuy && ['INCLUDED', 'REVERTED', 'SKIPPED'].includes(parentBuy.state)) {
+      const trigger: CanaryEntryApprovalCleanupTrigger = parentBuy.state === 'INCLUDED'
+        ? 'PARENT_BUY_INCLUDED'
+        : parentBuy.state === 'REVERTED'
+          ? 'PARENT_BUY_REVERTED'
+          : 'PARENT_BUY_SKIPPED';
+      return runCleanup({
+        trigger, committedEntry, params, headBlock,
+        candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0
+      });
+    }
+  }
+
   let baselines;
   if (committedEntry) {
     const frozen = params.canaryStore.getCompleteBaseline(committedEntry.launchId, committedEntry.baselineId);
@@ -96,11 +191,15 @@ export async function syncCanarySniper(params: {
       };
     }
     if (frozen.decisionBlock < minDecisionBlock) {
-      return {
-        headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
-        action: 'BLOCKED_SETUP', launchId: committedEntry.launchId,
-        reason: 'CANARY_E0_ENTRY_APPROVAL_CANDIDATE_EXPIRED'
-      };
+      return runCleanup({
+        trigger: 'CANDIDATE_EXPIRED', committedEntry, params, headBlock,
+        candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+        terminalParent: {
+          baseline: frozen,
+          decision: 'PASS',
+          reasons: ['CANARY_E0_ENTRY_APPROVAL_CANDIDATE_EXPIRED']
+        }
+      });
     }
     baselines = [frozen];
   } else {
@@ -141,10 +240,17 @@ export async function syncCanarySniper(params: {
 
     if (vet.decision !== 'PASS') {
       if (committedEntry) {
+        if (vet.decision === 'REJECT') {
+          return runCleanup({
+            trigger: 'CANDIDATE_REJECTED', committedEntry, params, headBlock,
+            candidatesConsidered: considered, pass, reject, unknown,
+            terminalParent: { baseline, decision: 'REJECT', reasons: vet.reasons }
+          });
+        }
         return {
           headBlock, candidatesConsidered: considered, pass, reject, unknown,
           action: 'BLOCKED_SETUP', launchId: baseline.launchId,
-          reason: `CANARY_E0_ENTRY_APPROVAL_CANDIDATE_NO_LONGER_PASS:${vet.decision}`
+          reason: 'CANARY_E0_ENTRY_APPROVAL_CANDIDATE_NO_LONGER_PASS:UNKNOWN'
         };
       }
       params.canaryStore.insert(makeRecord({
@@ -177,6 +283,8 @@ export async function syncCanarySniper(params: {
       continue;
     }
 
+    // Cleanup is intentionally forbidden inside this quote/execution try block. RPC,
+    // authority, market, calibration and quote failures fail closed without signing revoke.
     try {
       const quoteBlockNumber = await params.baselineSource.getHeadBlockNumber();
       if (quoteBlockNumber < minDecisionBlock) throw new Error('CANARY_QUOTE_HEAD_TOO_OLD');
@@ -312,6 +420,101 @@ export async function syncCanarySniper(params: {
   }
 
   return { headBlock, candidatesConsidered: considered, pass, reject, unknown, action: 'NONE' };
+}
+
+async function runCleanup(params: {
+  trigger: CanaryEntryApprovalCleanupTrigger;
+  committedEntry: CanaryEntryApprovalActionRecord;
+  params: Parameters<typeof syncCanarySniper>[0];
+  headBlock: bigint;
+  candidatesConsidered: number;
+  pass: number;
+  reject: number;
+  unknown: number;
+  terminalParent?: {
+    baseline: { launchId: string; baselineId: string; decisionBlock: bigint; decisionBlockHash: Hex };
+    decision: CanaryActionRecord['decision'];
+    reasons: readonly string[];
+  };
+}): Promise<CanaryCycleReport> {
+  const context = params.params;
+  if (params.terminalParent && !context.canaryStore.getAction(params.committedEntry.parentBuyActionId)) {
+    context.canaryStore.insert(makeRecord({
+      actionId: params.committedEntry.parentBuyActionId,
+      baseline: params.terminalParent.baseline,
+      decision: params.terminalParent.decision,
+      reasons: [...params.terminalParent.reasons, `CANARY_E0_ENTRY_APPROVAL_CLEANUP_TRIGGER:${params.trigger}`],
+      state: 'SKIPPED'
+    }));
+  }
+
+  if (!context.entryApprovalStore || !context.entryApprovalRevokeStore) {
+    return {
+      headBlock: params.headBlock,
+      candidatesConsidered: params.candidatesConsidered,
+      pass: params.pass,
+      reject: params.reject,
+      unknown: params.unknown,
+      action: 'BLOCKED_SETUP',
+      launchId: params.committedEntry.launchId,
+      reason: `CANARY_E0_ENTRY_APPROVAL_REVOKE_WIRING_REQUIRED:${params.trigger}`
+    };
+  }
+  if (!context.executor) {
+    return {
+      headBlock: params.headBlock,
+      candidatesConsidered: params.candidatesConsidered,
+      pass: params.pass,
+      reject: params.reject,
+      unknown: params.unknown,
+      action: 'BLOCKED_UNRESOLVED',
+      launchId: params.committedEntry.launchId,
+      reason: `CANARY_E0_ENTRY_APPROVAL_REVOKE_EXECUTOR_REQUIRED:${params.trigger}`
+    };
+  }
+
+  const cleanup = await cleanupCanaryE0EntryApproval({
+    trigger: params.trigger,
+    parentApproval: params.committedEntry,
+    entryApprovalStore: context.entryApprovalStore,
+    revokeStore: context.entryApprovalRevokeStore,
+    executor: context.executor
+  });
+  return cleanupReport(
+    params.headBlock,
+    params.candidatesConsidered,
+    params.pass,
+    params.reject,
+    params.unknown,
+    params.committedEntry.launchId,
+    cleanup
+  );
+}
+
+function cleanupReport(
+  headBlock: bigint,
+  candidatesConsidered: number,
+  pass: number,
+  reject: number,
+  unknown: number,
+  launchId: string,
+  cleanup: { action: CanaryEntryApprovalCleanupAction; trigger: CanaryEntryApprovalCleanupTrigger; transactionHash?: Hex | undefined; reason?: string | undefined }
+): CanaryCycleReport {
+  return {
+    headBlock,
+    candidatesConsidered,
+    pass,
+    reject,
+    unknown,
+    action: cleanup.action,
+    launchId,
+    transactionHash: cleanup.transactionHash,
+    reason: cleanup.reason ?? `CANARY_E0_ENTRY_APPROVAL_CLEANUP_TRIGGER:${cleanup.trigger}`
+  };
+}
+
+function mapCleanupAction(action: 'ENTRY_APPROVAL_REVOKE_INCLUDED' | 'ENTRY_APPROVAL_REVOKE_SUBMITTED' | 'BLOCKED_UNRESOLVED' | 'BLOCKED_SETUP'): CanaryCycleReport['action'] {
+  return action;
 }
 
 function mapEntryApprovalAction(action: 'ENTRY_APPROVAL_INCLUDED' | 'ENTRY_APPROVAL_SUBMITTED' | 'READY_TO_BUY' | 'BLOCKED_UNRESOLVED' | 'BLOCKED_SETUP'): CanaryCycleReport['action'] {
