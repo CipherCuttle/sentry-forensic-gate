@@ -135,7 +135,7 @@ export async function syncCanarySniper(params: {
         tokenIn: market.baseToken as Address,
         tokenOut: market.launchedToken as Address,
         fee: market.fee,
-        recipient: params.executor.account.address,
+        recipient: params.executor.walletAddress,
         notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS,
         amountIn: calibration.baseAmount,
         quotedAmountOut: entry.amountOut,
