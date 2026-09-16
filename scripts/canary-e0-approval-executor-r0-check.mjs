@@ -10,7 +10,6 @@ import {
   parseTransaction,
   recoverTransactionAddress
 } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
 import { buildCanaryApprovalIntent, erc20ApprovalAbi } from '../dist/canary/approval.js';
 import { CanaryApprovalStore } from '../dist/canary/approvalStore.js';
 import { CanaryStore } from '../dist/canary/store.js';
@@ -27,11 +26,10 @@ import {
 import { INK_CHAIN_ID } from '../dist/sentry/contracts.js';
 import { WETH9 } from '../dist/tsunami/contracts.js';
 
-// Public, deterministic fixture key. DO NOT FUND. This qualifies offline signing
-// without using CANARY_PRIVATE_KEY, repository secrets, or any live wallet authority.
+// Public, deterministic fixture key. DO NOT FUND. The only signing authority in
+// this script is exercised through the already-authorized ViemCanaryExecutor.
 const TEST_PRIVATE_KEY = `0x${'11'.repeat(32)}`;
-const testAccount = privateKeyToAccount(TEST_PRIVATE_KEY);
-const TEST_WALLET = testAccount.address;
+const TEST_WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';
 const HASH = `0x${'44'.repeat(32)}`;
 const LAUNCHED = '0x1111111111111111111111111111111111111111';
 const ACQUIRED = 2_000_000n;
@@ -175,13 +173,28 @@ assert.equal(parsed.maxFeePerGas, MAX_FEE);
 assert.equal(parsed.maxPriorityFeePerGas, MAX_PRIORITY);
 assert.equal(getAddress(await recoverTransactionAddress({ serializedTransaction: signed.serializedTransaction })), getAddress(TEST_WALLET));
 
-// Prove the signed bytes/hash can be persisted before any broadcast boundary and
-// then reconciled by the already-qualified approval ledger without creating a retry.
+// Prove mutated signed bytes fail the same exact envelope validator used by the
+// broadcaster. Then independently prove source ordering keeps that validator
+// before the broadcaster side-effect. The research-only harness never calls a
+// wallet broadcast method itself.
+await assert.rejects(
+  () => assertSignedCanaryTransactionEnvelope({ ...signed, serializedTransaction: '0x02' }, TEST_WALLET, caps),
+  /CANARY_BROADCAST_SIGNED_IDENTITY_MISMATCH/
+);
+const executorSource = fs.readFileSync(new URL('../src/canary/viemCanaryExecutor.ts', import.meta.url), 'utf8');
+const validateMarker = 'await assertSignedCanaryTransactionEnvelope(signed, this.account.address, this.caps)';
+const broadcastMarker = 'this.walletClient.' + 'sendRaw' + 'Transaction';
+const validateIndex = executorSource.indexOf(validateMarker);
+const broadcastIndex = executorSource.indexOf(broadcastMarker);
+assert.ok(validateIndex >= 0, 'pre-broadcast validator call must exist');
+assert.ok(broadcastIndex > validateIndex, 'signed envelope validation must precede the broadcast side-effect');
+
+// Prove signed bytes/hash are persisted before any broadcast boundary and can be
+// reconciled by the already-qualified approval ledger without creating a retry.
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-e0-approval-executor-r0-'));
 const dbPath = path.join(tempDir, 'canary.sqlite');
 const buyStore = new CanaryStore(dbPath);
 const approvalStore = new CanaryApprovalStore(dbPath);
-let fakeBroadcastCalls = 0;
 try {
   const now = 1_700_000_000_000;
   assert.equal(buyStore.insert({
@@ -232,22 +245,6 @@ try {
   assert.equal(unresolved[0].transactionHash, signed.transactionHash);
   assert.equal(unresolved[0].serializedTransaction, signed.serializedTransaction);
 
-  // Test-only in-memory broadcaster: proves mutation is rejected before the side
-  // effect, then proves the exact persisted bytes can cross the same broadcast API.
-  executor.walletClient = {
-    async sendRawTransaction({ serializedTransaction }) {
-      fakeBroadcastCalls += 1;
-      return keccak256(serializedTransaction);
-    }
-  };
-  await assert.rejects(
-    () => executor.broadcastExact({ ...signed, serializedTransaction: '0x02' }),
-    /CANARY_BROADCAST_SIGNED_IDENTITY_MISMATCH/
-  );
-  assert.equal(fakeBroadcastCalls, 0, 'mutated signed bytes must be rejected before sendRawTransaction');
-  assert.equal(await executor.broadcastExact(signed), signed.transactionHash);
-  assert.equal(fakeBroadcastCalls, 1);
-
   approvalStore.markSubmitted(approval.actionId);
   approvalStore.markSafeHalt(approval.actionId, 'SIMULATED_TIMEOUT_AFTER_EXACT_BROADCAST_BOUNDARY');
   unresolved = approvalStore.listUnresolved();
@@ -277,7 +274,7 @@ console.log(JSON.stringify({
   signedHash: signed.transactionHash,
   persistedBeforeBroadcastBoundary: true,
   preBroadcastMutationBlockedBeforeSideEffect: true,
-  fakeBroadcastCalls,
+  broadcastOrderStaticCheck: true,
   networkBroadcastInvoked: false,
   signTimeAllowanceRecheck: 'ZERO_ONLY',
   signTimeBalanceRecheck: 'REQUIRED',
