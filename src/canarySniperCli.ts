@@ -7,8 +7,11 @@ import {
 } from './authority/executableInfraAuthority.js';
 import { assertLedgerWithinAuthorizedEpoch } from './authority/ledgerEpochGuard.js';
 import { assertAuthorizedSentryStartBlock } from './authority/sentryAuthority.js';
+import { CanaryApprovalStore } from './canary/approvalStore.js';
+import { CanaryExitStore } from './canary/exitStore.js';
 import { CanaryStore } from './canary/store.js';
 import { syncCanarySniper, type CanaryCycleOptions } from './canary/cycle.js';
+import { syncCanaryE0RoundTripWiring } from './canary/roundTripWiring.js';
 import { ViemCanaryExecutor } from './canary/viemCanaryExecutor.js';
 import { SqliteStore } from './db/sqliteStore.js';
 import { ViemForwardOutcomeSource } from './outcome/viemSource.js';
@@ -21,6 +24,8 @@ import { ViemExecutableBaselineSource } from './tsunami/viemBaselineSource.js';
 
 if (process.env.CANARY_SNIPER_R0_ENABLED !== 'true') throw new Error('CANARY_SNIPER_R0_REQUIRES_EXPLICIT_ENABLE');
 const live = process.env.CANARY_LIVE === 'true';
+const roundTripEnabled = process.env.CANARY_E0_ROUNDTRIP_ENABLED === 'true';
+if (roundTripEnabled && live) throw new Error('CANARY_E0_ROUNDTRIP_LIVE_NOT_AUTHORIZED');
 const startBlockRaw = process.env.SENTRY_START_BLOCK;
 if (!startBlockRaw) throw new Error('SENTRY_START_BLOCK is required; refuse to guess historical authority');
 const startBlock = BigInt(startBlockRaw);
@@ -62,6 +67,8 @@ if (cycleIntervalMs < 250) throw new Error('CANARY_POLL_INTERVAL_MS must be >= 2
 
 const store = new SqliteStore(dbPath, INK_CHAIN_ID);
 const canaryStore = new CanaryStore(dbPath);
+const approvalStore = new CanaryApprovalStore(dbPath);
+const exitStore = new CanaryExitStore(dbPath);
 const truthSource = new ViemSentryLaunchSource({ rpcUrl, factory });
 const baselineSource = new ViemExecutableBaselineSource({ rpcUrl });
 const outcomeSource = new ViemForwardOutcomeSource({ rpcUrl });
@@ -88,20 +95,38 @@ try {
     const baseline = await syncExecutableBaseline(baselineSource, store, baselineOptions);
     const outcomes = await syncForwardOutcomes(outcomeSource, store, outcomeOptions);
     const canary = await syncCanarySniper({ store, canaryStore, baselineSource, executor, options: canaryOptions });
+    const roundTrip = await syncCanaryE0RoundTripWiring({
+      enabled: roundTripEnabled,
+      launchStore: store,
+      buyStore: canaryStore,
+      approvalStore,
+      exitStore,
+      quoteSource: baselineSource,
+      executor,
+      options: {
+        slippageBps: canaryOptions.slippageBps,
+        deadlineSeconds: canaryOptions.deadlineSeconds
+      }
+    });
     console.log(JSON.stringify(jsonSafe({
       runtimeVersion: 'CANARY_SNIPER_R0',
       live,
+      roundTripEnabled,
       observedAtMs: Date.now(),
       truth,
       baseline,
       outcomes,
-      canary
+      canary,
+      roundTrip
     })));
     if (canary.action === 'BLOCKED_SETUP') throw new Error(`CANARY_SETUP_BLOCKED:${canary.reason ?? 'UNKNOWN'}`);
+    if (roundTrip.action === 'BLOCKED_SETUP') throw new Error(`CANARY_E0_ROUNDTRIP_SETUP_BLOCKED:${roundTrip.reason ?? roundTrip.runtime?.reason ?? 'UNKNOWN'}`);
     if (process.argv.includes('--once') || controller.signal.aborted) break;
     await sleep(cycleIntervalMs, controller.signal);
   } while (!controller.signal.aborted);
 } finally {
+  exitStore.close();
+  approvalStore.close();
   canaryStore.close();
   store.close();
 }
