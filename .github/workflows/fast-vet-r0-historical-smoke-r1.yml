@@ -1,0 +1,62 @@
+name: fast-vet-r0-historical-smoke-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/evaluation/fastVet.ts'
+      - 'src/evaluation/fastVetShadow.ts'
+      - 'scripts/fast-vet-check.mjs'
+      - 'scripts/fast-vet-r0-historical-smoke-r1.mjs'
+      - 'docs/FAST_VET_R0_HISTORICAL_SMOKE_R1.md'
+      - 'package.json'
+      - '.github/workflows/fast-vet-r0-historical-smoke-r1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+      - name: Verify frozen FAST_VET source blobs
+        run: |
+          test "$(git hash-object src/evaluation/fastVet.ts)" = "0ca384e142a8f1c898f7041fff87811e2f136225"
+          test "$(git hash-object src/evaluation/fastVetShadow.ts)" = "de2a993b93b9b60669acd09a60e1589cdc96e572"
+          test "$(git hash-object scripts/fast-vet-check.mjs)" = "2417b03a449bf305a89d0a7196b5db89ef4216bc"
+          node scripts/fast-vet-check.mjs
+      - name: Download repaired full-replay receipt
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p .fast-vet-smoke/replay
+          curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o .fast-vet-smoke/replay.zip \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/10410898359/zip"
+          unzip -q .fast-vet-smoke/replay.zip -d .fast-vet-smoke/replay
+          mapfile -t files < <(find .fast-vet-smoke/replay -type f -print)
+          test "${#files[@]}" -eq 1
+          test "$(basename "${files[0]}")" = "historical-full-replay-r1-live-receipt.json"
+          echo "916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825  ${files[0]}" | sha256sum -c -
+          echo "REPLAY_RECEIPT=${files[0]}" >> "$GITHUB_ENV"
+      - name: Run frozen historical smoke
+        run: |
+          mkdir -p .fast-vet-smoke/output
+          OUTPUT_PATH=.fast-vet-smoke/output/fast-vet-r0-historical-smoke-r1-receipt.json \
+          node scripts/fast-vet-r0-historical-smoke-r1.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fast-vet-r0-historical-smoke-r1-${{ github.sha }}
+          path: .fast-vet-smoke/output/fast-vet-r0-historical-smoke-r1-receipt.json
+          if-no-files-found: error
