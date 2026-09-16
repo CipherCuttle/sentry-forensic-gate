@@ -29,7 +29,17 @@ for (const file of files) {
 }
 
 const executor = fs.readFileSync(allowedWalletAuthorityFile, 'utf8');
-for (const required of ['CANARY_PRIVATE_KEY_FORMAT_INVALID', 'CANARY_ROUTER_MISMATCH', 'CANARY_CHAIN_ID_MISMATCH', 'CANARY_INPUT_ALLOWANCE_INSUFFICIENT', 'CANARY_QUOTE_STALE', 'CANARY_GAS_CAP_EXCEEDED', 'CANARY_BROADCAST_HASH_MISMATCH']) {
+for (const required of [
+  'CANARY_PRIVATE_KEY_FORMAT_INVALID',
+  'CANARY_ROUTER_MISMATCH',
+  'CANARY_CHAIN_ID_MISMATCH',
+  'CANARY_INPUT_ALLOWANCE_INSUFFICIENT',
+  'CANARY_QUOTE_STALE',
+  'CANARY_QUOTE_BLOCK_REORG',
+  'CANARY_DEADLINE_EXCEEDS_MAX',
+  'CANARY_GAS_CAP_EXCEEDED',
+  'CANARY_BROADCAST_HASH_MISMATCH'
+]) {
   if (!executor.includes(required)) findings.push(`missing-fail-closed-guard:${required}`);
 }
 if (findings.length) throw new Error(`CANARY_BOUNDARY_VIOLATION\n${findings.join('\n')}`);

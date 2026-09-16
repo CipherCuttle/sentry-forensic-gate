@@ -6,7 +6,7 @@ import type { ViemExecutableBaselineSource } from '../tsunami/viemBaselineSource
 import { buildCanarySwapIntent, CANARY_PRIMARY_NOTIONAL_USD_MICROS, deriveCanaryActionId } from './swapIntent.js';
 import { CanaryStore } from './store.js';
 import type { CanaryActionRecord } from './types.js';
-import type { ViemCanaryExecutor } from './viemCanaryExecutor.js';
+import { assertCanaryQuoteBlockHash, type ViemCanaryExecutor } from './viemCanaryExecutor.js';
 
 export interface CanaryCycleOptions {
   live: boolean;
@@ -85,6 +85,9 @@ export async function syncCanarySniper(params: {
       return { headBlock, candidatesConsidered: considered, pass, reject, unknown, action: 'DRY_PASS', launchId: baseline.launchId };
     }
     if (!params.executor) throw new Error('CANARY_LIVE_REQUIRES_EXECUTOR');
+
+    // Advisory fast path only. The database partial UNIQUE index is the actual
+    // one-buy authority and closes count/insert races across processes.
     if (params.canaryStore.countCommittedBuys() >= params.options.buyLimit) {
       params.canaryStore.insert(makeRecord({
         actionId, baseline, decision: 'PASS', reasons: ['CANARY_BUY_LIMIT_REACHED'], state: 'SKIPPED'
@@ -113,6 +116,14 @@ export async function syncCanarySniper(params: {
       });
       if (!reverse.executable || reverse.amountOut <= 0n) throw new Error('CANARY_FRESH_REVERSE_NOT_EXECUTABLE');
 
+      // All historical-at-block reads above must still refer to the same
+      // canonical block after the last quote. A tip reorg invalidates the whole
+      // evidence bundle rather than mixing forks.
+      const quoteBlockHashAfter = await params.baselineSource.getBlockHash(quoteBlockNumber);
+      assertCanaryQuoteBlockHash(quoteBlockHash, quoteBlockHashAfter);
+
+      // Deadline authority comes from Ink's block clock, never the host clock.
+      const chainClock = await params.executor.getChainClock();
       const intent = await buildCanarySwapIntent({
         launchId: baseline.launchId,
         baselineId: baseline.baselineId,
@@ -126,12 +137,12 @@ export async function syncCanarySniper(params: {
         amountIn: calibration.baseAmount,
         quotedAmountOut: entry.amountOut,
         slippageBps: params.options.slippageBps,
-        nowEpochSeconds: Math.floor(Date.now() / 1000),
+        chainTimestampSeconds: chainClock.timestampSeconds,
         deadlineSeconds: params.options.deadlineSeconds
       });
       const preflight = await params.executor.preflight(intent);
       const now = Date.now();
-      params.canaryStore.insert(makeRecord({
+      const reservation = params.canaryStore.insert(makeRecord({
         actionId: intent.actionId,
         baseline,
         decision: 'PASS',
@@ -141,6 +152,21 @@ export async function syncCanarySniper(params: {
         outputBalanceBefore: preflight.outputBalanceBefore,
         now
       }));
+      if (reservation === 'DUPLICATE') {
+        return {
+          headBlock, candidatesConsidered: considered, pass, reject, unknown,
+          action: 'BLOCKED_UNRESOLVED', launchId: baseline.launchId,
+          reason: 'CANARY_RESERVATION_DUPLICATE_NO_SIGN'
+        };
+      }
+      if (reservation === 'BUY_LIMIT') {
+        return {
+          headBlock, candidatesConsidered: considered, pass, reject, unknown,
+          action: 'BLOCKED_UNRESOLVED', launchId: baseline.launchId,
+          reason: 'CANARY_GLOBAL_BUY_SLOT_ALREADY_RESERVED'
+        };
+      }
+
       const signed = await params.executor.sign(intent, preflight);
       params.canaryStore.markSigned(intent.actionId, signed);
       try {

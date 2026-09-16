@@ -14,7 +14,12 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { INK_CHAIN_ID, DEFAULT_INK_RPC_URL } from '../sentry/contracts.js';
 import { TSUNAMI_V3_FACTORY, WETH9 } from '../tsunami/contracts.js';
-import { INK_SWAP_ROUTER_02, swapRouter02Abi, type CanarySwapIntent } from './swapIntent.js';
+import {
+  CANARY_MAX_DEADLINE_SECONDS,
+  INK_SWAP_ROUTER_02,
+  swapRouter02Abi,
+  type CanarySwapIntent
+} from './swapIntent.js';
 
 const erc20CanaryAbi = [
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
@@ -45,6 +50,12 @@ export interface CanaryPreflight {
   gas: bigint;
   maxFeePerGas: bigint;
   maxPriorityFeePerGas: bigint;
+}
+
+export interface CanaryChainClock {
+  blockNumber: bigint;
+  blockHash: Hex;
+  timestampSeconds: number;
 }
 
 export interface SignedCanaryTransaction {
@@ -81,11 +92,24 @@ export class ViemCanaryExecutor {
     validateCaps(this.caps);
   }
 
+  async getChainClock(): Promise<CanaryChainClock> {
+    const [chainId, block] = await Promise.all([
+      this.publicClient.getChainId(),
+      this.publicClient.getBlock()
+    ]);
+    if (chainId !== INK_CHAIN_ID) throw new Error(`CANARY_CHAIN_ID_MISMATCH:${chainId}`);
+    if (block.number === null || !block.hash) throw new Error('CANARY_CHAIN_CLOCK_BLOCK_IDENTITY_MISSING');
+    const timestampSeconds = blockTimestampToNumber(block.timestamp);
+    return { blockNumber: block.number, blockHash: block.hash, timestampSeconds };
+  }
+
   async preflight(intent: CanarySwapIntent): Promise<CanaryPreflight> {
     if (getAddress(intent.router) !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_ROUTER_MISMATCH:${intent.router}`);
     if (getAddress(intent.recipient) !== getAddress(this.account.address)) throw new Error('CANARY_RECIPIENT_MUST_EQUAL_WALLET');
-    const chainId = await this.publicClient.getChainId();
-    if (chainId !== INK_CHAIN_ID) throw new Error(`CANARY_CHAIN_ID_MISMATCH:${chainId}`);
+    const chainClock = await this.getChainClock();
+    assertQuoteFresh(intent.quoteBlockNumber, chainClock.blockNumber, this.caps.maxQuoteAgeBlocks);
+    assertCanaryDeadlineAgainstChainClock(intent.deadlineEpochSeconds, chainClock.timestampSeconds);
+    await this.assertQuoteBlockCanonical(intent);
 
     const [routerCode, routerFactory, routerWeth] = await Promise.all([
       this.publicClient.getBytecode({ address: INK_SWAP_ROUTER_02 }),
@@ -96,8 +120,6 @@ export class ViemCanaryExecutor {
     if (getAddress(routerFactory as Address) !== getAddress(TSUNAMI_V3_FACTORY)) throw new Error('CANARY_ROUTER_FACTORY_DRIFT');
     if (getAddress(routerWeth as Address) !== getAddress(WETH9)) throw new Error('CANARY_ROUTER_WETH_DRIFT');
 
-    const checkedAtBlock = await this.publicClient.getBlockNumber();
-    assertQuoteFresh(intent.quoteBlockNumber, checkedAtBlock, this.caps.maxQuoteAgeBlocks);
     const [inputBalance, inputAllowance, outputBalanceBefore] = await Promise.all([
       this.publicClient.readContract({ address: intent.tokenIn, abi: erc20CanaryAbi, functionName: 'balanceOf', args: [this.account.address] }),
       this.publicClient.readContract({ address: intent.tokenIn, abi: erc20CanaryAbi, functionName: 'allowance', args: [this.account.address, INK_SWAP_ROUTER_02] }),
@@ -119,7 +141,7 @@ export class ViemCanaryExecutor {
 
     return {
       wallet: this.account.address,
-      checkedAtBlock,
+      checkedAtBlock: chainClock.blockNumber,
       inputBalance,
       inputAllowance,
       outputBalanceBefore,
@@ -130,8 +152,10 @@ export class ViemCanaryExecutor {
   }
 
   async sign(intent: CanarySwapIntent, preflight: CanaryPreflight): Promise<SignedCanaryTransaction> {
-    const head = await this.publicClient.getBlockNumber();
-    assertQuoteFresh(intent.quoteBlockNumber, head, this.caps.maxQuoteAgeBlocks);
+    const chainClock = await this.getChainClock();
+    assertQuoteFresh(intent.quoteBlockNumber, chainClock.blockNumber, this.caps.maxQuoteAgeBlocks);
+    assertCanaryDeadlineAgainstChainClock(intent.deadlineEpochSeconds, chainClock.timestampSeconds);
+    await this.assertQuoteBlockCanonical(intent);
     const nonce = await this.publicClient.getTransactionCount({ address: this.account.address, blockTag: 'pending' });
     const serializedTransaction = await this.account.signTransaction({
       chainId: INK_CHAIN_ID,
@@ -178,6 +202,33 @@ export class ViemCanaryExecutor {
   async getTokenBalance(token: Address): Promise<bigint> {
     return this.publicClient.readContract({ address: token, abi: erc20CanaryAbi, functionName: 'balanceOf', args: [this.account.address] });
   }
+
+  private async assertQuoteBlockCanonical(intent: CanarySwapIntent): Promise<void> {
+    const block = await this.publicClient.getBlock({ blockNumber: intent.quoteBlockNumber });
+    if (!block.hash) throw new Error(`CANARY_QUOTE_BLOCK_HASH_MISSING:${intent.quoteBlockNumber}`);
+    assertCanaryQuoteBlockHash(intent.quoteBlockHash, block.hash);
+  }
+}
+
+export function assertCanaryQuoteBlockHash(expected: Hex, actual: Hex): void {
+  if (expected.toLowerCase() !== actual.toLowerCase()) {
+    throw new Error(`CANARY_QUOTE_BLOCK_REORG:expected=${expected}:actual=${actual}`);
+  }
+}
+
+export function assertCanaryDeadlineAgainstChainClock(deadlineEpochSeconds: bigint, chainTimestampSeconds: number): void {
+  if (!Number.isInteger(chainTimestampSeconds) || chainTimestampSeconds <= 0) throw new Error('CANARY_CHAIN_TIMESTAMP_INVALID');
+  const chainTimestamp = BigInt(chainTimestampSeconds);
+  if (deadlineEpochSeconds <= chainTimestamp) throw new Error('CANARY_DEADLINE_EXPIRED');
+  const lifetime = deadlineEpochSeconds - chainTimestamp;
+  if (lifetime > BigInt(CANARY_MAX_DEADLINE_SECONDS)) {
+    throw new Error(`CANARY_DEADLINE_EXCEEDS_MAX:${lifetime}:${CANARY_MAX_DEADLINE_SECONDS}`);
+  }
+}
+
+function blockTimestampToNumber(timestamp: bigint): number {
+  if (timestamp <= 0n || timestamp > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`CANARY_CHAIN_TIMESTAMP_INVALID:${timestamp}`);
+  return Number(timestamp);
 }
 
 function assertQuoteFresh(quoteBlock: bigint, headBlock: bigint, maxAge: bigint): void {

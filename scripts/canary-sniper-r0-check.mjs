@@ -1,13 +1,22 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { decodeFunctionData } from 'viem';
+import { CanaryStore } from '../dist/canary/store.js';
 import {
   buildCanarySwapIntent,
   CANARY_PRIMARY_NOTIONAL_USD_MICROS,
   INK_SWAP_ROUTER_02,
   swapRouter02Abi
 } from '../dist/canary/swapIntent.js';
+import {
+  assertCanaryDeadlineAgainstChainClock,
+  assertCanaryQuoteBlockHash
+} from '../dist/canary/viemCanaryExecutor.js';
 
 const HASH = `0x${'22'.repeat(32)}`;
+const OTHER_HASH = `0x${'33'.repeat(32)}`;
 const TOKEN_IN = '0x4200000000000000000000000000000000000006';
 const TOKEN_OUT = '0x1111111111111111111111111111111111111111';
 const RECIPIENT = '0x2222222222222222222222222222222222222222';
@@ -17,14 +26,14 @@ const first = await buildCanarySwapIntent({
   tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, fee: 10_000, recipient: RECIPIENT,
   notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS,
   amountIn: 1_000_000n, quotedAmountOut: 2_000_000n,
-  slippageBps: 500, nowEpochSeconds: 1_700_000_000, deadlineSeconds: 30
+  slippageBps: 500, chainTimestampSeconds: 1_700_000_000, deadlineSeconds: 30
 });
 const second = await buildCanarySwapIntent({
-  launchId: 'launch-1', baselineId: 'baseline-1', quoteBlockNumber: 101n, quoteBlockHash: `0x${'33'.repeat(32)}`,
+  launchId: 'launch-1', baselineId: 'baseline-1', quoteBlockNumber: 101n, quoteBlockHash: OTHER_HASH,
   tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, fee: 10_000, recipient: RECIPIENT,
   notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS,
   amountIn: 1_010_000n, quotedAmountOut: 2_020_000n,
-  slippageBps: 500, nowEpochSeconds: 1_700_000_001, deadlineSeconds: 30
+  slippageBps: 500, chainTimestampSeconds: 1_700_000_001, deadlineSeconds: 30
 });
 assert.equal(first.actionId, second.actionId, 'EconomicActionID must not change when the fresh quote changes');
 assert.equal(first.router, INK_SWAP_ROUTER_02);
@@ -51,19 +60,71 @@ await assert.rejects(() => buildCanarySwapIntent({
   launchId: 'x', baselineId: 'b', quoteBlockNumber: 1n, quoteBlockHash: HASH,
   tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, fee: 3000, recipient: RECIPIENT,
   notionalUsdMicros: 2_000_000n, amountIn: 1n, quotedAmountOut: 1n,
-  slippageBps: 100, nowEpochSeconds: 1, deadlineSeconds: 30
+  slippageBps: 100, chainTimestampSeconds: 1, deadlineSeconds: 30
 }), /CANARY_NOTIONAL_MUST_BE_ONE_DOLLAR/);
 await assert.rejects(() => buildCanarySwapIntent({
   launchId: 'x', baselineId: 'b', quoteBlockNumber: 1n, quoteBlockHash: HASH,
   tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, fee: 3000, recipient: RECIPIENT,
   notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS, amountIn: 1n, quotedAmountOut: 1n,
-  slippageBps: 2001, nowEpochSeconds: 1, deadlineSeconds: 30
+  slippageBps: 2001, chainTimestampSeconds: 1, deadlineSeconds: 30
 }), /CANARY_SLIPPAGE_BPS_OUT_OF_RANGE/);
 await assert.rejects(() => buildCanarySwapIntent({
   launchId: 'x', baselineId: 'b', quoteBlockNumber: 1n, quoteBlockHash: HASH,
   tokenIn: TOKEN_IN, tokenOut: TOKEN_IN, fee: 3000, recipient: RECIPIENT,
   notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS, amountIn: 1n, quotedAmountOut: 1n,
-  slippageBps: 100, nowEpochSeconds: 1, deadlineSeconds: 30
+  slippageBps: 100, chainTimestampSeconds: 1, deadlineSeconds: 30
 }), /CANARY_TOKEN_IDENTITY_INVALID/);
 
+assert.doesNotThrow(() => assertCanaryDeadlineAgainstChainClock(1_120n, 1_000));
+assert.throws(() => assertCanaryDeadlineAgainstChainClock(1_121n, 1_000), /CANARY_DEADLINE_EXCEEDS_MAX/);
+assert.throws(() => assertCanaryDeadlineAgainstChainClock(1_000n, 1_000), /CANARY_DEADLINE_EXPIRED/);
+assert.doesNotThrow(() => assertCanaryQuoteBlockHash(HASH, HASH));
+assert.throws(() => assertCanaryQuoteBlockHash(HASH, OTHER_HASH), /CANARY_QUOTE_BLOCK_REORG/);
+
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-canary-r0-'));
+const dbPath = path.join(tempDir, 'race.sqlite');
+const storeA = new CanaryStore(dbPath);
+const storeB = new CanaryStore(dbPath);
+try {
+  const recordA = canaryRecord('action-a', 'launch-a', 'baseline-a', 'RESERVED');
+  const recordB = canaryRecord('action-b', 'launch-b', 'baseline-b', 'RESERVED');
+  assert.equal(storeA.countCommittedBuys(), 0);
+  assert.equal(storeB.countCommittedBuys(), 0);
+  assert.equal(storeA.insert(recordA), 'INSERTED');
+  assert.equal(storeB.insert(recordB), 'BUY_LIMIT', 'second process must lose the global one-buy race');
+  assert.equal(storeB.insert(recordA), 'DUPLICATE', 'same action must never become a second signer');
+  assert.equal(storeA.countCommittedBuys(), 1);
+
+  const skipped = canaryRecord('action-skip', 'launch-skip', 'baseline-skip', 'SKIPPED');
+  assert.equal(storeB.insert(skipped), 'INSERTED', 'non-economic skipped rows must not consume the singleton slot');
+  assert.equal(storeB.countCommittedBuys(), 1);
+} finally {
+  storeB.close();
+  storeA.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+}
+
 console.log('canary-sniper-r0-check: PASS');
+
+function canaryRecord(actionId, launchId, baselineId, state) {
+  const now = 1_700_000_000_000;
+  return {
+    actionId,
+    launchId,
+    baselineId,
+    decision: 'PASS',
+    reasons: [],
+    state,
+    originDecisionBlock: 100n,
+    originDecisionBlockHash: HASH,
+    intent: null,
+    nonce: null,
+    transactionHash: null,
+    serializedTransaction: null,
+    lastError: null,
+    outputBalanceBefore: null,
+    outputBalanceAfter: null,
+    createdAtMs: now,
+    updatedAtMs: now
+  };
+}

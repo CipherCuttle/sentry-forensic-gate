@@ -39,7 +39,7 @@ export interface CanarySwapIntentInput {
   amountIn: bigint;
   quotedAmountOut: bigint;
   slippageBps: number;
-  nowEpochSeconds: number;
+  chainTimestampSeconds: number;
   deadlineSeconds: number;
 }
 
@@ -85,7 +85,9 @@ export async function buildCanarySwapIntent(input: CanarySwapIntentInput): Promi
   if (!Number.isInteger(input.slippageBps) || input.slippageBps < 1 || input.slippageBps > CANARY_MAX_SLIPPAGE_BPS) {
     throw new Error(`CANARY_SLIPPAGE_BPS_OUT_OF_RANGE:${input.slippageBps}`);
   }
-  if (!Number.isInteger(input.nowEpochSeconds) || input.nowEpochSeconds <= 0) throw new Error('CANARY_NOW_INVALID');
+  if (!Number.isInteger(input.chainTimestampSeconds) || input.chainTimestampSeconds <= 0) {
+    throw new Error('CANARY_CHAIN_TIMESTAMP_INVALID');
+  }
   if (!Number.isInteger(input.deadlineSeconds) || input.deadlineSeconds < 1 || input.deadlineSeconds > CANARY_MAX_DEADLINE_SECONDS) {
     throw new Error(`CANARY_DEADLINE_SECONDS_OUT_OF_RANGE:${input.deadlineSeconds}`);
   }
@@ -96,7 +98,7 @@ export async function buildCanarySwapIntent(input: CanarySwapIntentInput): Promi
   if (tokenIn === tokenOut) throw new Error('CANARY_TOKEN_IDENTITY_INVALID');
   const amountOutMinimum = (input.quotedAmountOut * BigInt(10_000 - input.slippageBps)) / 10_000n;
   if (amountOutMinimum <= 0n) throw new Error('CANARY_MIN_OUT_ROUNDS_TO_ZERO');
-  const deadlineEpochSeconds = BigInt(input.nowEpochSeconds + input.deadlineSeconds);
+  const deadlineEpochSeconds = BigInt(input.chainTimestampSeconds + input.deadlineSeconds);
 
   const exactInputCalldata = encodeFunctionData({
     abi: swapRouter02Abi,

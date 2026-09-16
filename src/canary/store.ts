@@ -3,6 +3,8 @@ import type { Hex } from '../domain.js';
 import type { ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
 import type { CanaryActionRecord, CanaryActionState } from './types.js';
 
+export type CanaryInsertResult = 'INSERTED' | 'DUPLICATE' | 'BUY_LIMIT';
+
 export class CanaryStore {
   private readonly db: Database.Database;
 
@@ -31,6 +33,9 @@ export class CanaryStore {
         updated_at_ms INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_canary_actions_state ON canary_actions(state);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_canary_single_committed_buy
+        ON canary_actions(decision)
+        WHERE decision = 'PASS' AND state <> 'SKIPPED';
     `);
   }
 
@@ -70,7 +75,7 @@ export class CanaryStore {
     return rows.map(fromActionRow);
   }
 
-  insert(record: CanaryActionRecord): 'INSERTED' | 'DUPLICATE' {
+  insert(record: CanaryActionRecord): CanaryInsertResult {
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO canary_actions (
         action_id, launch_id, baseline_id, decision, reasons_json, state,
@@ -87,12 +92,21 @@ export class CanaryStore {
       record.createdAtMs, record.updatedAtMs
     );
     if (result.changes === 1) return 'INSERTED';
+
     const existing = this.db.prepare('SELECT action_id, baseline_id FROM canary_actions WHERE action_id = ? OR launch_id = ? LIMIT 1')
       .get(record.actionId, record.launchId) as { action_id: string; baseline_id: string } | undefined;
-    if (!existing || existing.action_id !== record.actionId || existing.baseline_id !== record.baselineId) {
+    if (existing) {
+      if (existing.action_id === record.actionId && existing.baseline_id === record.baselineId) return 'DUPLICATE';
       throw new Error(`CANARY_ACTION_IDENTITY_CONFLICT:${record.launchId}`);
     }
-    return 'DUPLICATE';
+
+    // The partial UNIQUE index above is the economic authority for R0. Two
+    // independent processes may both observe count=0, but only one PASS row can
+    // transition into the non-SKIPPED economic state.
+    if (record.decision === 'PASS' && record.state !== 'SKIPPED' && this.countCommittedBuys() >= 1) {
+      return 'BUY_LIMIT';
+    }
+    throw new Error(`CANARY_ACTION_INSERT_REJECTED:${record.launchId}`);
   }
 
   markSigned(actionId: string, params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }): void {
