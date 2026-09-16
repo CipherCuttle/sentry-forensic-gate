@@ -42,7 +42,7 @@ export interface CanaryApprovalIntent {
   calldata: Hex;
 }
 
-export type CanaryApprovalAllowanceDisposition = 'APPROVE_EXACT' | 'ALREADY_EXACT' | 'BLOCKED_DIRTY_ALLOWANCE';
+export type CanaryApprovalAllowanceDisposition = 'APPROVE_EXACT' | 'BLOCKED_DIRTY_ALLOWANCE';
 
 export async function deriveCanaryApprovalActionId(params: {
   parentBuyActionId: string;
@@ -122,7 +122,6 @@ export function classifyCanaryApprovalAllowance(current: bigint, required: bigin
   if (current < 0n) throw new Error('CANARY_APPROVAL_ALLOWANCE_INVALID');
   assertExactApprovalAmount(required);
   if (current === 0n) return 'APPROVE_EXACT';
-  if (current === required) return 'ALREADY_EXACT';
   return 'BLOCKED_DIRTY_ALLOWANCE';
 }
 
