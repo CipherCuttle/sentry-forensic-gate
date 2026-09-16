@@ -344,7 +344,7 @@ export async function assertSignedCanaryTransactionEnvelope(
   if (parsed.maxFeePerGas !== signed.maxFeePerGas) throw new Error('CANARY_BROADCAST_MAX_FEE_MISMATCH');
   if (parsed.maxPriorityFeePerGas !== signed.maxPriorityFeePerGas) throw new Error('CANARY_BROADCAST_PRIORITY_FEE_MISMATCH');
   if (caps) assertFeeAndGasCaps(signed.gas, signed.maxFeePerGas, signed.maxPriorityFeePerGas, caps);
-  const recovered = await recoverTransactionAddress({ serializedTransaction: signed.serializedTransaction });
+  const recovered = await recoverTransactionAddress({ serializedTransaction: signed.serializedTransaction as `0x02${string}` });
   if (getAddress(recovered) !== getAddress(expectedWallet)) throw new Error('CANARY_BROADCAST_SIGNER_MISMATCH');
 }
 
