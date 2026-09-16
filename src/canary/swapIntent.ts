@@ -65,6 +65,16 @@ export interface CanarySwapIntent {
   value: 0n;
 }
 
+export async function deriveCanaryActionId(launchId: string, baselineId: string): Promise<string> {
+  if (!launchId || !baselineId) throw new Error('CANARY_IDENTITY_REQUIRED');
+  return sha256Hex({
+    kind: CANARY_SNIPER_R0,
+    launchId,
+    baselineId,
+    notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS
+  });
+}
+
 export async function buildCanarySwapIntent(input: CanarySwapIntentInput): Promise<CanarySwapIntent> {
   if (!input.launchId || !input.baselineId) throw new Error('CANARY_IDENTITY_REQUIRED');
   if (input.notionalUsdMicros !== CANARY_PRIMARY_NOTIONAL_USD_MICROS) {
@@ -98,12 +108,7 @@ export async function buildCanarySwapIntent(input: CanarySwapIntentInput): Promi
     functionName: 'multicall',
     args: [deadlineEpochSeconds, [exactInputCalldata]]
   });
-  const actionId = await sha256Hex({
-    kind: CANARY_SNIPER_R0,
-    launchId: input.launchId,
-    baselineId: input.baselineId,
-    notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS
-  });
+  const actionId = await deriveCanaryActionId(input.launchId, input.baselineId);
 
   return {
     version: CANARY_SNIPER_R0, actionId, launchId: input.launchId, baselineId: input.baselineId,
