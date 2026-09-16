@@ -55,7 +55,7 @@ assert.equal(getAddress(decoded.args[0]), getAddress(INK_SWAP_ROUTER_02));
 assert.equal(decoded.args[1], ACQUIRED);
 
 assert.equal(classifyCanaryApprovalAllowance(0n, ACQUIRED), 'APPROVE_EXACT');
-assert.equal(classifyCanaryApprovalAllowance(ACQUIRED, ACQUIRED), 'ALREADY_EXACT');
+assert.equal(classifyCanaryApprovalAllowance(ACQUIRED, ACQUIRED), 'BLOCKED_DIRTY_ALLOWANCE');
 assert.equal(classifyCanaryApprovalAllowance(1n, ACQUIRED), 'BLOCKED_DIRTY_ALLOWANCE');
 assert.equal(classifyCanaryApprovalAllowance(ACQUIRED + 1n, ACQUIRED), 'BLOCKED_DIRTY_ALLOWANCE');
 await assert.rejects(() => buildCanaryApprovalIntent({ buyIntent: buy, acquiredAmount: ERC20_MAX_UINT256 }), /CANARY_APPROVAL_INFINITE_ALLOWANCE_FORBIDDEN/);
@@ -189,6 +189,7 @@ console.log(JSON.stringify({
   spender: INK_SWAP_ROUTER_02,
   readOnlySimulationToken: USDT0,
   exactApprovalAmount: ACQUIRED.toString(),
+  preApprovalAllowancePolicy: 'ZERO_ONLY',
   dirtyAllowancePolicy: 'FAIL_CLOSED',
   infiniteAllowance: 'FORBIDDEN',
   persistedBeforeBroadcast: ['actionId', 'nonce', 'transactionHash', 'serializedTransaction'],
