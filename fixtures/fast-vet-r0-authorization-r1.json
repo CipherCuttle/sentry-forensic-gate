@@ -9,7 +9,9 @@
       "docs/FAST_VET_R0.md": "1ea7ac524803e621947d076e120860bade3df780",
       "src/evaluation/fastVet.ts": "0ca384e142a8f1c898f7041fff87811e2f136225",
       "src/evaluation/fastVetShadow.ts": "de2a993b93b9b60669acd09a60e1589cdc96e572",
-      "scripts/fast-vet-check.mjs": "2417b03a449bf305a89d0a7196b5db89ef4216bc"
+      "scripts/fast-vet-check.mjs": "2417b03a449bf305a89d0a7196b5db89ef4216bc",
+      "src/forensic/creatorOutcome.ts": "2d9b15481df64e69016c236a6374c96657d31cc0",
+      "src/outcome/forwardTypes.ts": "8c9682b671a7c185dbca416594c8eacd4b0c282e"
     },
     "review_history": {
       "initial_review_id": 5191567270,
@@ -72,7 +74,23 @@
       "NO_KNOWN_PRIOR_ADVERSE_CREATOR"
     ],
     "independent_reverse_semantics": "INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL",
-    "recovery_bps_threshold": null
+    "recovery_bps_threshold": null,
+    "reject_reasons": [
+      "PRIMARY_ENTRY_NOT_EXECUTABLE",
+      "PRIMARY_REVERSE_NOT_EXECUTABLE",
+      "KNOWN_PRIOR_ADVERSE_CREATOR"
+    ],
+    "unknown_reasons": [
+      "BASELINE_MISSING",
+      "BASELINE_UNVERIFIED",
+      "PRIMARY_LEG_MISSING",
+      "CREATOR_FEATURE_MISSING",
+      "CREATOR_HISTORY_INCOMPLETE"
+    ],
+    "pass_creator_coverage": [
+      "NO_HISTORY",
+      "COMPLETE"
+    ]
   },
   "shadow_semantics": {
     "receipt_version": "FAST_VET_SHADOW_R0",
@@ -96,7 +114,9 @@
     "win_class": "NORMAL_WIN",
     "no_sample_adequacy_claim": true,
     "no_probability_or_p_value": true,
-    "no_threshold_tuning": true
+    "no_threshold_tuning": true,
+    "source_outcome_policy": "FORWARD_OUTCOMES_R1",
+    "primary_outcome_notional_usd_micros": 1000000
   },
   "historical_adapter_contract": {
     "input_artifact_id": 10410898359,

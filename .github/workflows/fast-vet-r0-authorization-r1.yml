@@ -12,17 +12,22 @@ on:
       - 'scripts/dev-spine-context.mjs'
       - 'scripts/dev-spine-pack.mjs'
       - 'scripts/dev-spine-receipt.mjs'
+      - 'scripts/fast-vet-r0-authorization-predecessor-check.mjs'
+      - 'scripts/fast-vet-r0-source-parity-check.mjs'
       - '.github/workflows/fast-vet-r0-authorization-r1.yml'
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   authorization-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -30,14 +35,14 @@ jobs:
         run: |
           node scripts/dev-spine-check-test.mjs
           node scripts/dev-spine-check.mjs
-      - name: Verify frozen PR13 source object identities
-        run: |
-          git fetch --no-tags --depth=1 origin 22fcce4c301e791a59c68b19b198bd1bea104138
-          test "$(git rev-parse 22fcce4c301e791a59c68b19b198bd1bea104138:docs/FAST_VET_R0.md)" = "1ea7ac524803e621947d076e120860bade3df780"
-          test "$(git rev-parse 22fcce4c301e791a59c68b19b198bd1bea104138:src/evaluation/fastVet.ts)" = "0ca384e142a8f1c898f7041fff87811e2f136225"
-          test "$(git rev-parse 22fcce4c301e791a59c68b19b198bd1bea104138:src/evaluation/fastVetShadow.ts)" = "de2a993b93b9b60669acd09a60e1589cdc96e572"
-          test "$(git rev-parse 22fcce4c301e791a59c68b19b198bd1bea104138:scripts/fast-vet-check.mjs)" = "2417b03a449bf305a89d0a7196b5db89ef4216bc"
-          echo "FAST_VET_R0_SOURCE_IDENTITY=PASS"
+      - name: Verify real predecessor run artifact and receipt provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/fast-vet-r0-authorization-predecessor-check.mjs
+      - name: Fetch exact pre-existing FAST_VET source
+        run: git fetch --no-tags --depth=1 origin 22fcce4c301e791a59c68b19b198bd1bea104138
+      - name: Verify normalized rule semantic parity with PR13 source
+        run: node scripts/fast-vet-r0-source-parity-check.mjs
       - name: Prove this PR contains no FAST_VET implementation
         run: |
           test ! -e src/evaluation/fastVet.ts

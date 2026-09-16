@@ -4,139 +4,89 @@
 
 `PENDING HOSTILE REVIEW / FAST_VET SMOKE NOT AUTHORIZED / CANARY + LIVE AUTHORITY FALSE`
 
-This phase decides only whether the pre-existing `FAST_VET_R0` smoke rule may be executed once against the closed historical replay. It does not execute the smoke, tune the rule, add OSINT, or authorize a canary.
+This phase decides only whether the pre-existing `FAST_VET_R0` smoke rule may be executed once against the closed historical replay. It does not execute FAST_VET, tune the rule, add OSINT, or authorize a canary.
 
-## Predecessor closure
+## Closed predecessor
 
-`HISTORICAL_FULL_REPLAY_R1` is closed PASS on exact repaired/reviewed head:
+`HISTORICAL_FULL_REPLAY_R1` closed PASS on repaired/reviewed head `75588056de53b94f92b5cf3b40e89e2b5521031a`.
 
-`75588056de53b94f92b5cf3b40e89e2b5521031a`
+Pinned repaired replay evidence:
 
-Exact-head verification is 7/7 green:
+- Stage B run `35001582697`
+- artifact `10410898359`
+- GitHub artifact digest `sha256:ebeb0ff5d6c3fecc9dac2dde4397e8592f72a3501aa3b9980662c3bd8c71fb6a`
+- aggregate receipt SHA-256 `916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825`
+- 147/147 COMPLETE baselines
+- 735/735 COMPLETE outcomes
+- zero UNVERIFIED
 
-- CI `35001582681`
-- Stage A authority map `35001582737`
-- historical baseline `35001582904`
-- historical outcome `35001582683`
-- all-horizon compatibility `35001582992`
-- 147-launch scope/authorization `35001582695`
-- repaired Stage B replay `35001582697`
+The full-replay initial review found three P1s; the repaired full replay was regenerated and the single targeted review on the exact repair head reported no major issues.
 
-The repaired Stage B artifact is `10410898359`, GitHub digest
-`sha256:ebeb0ff5d6c3fecc9dac2dde4397e8592f72a3501aa3b9980662c3bd8c71fb6a`.
-The aggregate receipt SHA-256 is
-`916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825`.
+## Frozen pre-existing FAST_VET rule
 
-It accounts for exactly 147 launches and 735 horizon cells, with 147 COMPLETE baselines, 735 COMPLETE outcomes, and zero UNVERIFIED results.
+The smoke rule predates the full-cohort replay result and is frozen from PR #13 exact head `22fcce4c301e791a59c68b19b198bd1bea104138`, whose exact-head CI `34772418456` succeeded.
 
-The initial full-replay hostile review found three P1 findings. They were repaired atomically in the exact closure head, the full replay was regenerated, and the single targeted Codex re-review on `75588056de` reported no major issues. No further review loop is open.
-
-## Frozen FAST_VET source
-
-The candidate smoke rule already existed before the full-cohort replay result in PR #13:
-
-- PR: `#13 FAST_VET_R0: compressed existing-evidence smoke filter`
-- exact source head: `22fcce4c301e791a59c68b19b198bd1bea104138`
-- exact-head CI: `34772418456` SUCCESS
-
-Frozen source blobs:
+Pinned source objects:
 
 - `docs/FAST_VET_R0.md` → `1ea7ac524803e621947d076e120860bade3df780`
 - `src/evaluation/fastVet.ts` → `0ca384e142a8f1c898f7041fff87811e2f136225`
 - `src/evaluation/fastVetShadow.ts` → `de2a993b93b9b60669acd09a60e1589cdc96e572`
 - `scripts/fast-vet-check.mjs` → `2417b03a449bf305a89d0a7196b5db89ef4216bc`
+- `src/forensic/creatorOutcome.ts` → `2d9b15481df64e69016c236a6374c96657d31cc0`
+- `src/outcome/forwardTypes.ts` → `8c9682b671a7c185dbca416594c8eacd4b0c282e`
 
-The normalized frozen rule is committed as
-`fixtures/fast-vet-r0-authorization-r1.json`
-with SHA-256:
+Normalized rule fixture: `fixtures/fast-vet-r0-authorization-r1.json`, Git blob SHA-1 `a3266ab0bc2e1e1aaec26fafda64ae6be164c494`.
 
-`48704fd4692016a7fae73bcd63841686788f837d3001d43c9cf5cb3841172665`
+Frozen semantics:
 
-## Frozen decision semantics
+- primary notional exactly `$1` (`1_000_000` USD micros)
+- decisions exactly `PASS / REJECT / UNKNOWN`
+- `UNKNOWN -> SKIP`
+- reject explicit non-executable `$1` entry
+- reject non-executable same-state independent reverse/sellability diagnostic
+- reject known prior creator `CATASTROPHIC_LOSS`, `EXIT_FAILURE`, or `LIQUIDITY_COLLAPSE`
+- incomplete/missing evidence remains `UNKNOWN`
+- PASS requires COMPLETE executable baseline and creator coverage `NO_HISTORY` or `COMPLETE` with no known prior adverse creator history
+- no recovery-BPS threshold
+- target horizon exactly 24h
+- control denominator COMPLETE baselines only
+- candidate exposure PASS only
+- receipt `FAST_VET_SHADOW_R0`, status `SMOKE_ONLY`, strategy `EDGE_UNPROVEN`
+- no sample-adequacy, probability, p-value, ML, tuned-threshold, or promotion claim
 
-Primary notional is exactly `$1` (`1_000_000` USD micros).
+## P1 review repairs required by this authorization
 
-The decision is exactly `PASS / REJECT / UNKNOWN`.
+Authorization must not trust packet constants authored in this PR. CI must independently prove both lineages:
 
-`UNKNOWN -> SKIP`.
-
-`REJECT` when the primary `$1` entry is explicitly non-executable, the primary same-state independent reverse/sellability diagnostic is non-executable, or point-in-time creator history already contains a canonical prior `CATASTROPHIC_LOSS`, `EXIT_FAILURE`, or `LIQUIDITY_COLLAPSE`.
-
-`UNKNOWN` covers missing/unverified baseline or primary evidence, missing creator evidence, and incomplete creator history without already-known adverse history.
-
-`PASS` requires a COMPLETE baseline, executable `$1` entry, executable `$1` independent reverse, creator coverage `NO_HISTORY` or `COMPLETE`, and no known prior adverse creator history.
-
-The independent reverse remains a same-state sellability diagnostic. It is not sequential PnL. There is no recovery-BPS threshold.
-
-## Frozen shadow semantics
-
-The smoke remains:
-
-- receipt: `FAST_VET_SHADOW_R0`
-- status: `SMOKE_ONLY`
-- strategy label: `EDGE_UNPROVEN`
-- target horizon: exactly 24h
-- control cohort: COMPLETE baselines only
-- candidate exposure: PASS only
-
-Metrics remain trade retention, outcome coverage, adverse-exposure reduction, ordinary-win retention, and positive executable-upside capture.
-
-There is no sample-adequacy claim, probability, p-value, confidence interval, ML model, tuned threshold, or promotion decision.
+1. Query GitHub Actions run `35001582697`; require successful completion on exact head `75588056de53b94f92b5cf3b40e89e2b5521031a`.
+2. Query artifact `10410898359`; require it belongs to that run/head and has the pinned GitHub digest; download it; require it contains only `historical-full-replay-r1-live-receipt.json`; hash the receipt bytes to the pinned SHA-256; then validate the closed 147×5 accounting and policy identities.
+3. Fetch exact PR #13 head `22fcce4c301e791a59c68b19b198bd1bea104138`; verify all six pinned direct/transitive source blobs; deterministically validate the normalized decision and shadow semantics against those source bytes and the existing regression test.
+4. Prove this authorization branch contains no FAST_VET evaluator, shadow runner, or smoke-check implementation.
 
 ## Historical adapter boundary
 
-The old PR #13 runner reads an old local SQLite ledger and is **not** authority for this run.
+The old PR #13 SQLite runner is not authority for this historical run. A later implementation successor, only after authorization closure, may consume only the repaired historical replay artifact and may adapt shape, not semantics.
 
-A later implementation successor, only if this authorization closes, may consume only the repaired `HISTORICAL_FULL_REPLAY_R1` aggregate artifact pinned above.
+It must preserve historical baseline/outcome policy identity, point-in-time creator history, classifications, executable values, `$1`, exact 24h target, `UNKNOWN -> SKIP`, and COMPLETE-baseline denominators. No post-decision information may enter creator history.
 
-The adapter may adapt shape, not semantics. It must:
+## Authority
 
-- preserve the historical source policy identities;
-- use the historical baseline `HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1`;
-- use the historical outcome `HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1`;
-- use only the exact 24h target cell;
-- preserve outcome classification and executable value;
-- reconstruct creator history point-in-time only;
-- exclude information observed after the target launch's decision block;
-- preserve `$1`, `UNKNOWN -> SKIP`, and COMPLETE-baseline denominators.
+Pending review, every authority bit is false, including `fast_vet_smoke`.
 
-Changing the source-policy binding from the old local-ledger runner to the reviewed historical replay artifact is an adapter requirement, not permission to change the smoke rule.
+If this authorization later closes PASS, only `fast_vet_smoke` may become true. General FAST_VET, FAST_VET OSINT, canary, signing, transaction construction, transaction broadcast, live execution, and merge remain false.
 
-## Authorization state
-
-Every authority bit is currently false, including `fast_vet_smoke`.
-
-The one independent hostile review must close before `fast_vet_smoke=true` can be considered.
-
-Even after a successful authorization review:
-
-- general `fast_vet` stays false;
-- `fast_vet_osint` stays false;
-- canary stays false;
-- signing stays false;
-- transaction construction stays false;
-- transaction broadcast stays false;
-- live execution stays false;
-- merge stays false.
-
-A smoke result does not automatically authorize any of those capabilities.
+No smoke result automatically authorizes any later capability.
 
 ## Prohibitions
 
-- do not execute FAST_VET smoke in this PR;
-- do not tune or remove the frozen independent-reverse criterion;
-- do not tune the creator-history criterion;
-- do not change the `$1` primary notional;
-- do not change the 24h target;
-- do not change `UNKNOWN -> SKIP`;
-- do not add new RPC/HTTP/social/domain/Telegram/X/GitHub/funding/identity/RekTrace collectors;
-- do not revive the old SQLite runner as authority for this historical run;
-- do not authorize canary, signing, transaction construction, transaction broadcast, live execution, or merge;
-- do not change current R3/default behavior;
-- do not merge without explicit user authority.
+- no FAST_VET execution in this PR
+- no post-hoc rule or threshold tuning
+- no new network or OSINT collectors
+- no old SQLite runner as historical authority
+- no current-R3/default behavior change
+- no canary, signing, transaction construction, broadcast, or live execution
+- no merge without explicit user authority
 
 ## Completion policy
 
-`FREEZE PRE-EXISTING RULE -> VERIFY SOURCE IDENTITY -> ONE HOSTILE REVIEW -> FIX CRITICAL/HIGH -> ONE TARGETED RE-REVIEW ONLY IF NEEDED -> AUTHORIZE_SMOKE OR STOP`
-
-No smoke execution occurs inside this authorization phase.
+`FREEZE RULE -> VERIFY REAL PREDECESSOR PROVENANCE + SOURCE PARITY -> ONE HOSTILE REVIEW -> FIX CRITICAL/HIGH -> ONE TARGETED RE-REVIEW ONLY IF NEEDED -> AUTHORIZE_SMOKE OR STOP`

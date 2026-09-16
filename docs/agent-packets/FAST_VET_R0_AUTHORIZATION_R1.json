@@ -10,8 +10,6 @@
     "closure_head": "75588056de53b94f92b5cf3b40e89e2b5521031a",
     "verdict": "CLOSED_PASS",
     "closure_comment_id": 5688792266,
-    "scope_identity_sha256": "b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211",
-    "authority_map_sha256": "c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e6022275",
     "full_replay": {
       "run_id": 35001582697,
       "artifact_id": 10410898359,
@@ -24,19 +22,7 @@
       "outcomes_complete": 735,
       "outcomes_unverified": 0
     },
-    "exact_head_runs": {
-      "ci": {"id": 35001582681, "status": "SUCCESS"},
-      "stage_a": {"id": 35001582737, "status": "SUCCESS"},
-      "historical_baseline_policy": {"id": 35001582904, "status": "SUCCESS"},
-      "historical_outcome_policy": {"id": 35001582683, "status": "SUCCESS"},
-      "historical_all_horizon_compatibility": {"id": 35001582992, "status": "SUCCESS"},
-      "historical_full_replay_authorization": {"id": 35001582695, "status": "SUCCESS"},
-      "historical_full_replay_stage_b": {"id": 35001582697, "status": "SUCCESS"}
-    },
     "review_closure": {
-      "initial_review_id": 5213513068,
-      "initial_reviewed_head": "62f6812ae7d962f527d9bb122a04af54d9270eda",
-      "initial_critical_high_count": 3,
       "repair_head": "75588056de53b94f92b5cf3b40e89e2b5521031a",
       "targeted_clean_comment_id": 5688765850,
       "targeted_reviewed_head": "75588056de53b94f92b5cf3b40e89e2b5521031a",
@@ -49,7 +35,7 @@
     "source_ci_run": 34772418456,
     "source_ci_status": "SUCCESS",
     "fixture_path": "fixtures/fast-vet-r0-authorization-r1.json",
-    "fixture_sha256": "48704fd4692016a7fae73bcd63841686788f837d3001d43c9cf5cb3841172665",
+    "fixture_git_blob_sha1": "a3266ab0bc2e1e1aaec26fafda64ae6be164c494",
     "decision_policy_version": "FAST_VET_R0",
     "shadow_receipt_version": "FAST_VET_SHADOW_R0",
     "status": "SMOKE_ONLY",
@@ -111,26 +97,27 @@
     "control_denominator_must_be_complete_baselines_only": true,
     "no_post_hoc_threshold_or_rule_tuning": true,
     "no_new_collectors_or_osint": true,
-    "current_r3_must_remain_unchanged": true
+    "current_r3_must_remain_unchanged": true,
+    "predecessor_github_provenance_must_be_runtime_verified": true,
+    "normalized_rule_must_match_fetched_source_semantics": true
   },
   "decision_rules": [
     "AUTHORIZE_SMOKE only after one independent hostile review closes with zero unresolved Critical/High findings on the exact authorization head.",
-    "The authorization keyset is closed. Before review closure every authorization bit is false.",
-    "If authorized, only fast_vet_smoke may become true. General fast_vet, fast_vet_osint, canary, signing, transaction construction, transaction broadcast, live execution, and merge remain false.",
-    "The smoke decision and metric semantics are frozen from PR #13 head 22fcce4c301e791a59c68b19b198bd1bea104138 and may not be tuned after observing the full 147-launch cohort.",
-    "The implementation successor may adapt the repaired historical replay artifact's shape and historical policy labels, but must preserve source-policy identity, point-in-time creator history, classifications, executable values, the $1 primary notional, 24h target, UNKNOWN->SKIP, and COMPLETE-baseline denominators.",
+    "Before review closure every authorization bit is false.",
+    "If authorized, only fast_vet_smoke may become true; general fast_vet, fast_vet_osint, canary, signing, transaction construction, transaction broadcast, live execution, and merge remain false.",
+    "The smoke rule is frozen from PR #13 head 22fcce4c301e791a59c68b19b198bd1bea104138 and may not be tuned after observing the 147-launch cohort.",
+    "The successor may adapt repaired historical replay shape only while preserving source-policy identity, point-in-time creator history, classifications, executable values, $1, 24h, UNKNOWN->SKIP, and COMPLETE-baseline denominators.",
     "The old SQLite runner is not authority for the historical smoke execution.",
-    "No new network, social, domain, Telegram, X, GitHub, funding, identity, or RekTrace collectors are authorized by this decision.",
-    "No canary or live execution follows automatically from a smoke result."
+    "No new network/OSINT collectors and no canary/live authority are granted by this phase."
   ],
   "decision_result": {
     "status": "PENDING_REVIEW",
     "authorized_bit_if_closed": "fast_vet_smoke",
-    "rationale": "Historical replay is closed PASS and the candidate smoke rule predates the full-cohort result, but a fresh authorization review is required before executing it against the repaired historical artifact."
+    "rationale": "The predecessor replay is closed PASS and the smoke rule predates the full-cohort result, but runtime provenance verification and source-semantic parity plus hostile-review closure are required before smoke execution."
   },
   "prohibitions": [
     "Do not execute FAST_VET smoke in this authorization PR.",
-    "Do not tune or remove the independent-reverse criterion, creator-history criterion, $1 notional, 24h horizon, or UNKNOWN->SKIP semantics after seeing full-cohort results.",
+    "Do not tune the independent-reverse rule, creator-history rule, $1 notional, 24h horizon, or UNKNOWN->SKIP semantics.",
     "Do not revive the old SQLite runner as authority for this historical run.",
     "Do not add new RPC, HTTP, social, domain, Telegram, X, GitHub, funding, identity, RekTrace, or other OSINT collectors.",
     "Do not authorize canary, signing, transaction construction, transaction broadcast, live execution, or merge.",
@@ -147,13 +134,14 @@
     "docs/agent-packets/FAST_VET_R0_AUTHORIZATION_R1.json",
     "docs/FAST_VET_R0_AUTHORIZATION_R1.md",
     "fixtures/fast-vet-r0-authorization-r1.json",
-    "docs/PRD.md"
+    "docs/PRD.md",
+    "scripts/fast-vet-r0-authorization-predecessor-check.mjs",
+    "scripts/fast-vet-r0-source-parity-check.mjs"
   ],
   "next_action": "RUN_ONE_INDEPENDENT_HOSTILE_REVIEW",
   "notes": [
-    "PR #23 closed HISTORICAL_FULL_REPLAY_R1 on exact repaired/reviewed head 75588056de53b94f92b5cf3b40e89e2b5521031a with seven exact-head workflows green.",
-    "The repaired replay artifact contains 147/147 COMPLETE baselines and 735/735 COMPLETE horizon cells; this authorization does not infer FAST_VET quality from those results.",
-    "PR #13 head 22fcce4c301e791a59c68b19b198bd1bea104138 is used only as the pre-existing frozen smoke semantic source; its SQLite runner is deliberately excluded from authority.",
-    "No FAST_VET smoke execution is authorized until the review gate closes."
+    "The authorization CI must query the pinned predecessor GitHub run/artifact, download the actual receipt, hash its bytes, and validate 147x5 accounting.",
+    "The authorization CI must fetch exact PR #13 source objects and deterministically verify normalized decision/shadow semantics against those source bytes.",
+    "No FAST_VET smoke execution is authorized until review closure."
   ]
 }
