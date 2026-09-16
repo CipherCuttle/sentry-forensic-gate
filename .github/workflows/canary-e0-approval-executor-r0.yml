@@ -43,7 +43,8 @@ jobs:
           set -euo pipefail
           node scripts/canary-e0-approval-executor-r0-check.mjs | tee canary-e0-approval-executor-r0.json
           grep -q '"verdict": "CANARY_E0_APPROVAL_EXECUTOR_R0_PASS"' canary-e0-approval-executor-r0.json
-          grep -q '"broadcastInvoked": false' canary-e0-approval-executor-r0.json
+          grep -q '"preBroadcastMutationBlockedBeforeSideEffect": true' canary-e0-approval-executor-r0.json
+          grep -q '"networkBroadcastInvoked": false' canary-e0-approval-executor-r0.json
           grep -q '"live": false' canary-e0-approval-executor-r0.json
           grep -q '"walletSecretUsed": false' canary-e0-approval-executor-r0.json
       - uses: actions/upload-artifact@v4
