@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { getAddress, type Hex } from 'viem';
+import { getAddress, keccak256, type Hex } from 'viem';
 import {
   assertCanaryApprovalCalldata,
   CANARY_E0_APPROVAL_R0,
@@ -68,6 +68,8 @@ export class CanaryApprovalStore {
     this.assertRecordIntentIdentity(record);
     assertCanaryApprovalCalldata(record.intent);
 
+    const expectedParentBuyActionId = await deriveCanaryActionId(record.launchId, record.baselineId);
+    if (record.parentBuyActionId !== expectedParentBuyActionId) throw new Error('CANARY_APPROVAL_PARENT_BUY_IDENTITY_DRIFT');
     const expectedExitActionId = await deriveCanaryExitActionId({
       parentBuyActionId: record.parentBuyActionId,
       launchId: record.launchId,
@@ -107,8 +109,11 @@ export class CanaryApprovalStore {
       }
 
       const parentIntent = reviveBuyIntent(parent.intent_json);
-      const expectedBuyActionId = deriveBuyActionIdSyncGuard(parentIntent, parent.action_id);
-      if (!expectedBuyActionId) throw new Error('CANARY_APPROVAL_PERSISTED_PARENT_IDENTITY_INVALID');
+      if (
+        parentIntent.actionId !== parent.action_id ||
+        parentIntent.launchId !== parent.launch_id ||
+        parentIntent.baselineId !== parent.baseline_id
+      ) throw new Error('CANARY_APPROVAL_PERSISTED_PARENT_IDENTITY_INVALID');
       if (
         getAddress(record.intent.token) !== getAddress(parentIntent.tokenOut) ||
         getAddress(record.intent.spender) !== getAddress(parentIntent.router)
@@ -151,6 +156,11 @@ export class CanaryApprovalStore {
   }
 
   markSigned(actionId: string, params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }): void {
+    if (!Number.isSafeInteger(params.nonce) || params.nonce < 0) throw new Error(`CANARY_APPROVAL_NONCE_INVALID:${params.nonce}`);
+    const derivedHash = keccak256(params.serializedTransaction);
+    if (derivedHash.toLowerCase() !== params.transactionHash.toLowerCase()) {
+      throw new Error(`CANARY_APPROVAL_SIGNED_IDENTITY_MISMATCH:${params.transactionHash}:${derivedHash}`);
+    }
     this.transition(actionId, 'RESERVED', 'SIGNED', {
       nonce: params.nonce,
       transaction_hash: params.transactionHash.toLowerCase(),
@@ -290,13 +300,6 @@ function reviveBigInts(raw: Record<string, unknown>): Record<string, unknown> {
     if (typeof raw[key] === 'string' && /^\d+$/.test(raw[key] as string)) raw[key] = BigInt(raw[key] as string);
   }
   return raw;
-}
-
-function deriveBuyActionIdSyncGuard(intent: CanarySwapIntent, persistedActionId: string): boolean {
-  // The deterministic buy ID depends only on launch+baseline. The async hash is
-  // validated before approval construction; here the persisted key must still
-  // match the intent's own immutable action ID and identity fields.
-  return Boolean(intent.actionId && intent.actionId === persistedActionId && intent.launchId && intent.baselineId);
 }
 
 function jsonSafeStringify(value: unknown): string {
