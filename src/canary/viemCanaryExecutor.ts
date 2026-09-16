@@ -109,7 +109,7 @@ export class ViemCanaryExecutor {
     await this.publicClient.call({ account: this.account.address, to: INK_SWAP_ROUTER_02, data: intent.calldata, value: 0n });
     const [gas, fees] = await Promise.all([
       this.publicClient.estimateGas({ account: this.account.address, to: INK_SWAP_ROUTER_02, data: intent.calldata, value: 0n }),
-      this.publicClient.estimateFeesPerGas({ type: 'eip1559' })
+      this.publicClient.estimateFeesPerGas({ chain: undefined, type: 'eip1559' })
     ]);
     if (gas > this.caps.maxGas) throw new Error(`CANARY_GAS_CAP_EXCEEDED:${gas}:${this.caps.maxGas}`);
     if (fees.maxFeePerGas > this.caps.maxFeePerGas) throw new Error(`CANARY_MAX_FEE_CAP_EXCEEDED:${fees.maxFeePerGas}:${this.caps.maxFeePerGas}`);
