@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { keccak256 } from 'viem';
 import type { Hex } from '../domain.js';
 import type { CanaryActionState } from './types.js';
 import type { CanaryExitIntent } from './roundTrip.js';
@@ -116,6 +117,62 @@ export class CanaryExitStore {
     return transaction();
   }
 
+  markSigned(actionId: string, params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }): void {
+    if (!Number.isSafeInteger(params.nonce) || params.nonce < 0) throw new Error(`CANARY_EXIT_NONCE_INVALID:${params.nonce}`);
+    const derivedHash = keccak256(params.serializedTransaction);
+    if (derivedHash.toLowerCase() !== params.transactionHash.toLowerCase()) {
+      throw new Error(`CANARY_EXIT_SIGNED_IDENTITY_MISMATCH:${params.transactionHash}:${derivedHash}`);
+    }
+    this.transition(actionId, 'RESERVED', 'SIGNED', {
+      nonce: params.nonce,
+      transaction_hash: params.transactionHash.toLowerCase(),
+      serialized_transaction: params.serializedTransaction
+    });
+  }
+
+  markSubmitted(actionId: string): void {
+    this.transition(actionId, 'SIGNED', 'SUBMITTED', {});
+  }
+
+  markSafeHalt(actionId: string, error: string): void {
+    const row = this.db.prepare('SELECT state FROM canary_exit_actions WHERE action_id = ?').get(actionId) as { state: CanaryActionState } | undefined;
+    if (!row) throw new Error(`CANARY_EXIT_ACTION_MISSING:${actionId}`);
+    if (!['RESERVED', 'SIGNED', 'SUBMITTED', 'SAFE_HALT'].includes(row.state)) {
+      throw new Error(`CANARY_EXIT_SAFE_HALT_INVALID_STATE:${row.state}`);
+    }
+    this.db.prepare('UPDATE canary_exit_actions SET state = ?, last_error = ?, updated_at_ms = ? WHERE action_id = ?')
+      .run('SAFE_HALT', error.slice(0, 512), Date.now(), actionId);
+  }
+
+  markIncluded(actionId: string, outputBalanceAfter: bigint): void {
+    const row = this.db.prepare(`
+      SELECT state, transaction_hash, serialized_transaction, output_balance_before
+      FROM canary_exit_actions WHERE action_id = ?
+    `).get(actionId) as ExitReconcileRow | undefined;
+    if (!row || !['SIGNED', 'SUBMITTED', 'SAFE_HALT'].includes(row.state)) {
+      throw new Error(`CANARY_EXIT_INCLUDED_INVALID_STATE:${row?.state ?? 'MISSING'}`);
+    }
+    this.assertSignedProvenance(row, actionId);
+    if (row.output_balance_before === null) throw new Error(`CANARY_EXIT_OUTPUT_BALANCE_BEFORE_MISSING:${actionId}`);
+    const before = BigInt(row.output_balance_before);
+    if (outputBalanceAfter <= before) throw new Error(`CANARY_EXIT_OUTPUT_BALANCE_DID_NOT_INCREASE:${before}:${outputBalanceAfter}`);
+    this.db.prepare('UPDATE canary_exit_actions SET state = ?, output_balance_after = ?, updated_at_ms = ? WHERE action_id = ?')
+      .run('INCLUDED', outputBalanceAfter.toString(), Date.now(), actionId);
+  }
+
+  markReverted(actionId: string): void {
+    const row = this.db.prepare(`
+      SELECT state, transaction_hash, serialized_transaction, output_balance_before
+      FROM canary_exit_actions WHERE action_id = ?
+    `).get(actionId) as ExitReconcileRow | undefined;
+    if (!row || !['SIGNED', 'SUBMITTED', 'SAFE_HALT'].includes(row.state)) {
+      throw new Error(`CANARY_EXIT_REVERTED_INVALID_STATE:${row?.state ?? 'MISSING'}`);
+    }
+    this.assertSignedProvenance(row, actionId);
+    this.db.prepare('UPDATE canary_exit_actions SET state = ?, updated_at_ms = ? WHERE action_id = ?')
+      .run('REVERTED', Date.now(), actionId);
+  }
+
   listUnresolved(): CanaryExitActionRecord[] {
     const rows = this.db.prepare(`
       SELECT * FROM canary_exit_actions
@@ -123,6 +180,33 @@ export class CanaryExitStore {
       ORDER BY created_at_ms, action_id
     `).all() as ExitRow[];
     return rows.map(fromRow);
+  }
+
+  getByParentBuyActionId(parentBuyActionId: string): CanaryExitActionRecord | null {
+    const row = this.db.prepare('SELECT * FROM canary_exit_actions WHERE parent_buy_action_id = ?').get(parentBuyActionId) as ExitRow | undefined;
+    return row ? fromRow(row) : null;
+  }
+
+  private assertSignedProvenance(row: ExitReconcileRow, actionId: string): void {
+    if (!row.transaction_hash || !row.serialized_transaction) {
+      throw new Error(`CANARY_EXIT_RECONCILE_SIGNED_PROVENANCE_MISSING:${actionId}`);
+    }
+    const derivedHash = keccak256(row.serialized_transaction);
+    if (derivedHash.toLowerCase() !== row.transaction_hash.toLowerCase()) {
+      throw new Error(`CANARY_EXIT_RECONCILE_SIGNED_IDENTITY_MISMATCH:${actionId}`);
+    }
+  }
+
+  private transition(actionId: string, expected: CanaryActionState, next: CanaryActionState, patch: Record<string, unknown>): void {
+    const allowedColumns = new Set(['nonce', 'transaction_hash', 'serialized_transaction']);
+    for (const key of Object.keys(patch)) if (!allowedColumns.has(key)) throw new Error(`CANARY_EXIT_PATCH_COLUMN_FORBIDDEN:${key}`);
+    const entries = Object.entries(patch);
+    const assignments = entries.map(([key]) => `${key} = ?`);
+    assignments.push('state = ?', 'updated_at_ms = ?');
+    const values = entries.map(([, value]) => value);
+    values.push(next, Date.now(), actionId, expected);
+    const result = this.db.prepare(`UPDATE canary_exit_actions SET ${assignments.join(', ')} WHERE action_id = ? AND state = ?`).run(...values);
+    if (result.changes !== 1) throw new Error(`CANARY_EXIT_STATE_TRANSITION_FAILED:${actionId}:${expected}:${next}`);
   }
 }
 
@@ -154,6 +238,13 @@ type ExitRow = ExistingExitRow & {
   output_balance_after: string | null;
   created_at_ms: number;
   updated_at_ms: number;
+};
+
+type ExitReconcileRow = {
+  state: CanaryActionState;
+  transaction_hash: Hex | null;
+  serialized_transaction: Hex | null;
+  output_balance_before: string | null;
 };
 
 function assertExitBoundToPersistedParent(exit: CanaryExitIntent, parent: ParentBuyRow, buy: CanarySwapIntent): void {

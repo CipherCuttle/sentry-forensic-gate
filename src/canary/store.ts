@@ -66,6 +66,11 @@ export class CanaryStore {
     return row.count;
   }
 
+  getAction(actionId: string): CanaryActionRecord | null {
+    const row = this.db.prepare('SELECT * FROM canary_actions WHERE action_id = ?').get(actionId) as CanaryActionRow | undefined;
+    return row ? fromActionRow(row) : null;
+  }
+
   listUnresolvedActions(): CanaryActionRecord[] {
     const rows = this.db.prepare(`
       SELECT * FROM canary_actions
@@ -100,9 +105,6 @@ export class CanaryStore {
       throw new Error(`CANARY_ACTION_IDENTITY_CONFLICT:${record.launchId}`);
     }
 
-    // The partial UNIQUE index above is the economic authority for R0. Two
-    // independent processes may both observe count=0, but only one PASS row can
-    // transition into the non-SKIPPED economic state.
     if (record.decision === 'PASS' && record.state !== 'SKIPPED' && this.countCommittedBuys() >= 1) {
       return 'BUY_LIMIT';
     }
