@@ -2,8 +2,8 @@
   "schema": "dev-spine-phase/v1",
   "repo": "CipherCuttle/sentry-forensic-gate",
   "phase": "FAST_VET_R0_AUTHORIZATION_R1",
-  "state": "FAST_VET_R0_AUTHORIZATION_PENDING_REVIEW",
-  "objective": "Decide whether the frozen, pre-existing FAST_VET_R0 smoke semantics may be executed once against the closed 147-launch historical replay through a semantics-preserving historical adapter, without tuning the rule or widening OSINT, canary, signing, transaction, live-execution, or merge authority.",
+  "state": "FAST_VET_R0_SMOKE_AUTHORIZED",
+  "objective": "Authorize only one research-only historical FAST_VET_R0 smoke implementation against the closed 147-launch replay, using the pre-existing frozen rule and a shape-only historical adapter, without widening general FAST_VET, OSINT, canary, signing, transaction, live-execution, or merge authority.",
   "predecessor": {
     "phase": "HISTORICAL_FULL_REPLAY_R1",
     "pr": 23,
@@ -50,12 +50,12 @@
     "current_r3_behavior_must_remain_unchanged": true,
     "historical_full_replay_status": "PASS",
     "research_only": true,
-    "fast_vet_authorization_status": "PENDING_REVIEW"
+    "fast_vet_authorization_status": "CLOSED_PASS"
   },
   "authorization": {
     "historical_full_replay": false,
     "fast_vet": false,
-    "fast_vet_smoke": false,
+    "fast_vet_smoke": true,
     "fast_vet_osint": false,
     "canary": false,
     "signing": false,
@@ -66,12 +66,39 @@
   },
   "review_gate": {
     "required": true,
-    "status": "PENDING",
+    "status": "CLOSED_PASS",
     "review_loop_limit": 1,
-    "initial_review_id": null,
-    "initial_reviewed_head": null,
-    "unresolved_critical_high": null,
-    "targeted_rereview_required_only_if_critical_high_fixed": true
+    "initial_review_id": 5216435120,
+    "initial_reviewed_head": "b2d21a3e45db0b344f5c5ffcfe8caf4c0f6319d7",
+    "initial_critical_high_count": 2,
+    "critical_high_findings": [
+      {
+        "comment_id": 4020758274,
+        "severity": "P1",
+        "summary": "Bind predecessor replay provenance to the actual GitHub run, artifact, and receipt bytes.",
+        "repair_status": "CLOSED"
+      },
+      {
+        "comment_id": 4020758282,
+        "severity": "P1",
+        "summary": "Prove normalized FAST_VET semantics match the fetched pre-existing source blobs.",
+        "repair_status": "CLOSED"
+      }
+    ],
+    "repair_head": "c54c58b75e34ff390e0bf7f541b155d93de1a93d",
+    "repair_exact_head_runs": {
+      "ci": {"id": 35041509635, "status": "SUCCESS"},
+      "fast_vet_authorization": {"id": 35041509630, "status": "SUCCESS"},
+      "historical_stage_a": {"id": 35041509632, "status": "SUCCESS"},
+      "historical_baseline": {"id": 35041509572, "status": "SUCCESS"},
+      "historical_outcome": {"id": 35041509564, "status": "SUCCESS"}
+    },
+    "targeted_rereview_required": true,
+    "targeted_review_request_comment_id": 5690352056,
+    "targeted_clean_comment_id": 5690369864,
+    "targeted_reviewed_head": "c54c58b75e34ff390e0bf7f541b155d93de1a93d",
+    "unresolved_critical_high": 0,
+    "further_review_forbidden_by_bounded_policy": true
   },
   "adapter_contract": {
     "source": "HISTORICAL_FULL_REPLAY_R1_REPAIRED_AGGREGATE_ONLY",
@@ -99,30 +126,32 @@
     "no_new_collectors_or_osint": true,
     "current_r3_must_remain_unchanged": true,
     "predecessor_github_provenance_must_be_runtime_verified": true,
-    "normalized_rule_must_match_fetched_source_semantics": true
+    "normalized_rule_must_match_fetched_source_semantics": true,
+    "hostile_review_gate_closed": true
   },
   "decision_rules": [
-    "AUTHORIZE_SMOKE only after one independent hostile review closes with zero unresolved Critical/High findings on the exact authorization head.",
-    "Before review closure every authorization bit is false.",
-    "If authorized, only fast_vet_smoke may become true; general fast_vet, fast_vet_osint, canary, signing, transaction construction, transaction broadcast, live execution, and merge remain false.",
-    "The smoke rule is frozen from PR #13 head 22fcce4c301e791a59c68b19b198bd1bea104138 and may not be tuned after observing the 147-launch cohort.",
-    "The successor may adapt repaired historical replay shape only while preserving source-policy identity, point-in-time creator history, classifications, executable values, $1, 24h, UNKNOWN->SKIP, and COMPLETE-baseline denominators.",
+    "Only fast_vet_smoke is authorized by this phase.",
+    "General fast_vet, fast_vet_osint, canary, signing, transaction construction, transaction broadcast, live execution, and merge remain false.",
+    "The implementation successor must use the frozen PR #13 rule without post-hoc tuning and may adapt repaired historical replay shape only.",
     "The old SQLite runner is not authority for the historical smoke execution.",
-    "No new network/OSINT collectors and no canary/live authority are granted by this phase."
+    "No new network or OSINT collectors are authorized.",
+    "A smoke result does not automatically authorize canary or live execution."
   ],
   "decision_result": {
-    "status": "PENDING_REVIEW",
-    "authorized_bit_if_closed": "fast_vet_smoke",
-    "rationale": "The predecessor replay is closed PASS and the smoke rule predates the full-cohort result, but runtime provenance verification and source-semantic parity plus hostile-review closure are required before smoke execution."
+    "status": "AUTHORIZE_SMOKE",
+    "authorized_bit": "fast_vet_smoke",
+    "basis_repair_head": "c54c58b75e34ff390e0bf7f541b155d93de1a93d",
+    "targeted_clean_comment_id": 5690369864,
+    "rationale": "The closed historical replay provenance is verified against the actual GitHub run/artifact/receipt, the normalized FAST_VET rule is deterministically tied to the pre-existing PR #13 source semantics, exact-head CI and authorization checks are green, both P1 findings are repaired and resolved, and the single targeted Codex re-review found no major issues. This grants only one research-only historical smoke implementation authority."
   },
   "prohibitions": [
-    "Do not execute FAST_VET smoke in this authorization PR.",
     "Do not tune the independent-reverse rule, creator-history rule, $1 notional, 24h horizon, or UNKNOWN->SKIP semantics.",
     "Do not revive the old SQLite runner as authority for this historical run.",
     "Do not add new RPC, HTTP, social, domain, Telegram, X, GitHub, funding, identity, RekTrace, or other OSINT collectors.",
-    "Do not authorize canary, signing, transaction construction, transaction broadcast, live execution, or merge.",
+    "Do not authorize canary, signing, transaction construction, transaction broadcast, or live execution.",
     "Do not change current R3/default behavior.",
-    "Do not merge without explicit user authority."
+    "Do not merge without explicit user authority.",
+    "Do not create another review loop for this authorization phase."
   ],
   "authority_docs": [
     "AGENTS.md",
@@ -137,10 +166,11 @@
     "docs/PRD.md",
     ".github/workflows/fast-vet-r0-authorization-r1.yml"
   ],
-  "next_action": "RUN_ONE_INDEPENDENT_HOSTILE_REVIEW",
+  "next_action": "OPEN_FAST_VET_R0_HISTORICAL_SMOKE_R1_IMPLEMENTATION",
   "notes": [
-    "The authorization workflow performs GitHub-only predecessor retrieval and validation entirely inside the existing workflow surface; no new research/runtime executable surface is added.",
-    "The authorization workflow fetches exact PR #13 source and validates semantic parity entirely inside the existing workflow surface.",
-    "No FAST_VET smoke execution is authorized until review closure."
+    "Initial Codex review 5216435120 on b2d21a3e45db0b344f5c5ffcfe8caf4c0f6319d7 found P1 comments 4020758274 and 4020758282.",
+    "Repair head c54c58b75e34ff390e0bf7f541b155d93de1a93d passed CI 35041509635 and dedicated authorization gate 35041509630; the dedicated gate verified actual predecessor provenance and exact source-semantic parity.",
+    "Targeted Codex result 5690369864 reviewed c54c58b75e and reported no major issues. Both P1 threads are resolved. No further review loop is permitted.",
+    "This closure authorizes only a separate research-only historical FAST_VET_R0 smoke implementation; no smoke has run in this authorization PR."
   ]
 }

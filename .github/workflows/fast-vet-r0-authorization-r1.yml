@@ -17,6 +17,8 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: read
+  pull-requests: read
 
 jobs:
   authorization-gate:
@@ -33,6 +35,41 @@ jobs:
         run: |
           node scripts/dev-spine-check-test.mjs
           node scripts/dev-spine-check.mjs
+      - name: Verify bounded hostile-review closure
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ROOT=.fast-vet-auth/review
+          mkdir -p "$ROOT"
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          AUTH="Authorization: Bearer ${GITHUB_TOKEN}"
+          VERSION="X-GitHub-Api-Version: 2022-11-28"
+          curl -fsSL -H "$AUTH" -H "$VERSION" "$API/pulls/comments/4020758274" > "$ROOT/p1-a.json"
+          curl -fsSL -H "$AUTH" -H "$VERSION" "$API/pulls/comments/4020758282" > "$ROOT/p1-b.json"
+          curl -fsSL -H "$AUTH" -H "$VERSION" "$API/issues/comments/5690352056" > "$ROOT/target-request.json"
+          curl -fsSL -H "$AUTH" -H "$VERSION" "$API/issues/comments/5690369864" > "$ROOT/target-result.json"
+          python3 - "$ROOT" <<'PY'
+          import json,sys
+          from pathlib import Path
+          r=Path(sys.argv[1])
+          def req(c,m):
+            if not c: raise SystemExit('FAST_VET_AUTH_REVIEW_CLOSURE=FAIL '+m)
+          a=json.loads((r/'p1-a.json').read_text()); b=json.loads((r/'p1-b.json').read_text())
+          for item,cid,needle in [(a,4020758274,'Bind replay provenance'),(b,4020758282,'Prove normalized semantics')]:
+            req(item.get('id')==cid,'P1 comment id drift')
+            req(item.get('pull_request_review_id')==5216435120,'initial review id drift')
+            req((item.get('user') or {}).get('login')=='chatgpt-codex-connector[bot]','P1 author drift')
+            req('P1' in item.get('body','') and needle in item.get('body',''),'P1 body drift')
+          q=json.loads((r/'target-request.json').read_text()); z=json.loads((r/'target-result.json').read_text())
+          req(q.get('id')==5690352056 and (q.get('user') or {}).get('login')=='CipherCuttle','target request identity drift')
+          req('c54c58b75e34ff390e0bf7f541b155d93de1a93d' in q.get('body',''),'target request repair-head drift')
+          req('4020758274' in q.get('body','') and '4020758282' in q.get('body',''),'target request P1 scope drift')
+          req(z.get('id')==5690369864 and (z.get('user') or {}).get('login')=='chatgpt-codex-connector[bot]','target result identity drift')
+          req("Didn't find any major issues" in z.get('body',''),'target result verdict drift')
+          req('c54c58b75e' in z.get('body',''),'target result reviewed-head drift')
+          print('FAST_VET_AUTH_REVIEW_CLOSURE=PASS')
+          PY
       - name: Fetch and verify real predecessor provenance
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -124,7 +161,7 @@ jobs:
           req(ss['no_sample_adequacy_claim'] is True and ss['no_probability_or_p_value'] is True and ss['no_threshold_tuning'] is True,'scientific boundary drift')
           print('FAST_VET_R0_SOURCE_PARITY=PASS')
           PY
-      - name: Prove this PR contains no FAST_VET implementation
+      - name: Prove authorization PR contains no FAST_VET implementation
         run: |
           test ! -e src/evaluation/fastVet.ts
           test ! -e src/evaluation/fastVetShadow.ts
