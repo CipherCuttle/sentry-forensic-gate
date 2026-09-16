@@ -15,6 +15,7 @@ import {
   buildCanaryApprovalIntent,
   CANARY_E0_APPROVAL_R0,
   classifyCanaryApprovalAllowance,
+  deriveCanaryApprovalActionId,
   erc20ApprovalAbi,
   ERC20_MAX_UINT256
 } from '../dist/canary/approval.js';
@@ -32,6 +33,8 @@ const HASH = `0x${'44'.repeat(32)}`;
 const LAUNCHED = '0x1111111111111111111111111111111111111111';
 const OTHER_LAUNCHED = '0x3333333333333333333333333333333333333333';
 const WALLET = '0x2222222222222222222222222222222222222222';
+const OTHER_WALLET = '0x4444444444444444444444444444444444444444';
+const OTHER_ROUTER = '0x5555555555555555555555555555555555555555';
 const ACQUIRED = 2_000_000n;
 
 const buy = await buildCanarySwapIntent({
@@ -46,6 +49,7 @@ assert.equal(approval.version, CANARY_E0_APPROVAL_R0);
 assert.equal(approval.parentBuyActionId, buy.actionId);
 assert.notEqual(approval.actionId, buy.actionId);
 assert.notEqual(approval.actionId, approval.parentExitActionId);
+assert.equal(getAddress(approval.owner), getAddress(WALLET));
 assert.equal(getAddress(approval.token), getAddress(LAUNCHED));
 assert.equal(getAddress(approval.spender), getAddress(INK_SWAP_ROUTER_02));
 assert.equal(approval.amount, ACQUIRED);
@@ -59,6 +63,7 @@ assert.equal(classifyCanaryApprovalAllowance(ACQUIRED, ACQUIRED), 'BLOCKED_DIRTY
 assert.equal(classifyCanaryApprovalAllowance(1n, ACQUIRED), 'BLOCKED_DIRTY_ALLOWANCE');
 assert.equal(classifyCanaryApprovalAllowance(ACQUIRED + 1n, ACQUIRED), 'BLOCKED_DIRTY_ALLOWANCE');
 await assert.rejects(() => buildCanaryApprovalIntent({ buyIntent: buy, acquiredAmount: ERC20_MAX_UINT256 }), /CANARY_APPROVAL_INFINITE_ALLOWANCE_FORBIDDEN/);
+await assert.rejects(() => buildCanaryApprovalIntent({ buyIntent: { ...buy, router: OTHER_ROUTER }, acquiredAmount: ACQUIRED }), /CANARY_APPROVAL_PARENT_ROUTER_INVALID/);
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-e0-approval-r0-'));
 const dbPath = path.join(tempDir, 'approval.sqlite');
@@ -125,6 +130,23 @@ try {
     intent: tamperedApproval
   }), /CANARY_APPROVAL_PERSISTED_PARENT_INTENT_BINDING_MISMATCH/);
 
+  const tamperedOwnerActionId = await deriveCanaryApprovalActionId({
+    parentBuyActionId: approval.parentBuyActionId,
+    parentExitActionId: approval.parentExitActionId,
+    launchId: approval.launchId,
+    baselineId: approval.baselineId,
+    owner: OTHER_WALLET,
+    token: approval.token,
+    spender: approval.spender,
+    amount: approval.amount
+  });
+  const tamperedOwnerApproval = { ...approval, owner: OTHER_WALLET, actionId: tamperedOwnerActionId };
+  await assert.rejects(() => approvalStoreA.insertReserved({
+    ...record,
+    actionId: tamperedOwnerActionId,
+    intent: tamperedOwnerApproval
+  }), /CANARY_APPROVAL_PERSISTED_PARENT_INTENT_BINDING_MISMATCH/);
+
   const malformedCalldata = encodeFunctionData({
     abi: erc20ApprovalAbi,
     functionName: 'approve',
@@ -186,6 +208,7 @@ await client.call({ account: WALLET, to: USDT0, data: readOnlyCalldata, value: 0
 console.log(JSON.stringify({
   verdict: 'CANARY_E0_APPROVAL_LIFECYCLE_R0_PASS',
   chainId: INK_CHAIN_ID,
+  owner: WALLET,
   spender: INK_SWAP_ROUTER_02,
   readOnlySimulationToken: USDT0,
   exactApprovalAmount: ACQUIRED.toString(),
