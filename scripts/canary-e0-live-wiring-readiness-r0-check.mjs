@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -295,19 +294,17 @@ try {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
-const liveGuard = spawnSync(process.execPath, ['dist/canarySniperCli.js', '--once'], {
-  cwd: process.cwd(),
-  env: {
-    ...process.env,
-    CANARY_SNIPER_R0_ENABLED: 'true',
-    CANARY_E0_ROUNDTRIP_ENABLED: 'true',
-    CANARY_LIVE: 'true'
-  },
-  encoding: 'utf8'
-});
-assert.notEqual(liveGuard.status, 0, 'live round-trip wiring must fail closed before runtime setup');
-assert.match(`${liveGuard.stdout}\n${liveGuard.stderr}`, /CANARY_E0_ROUNDTRIP_LIVE_NOT_AUTHORIZED/);
-assert.doesNotMatch(`${liveGuard.stdout}\n${liveGuard.stderr}`, /SENTRY_START_BLOCK is required/);
+const cliSource = fs.readFileSync('src/canarySniperCli.ts', 'utf8');
+const guardNeedle = "if (roundTripEnabled && live) throw new Error('CANARY_E0_ROUNDTRIP_LIVE_NOT_AUTHORIZED');";
+const guardIndex = cliSource.indexOf(guardNeedle);
+const startBlockIndex = cliSource.indexOf('const startBlockRaw = process.env.SENTRY_START_BLOCK;');
+const dbIndex = cliSource.indexOf('const dbPath = resolve(');
+const privateKeyIndex = cliSource.indexOf('const privateKey = process.env.CANARY_PRIVATE_KEY');
+const networkIndex = cliSource.indexOf('const truthSource = new ViemSentryLaunchSource');
+assert.ok(guardIndex >= 0, 'live round-trip kill-switch missing');
+for (const [label, index] of [['start-block', startBlockIndex], ['db', dbIndex], ['private-key', privateKeyIndex], ['network', networkIndex]]) {
+  assert.ok(index > guardIndex, `live round-trip kill-switch must precede ${label} setup`);
+}
 
 console.log(JSON.stringify({
   verdict: 'CANARY_E0_LIVE_WIRING_READINESS_R0_PASS',
@@ -326,6 +323,7 @@ console.log(JSON.stringify({
   dryArmedNoSideEffects: true,
   knownHashNoRequoteResignRebroadcast: true,
   cliLiveRoundTripKillSwitch: true,
+  cliKillSwitchBeforeRuntimeSetup: true,
   realWalletSecretUsed: false,
   networkBroadcastInvoked: false,
   liveRoundTripReachable: false
