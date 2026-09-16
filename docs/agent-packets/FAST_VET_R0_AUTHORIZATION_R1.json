@@ -1,0 +1,176 @@
+{
+  "schema": "dev-spine-phase/v1",
+  "repo": "CipherCuttle/sentry-forensic-gate",
+  "phase": "FAST_VET_R0_AUTHORIZATION_R1",
+  "state": "FAST_VET_R0_SMOKE_AUTHORIZED",
+  "objective": "Authorize only one research-only historical FAST_VET_R0 smoke implementation against the closed 147-launch replay, using the pre-existing frozen rule and a shape-only historical adapter, without widening general FAST_VET, OSINT, canary, signing, transaction, live-execution, or merge authority.",
+  "predecessor": {
+    "phase": "HISTORICAL_FULL_REPLAY_R1",
+    "pr": 23,
+    "closure_head": "75588056de53b94f92b5cf3b40e89e2b5521031a",
+    "verdict": "CLOSED_PASS",
+    "closure_comment_id": 5688792266,
+    "full_replay": {
+      "run_id": 35001582697,
+      "artifact_id": 10410898359,
+      "artifact_sha256": "ebeb0ff5d6c3fecc9dac2dde4397e8592f72a3501aa3b9980662c3bd8c71fb6a",
+      "receipt_sha256": "916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825",
+      "launches_accounted": 147,
+      "baseline_complete": 147,
+      "baseline_unverified": 0,
+      "horizon_cells_accounted": 735,
+      "outcomes_complete": 735,
+      "outcomes_unverified": 0
+    },
+    "review_closure": {
+      "repair_head": "75588056de53b94f92b5cf3b40e89e2b5521031a",
+      "targeted_clean_comment_id": 5688765850,
+      "targeted_reviewed_head": "75588056de53b94f92b5cf3b40e89e2b5521031a",
+      "unresolved_critical_high": 0
+    }
+  },
+  "frozen_smoke_rule": {
+    "source_pr": 13,
+    "source_head": "22fcce4c301e791a59c68b19b198bd1bea104138",
+    "source_ci_run": 34772418456,
+    "source_ci_status": "SUCCESS",
+    "fixture_path": "fixtures/fast-vet-r0-authorization-r1.json",
+    "fixture_git_blob_sha1": "a3266ab0bc2e1e1aaec26fafda64ae6be164c494",
+    "decision_policy_version": "FAST_VET_R0",
+    "shadow_receipt_version": "FAST_VET_SHADOW_R0",
+    "status": "SMOKE_ONLY",
+    "strategy_label": "EDGE_UNPROVEN",
+    "primary_notional_usd_micros": 1000000,
+    "target_horizon_ms": 86400000,
+    "unknown_action": "SKIP",
+    "control_cohort": "COMPLETE_BASELINE_ONLY"
+  },
+  "authority": {
+    "current_default": "R3",
+    "current_r3_behavior_must_remain_unchanged": true,
+    "historical_full_replay_status": "PASS",
+    "research_only": true,
+    "fast_vet_authorization_status": "CLOSED_PASS"
+  },
+  "authorization": {
+    "historical_full_replay": false,
+    "fast_vet": false,
+    "fast_vet_smoke": true,
+    "fast_vet_osint": false,
+    "canary": false,
+    "signing": false,
+    "transaction_construction": false,
+    "transaction_broadcast": false,
+    "live_execution": false,
+    "merge": false
+  },
+  "review_gate": {
+    "required": true,
+    "status": "CLOSED_PASS",
+    "review_loop_limit": 1,
+    "initial_review_id": 5216435120,
+    "initial_reviewed_head": "b2d21a3e45db0b344f5c5ffcfe8caf4c0f6319d7",
+    "initial_critical_high_count": 2,
+    "critical_high_findings": [
+      {
+        "comment_id": 4020758274,
+        "severity": "P1",
+        "summary": "Bind predecessor replay provenance to the actual GitHub run, artifact, and receipt bytes.",
+        "repair_status": "CLOSED"
+      },
+      {
+        "comment_id": 4020758282,
+        "severity": "P1",
+        "summary": "Prove normalized FAST_VET semantics match the fetched pre-existing source blobs.",
+        "repair_status": "CLOSED"
+      }
+    ],
+    "repair_head": "c54c58b75e34ff390e0bf7f541b155d93de1a93d",
+    "repair_exact_head_runs": {
+      "ci": {"id": 35041509635, "status": "SUCCESS"},
+      "fast_vet_authorization": {"id": 35041509630, "status": "SUCCESS"},
+      "historical_stage_a": {"id": 35041509632, "status": "SUCCESS"},
+      "historical_baseline": {"id": 35041509572, "status": "SUCCESS"},
+      "historical_outcome": {"id": 35041509564, "status": "SUCCESS"}
+    },
+    "targeted_rereview_required": true,
+    "targeted_review_request_comment_id": 5690352056,
+    "targeted_clean_comment_id": 5690369864,
+    "targeted_reviewed_head": "c54c58b75e34ff390e0bf7f541b155d93de1a93d",
+    "unresolved_critical_high": 0,
+    "further_review_forbidden_by_bounded_policy": true
+  },
+  "adapter_contract": {
+    "source": "HISTORICAL_FULL_REPLAY_R1_REPAIRED_AGGREGATE_ONLY",
+    "source_artifact_id": 10410898359,
+    "source_artifact_sha256": "ebeb0ff5d6c3fecc9dac2dde4397e8592f72a3501aa3b9980662c3bd8c71fb6a",
+    "source_receipt_sha256": "916c9f4bc637a90e329abfaa3346debda83d28f3e642cac6c36ddd2122ab3825",
+    "baseline_policy": "HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1",
+    "outcome_policy": "HISTORICAL_FORWARD_OUTCOMES_REDSTONE_ASOF_R1",
+    "target_horizon_ms": 86400000,
+    "shape_adaptation_only": true,
+    "preserve_source_policy_identity": true,
+    "preserve_classification_and_executable_value": true,
+    "creator_history_point_in_time_only": true,
+    "old_sqlite_runner_authorized": false
+  },
+  "acceptance": {
+    "predecessor_replay_must_be_closed_pass": true,
+    "source_rule_must_exact_match_frozen_pr13_blobs": true,
+    "authorization_pr_must_not_contain_fast_vet_implementation": true,
+    "unknown_must_map_to_skip": true,
+    "primary_notional_must_remain_one_usd": true,
+    "target_horizon_must_remain_24h": true,
+    "control_denominator_must_be_complete_baselines_only": true,
+    "no_post_hoc_threshold_or_rule_tuning": true,
+    "no_new_collectors_or_osint": true,
+    "current_r3_must_remain_unchanged": true,
+    "predecessor_github_provenance_must_be_runtime_verified": true,
+    "normalized_rule_must_match_fetched_source_semantics": true,
+    "hostile_review_gate_closed": true
+  },
+  "decision_rules": [
+    "Only fast_vet_smoke is authorized by this phase.",
+    "General fast_vet, fast_vet_osint, canary, signing, transaction construction, transaction broadcast, live execution, and merge remain false.",
+    "The implementation successor must use the frozen PR #13 rule without post-hoc tuning and may adapt repaired historical replay shape only.",
+    "The old SQLite runner is not authority for the historical smoke execution.",
+    "No new network or OSINT collectors are authorized.",
+    "A smoke result does not automatically authorize canary or live execution."
+  ],
+  "decision_result": {
+    "status": "AUTHORIZE_SMOKE",
+    "authorized_bit": "fast_vet_smoke",
+    "basis_repair_head": "c54c58b75e34ff390e0bf7f541b155d93de1a93d",
+    "targeted_clean_comment_id": 5690369864,
+    "rationale": "The closed historical replay provenance is verified against the actual GitHub run/artifact/receipt, the normalized FAST_VET rule is deterministically tied to the pre-existing PR #13 source semantics, exact-head CI and authorization checks are green, both P1 findings are repaired and resolved, and the single targeted Codex re-review found no major issues. This grants only one research-only historical smoke implementation authority."
+  },
+  "prohibitions": [
+    "Do not tune the independent-reverse rule, creator-history rule, $1 notional, 24h horizon, or UNKNOWN->SKIP semantics.",
+    "Do not revive the old SQLite runner as authority for this historical run.",
+    "Do not add new RPC, HTTP, social, domain, Telegram, X, GitHub, funding, identity, RekTrace, or other OSINT collectors.",
+    "Do not authorize canary, signing, transaction construction, transaction broadcast, or live execution.",
+    "Do not change current R3/default behavior.",
+    "Do not merge without explicit user authority.",
+    "Do not create another review loop for this authorization phase."
+  ],
+  "authority_docs": [
+    "AGENTS.md",
+    "docs/FAST_VET_R0_AUTHORIZATION_R1.md",
+    "docs/PRD.md"
+  ],
+  "context_files": [
+    "AGENTS.md",
+    "docs/agent-packets/FAST_VET_R0_AUTHORIZATION_R1.json",
+    "docs/FAST_VET_R0_AUTHORIZATION_R1.md",
+    "fixtures/fast-vet-r0-authorization-r1.json",
+    "docs/PRD.md",
+    ".github/workflows/fast-vet-r0-authorization-r1.yml"
+  ],
+  "next_action": "OPEN_FAST_VET_R0_HISTORICAL_SMOKE_R1_IMPLEMENTATION",
+  "notes": [
+    "Initial Codex review 5216435120 on b2d21a3e45db0b344f5c5ffcfe8caf4c0f6319d7 found P1 comments 4020758274 and 4020758282.",
+    "Repair head c54c58b75e34ff390e0bf7f541b155d93de1a93d passed CI 35041509635 and dedicated authorization gate 35041509630; the dedicated gate verified actual predecessor provenance and exact source-semantic parity.",
+    "Targeted Codex result 5690369864 reviewed c54c58b75e and reported no major issues. Both P1 threads are resolved. No further review loop is permitted.",
+    "This closure authorizes only a separate research-only historical FAST_VET_R0 smoke implementation; no smoke has run in this authorization PR."
+  ]
+}
