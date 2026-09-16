@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   authorization-gate:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'agent/fast-vet-r0-authorization-r1'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

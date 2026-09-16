@@ -35,6 +35,7 @@ permissions:
 
 jobs:
   historical-outcome-gate:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'agent/historical-outcome-policy-r1'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
