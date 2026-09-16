@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import type { Hex } from '../domain.js';
 import type { CanaryActionState } from './types.js';
 import type { CanaryExitIntent } from './roundTrip.js';
+import type { CanarySwapIntent } from './swapIntent.js';
 
 export type CanaryExitInsertResult = 'INSERTED' | 'DUPLICATE';
 
@@ -63,7 +64,7 @@ export class CanaryExitStore {
 
     const transaction = this.db.transaction(() => {
       const parent = this.db.prepare(`
-        SELECT action_id, launch_id, baseline_id, state, output_balance_before, output_balance_after
+        SELECT action_id, launch_id, baseline_id, state, intent_json, output_balance_before, output_balance_after
         FROM canary_actions
         WHERE action_id = ?
       `).get(record.parentBuyActionId) as ParentBuyRow | undefined;
@@ -72,13 +73,17 @@ export class CanaryExitStore {
       if (parent.launch_id !== record.launchId || parent.baseline_id !== record.baselineId) {
         throw new Error('CANARY_EXIT_PARENT_BUY_IDENTITY_MISMATCH');
       }
+      if (!parent.intent_json) throw new Error('CANARY_EXIT_PARENT_INTENT_MISSING');
+      const parentIntent = reviveParentIntent(parent.intent_json);
+      assertExitBoundToPersistedParent(record.intent, parent, parentIntent);
+
       if (parent.output_balance_before === null || parent.output_balance_after === null) {
         throw new Error('CANARY_EXIT_PARENT_BALANCE_EVIDENCE_MISSING');
       }
       const acquired = BigInt(parent.output_balance_after) - BigInt(parent.output_balance_before);
       if (acquired <= 0n) throw new Error(`CANARY_EXIT_PARENT_ACQUIRED_BALANCE_INVALID:${acquired}`);
-      if (record.intent.amountIn > acquired) {
-        throw new Error(`CANARY_EXIT_AMOUNT_EXCEEDS_ACQUIRED:${record.intent.amountIn}:${acquired}`);
+      if (record.intent.amountIn !== acquired) {
+        throw new Error(`CANARY_EXIT_AMOUNT_MUST_EQUAL_ACQUIRED:${record.intent.amountIn}:${acquired}`);
       }
 
       const result = this.db.prepare(`
@@ -126,6 +131,7 @@ type ParentBuyRow = {
   launch_id: string;
   baseline_id: string;
   state: CanaryActionState;
+  intent_json: string | null;
   output_balance_before: string | null;
   output_balance_after: string | null;
 };
@@ -150,6 +156,22 @@ type ExitRow = ExistingExitRow & {
   updated_at_ms: number;
 };
 
+function assertExitBoundToPersistedParent(exit: CanaryExitIntent, parent: ParentBuyRow, buy: CanarySwapIntent): void {
+  if (buy.actionId !== parent.action_id || buy.launchId !== parent.launch_id || buy.baselineId !== parent.baseline_id) {
+    throw new Error('CANARY_EXIT_PERSISTED_PARENT_INTENT_IDENTITY_DRIFT');
+  }
+  const bindingsMatch =
+    sameHex(exit.router, buy.router) &&
+    sameHex(exit.tokenIn, buy.tokenOut) &&
+    sameHex(exit.tokenOut, buy.tokenIn) &&
+    exit.fee === buy.fee &&
+    sameHex(exit.recipient, buy.recipient) &&
+    exit.notionalUsdMicros === buy.notionalUsdMicros;
+  if (!bindingsMatch) throw new Error('CANARY_EXIT_PERSISTED_PARENT_INTENT_BINDING_MISMATCH');
+}
+
+function sameHex(a: string, b: string): boolean { return a.toLowerCase() === b.toLowerCase(); }
+
 function fromRow(row: ExitRow): CanaryExitActionRecord {
   return {
     actionId: row.action_id,
@@ -170,11 +192,19 @@ function fromRow(row: ExitRow): CanaryExitActionRecord {
 }
 
 function reviveIntent(json: string): CanaryExitIntent {
+  return reviveSwapIntent(json) as CanaryExitIntent;
+}
+
+function reviveParentIntent(json: string): CanarySwapIntent {
+  return reviveSwapIntent(json) as CanarySwapIntent;
+}
+
+function reviveSwapIntent(json: string): CanarySwapIntent | CanaryExitIntent {
   const raw = JSON.parse(json) as Record<string, unknown>;
   for (const key of ['quoteBlockNumber', 'notionalUsdMicros', 'amountIn', 'quotedAmountOut', 'amountOutMinimum', 'deadlineEpochSeconds', 'value']) {
     if (typeof raw[key] === 'string' && /^\d+$/.test(raw[key] as string)) raw[key] = BigInt(raw[key] as string);
   }
-  return raw as unknown as CanaryExitIntent;
+  return raw as unknown as CanarySwapIntent | CanaryExitIntent;
 }
 
 function jsonSafeStringify(value: unknown): string {
