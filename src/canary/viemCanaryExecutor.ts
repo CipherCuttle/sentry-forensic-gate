@@ -25,6 +25,11 @@ import {
   type CanaryApprovalIntent
 } from './approval.js';
 import {
+  assertCanaryEntryApprovalCalldata,
+  CANARY_E0_ENTRY_APPROVAL_R0,
+  type CanaryEntryApprovalIntent
+} from './entryApproval.js';
+import {
   CANARY_MAX_DEADLINE_SECONDS,
   INK_SWAP_ROUTER_02,
   swapRouter02Abi,
@@ -35,6 +40,8 @@ const erc20CanaryAbi = [
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
   { type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }
 ] as const;
+
+type CanaryExactApprovalIntent = CanaryApprovalIntent | CanaryEntryApprovalIntent;
 
 const ink = defineChain({
   id: INK_CHAIN_ID,
@@ -173,7 +180,7 @@ export class ViemCanaryExecutor {
     };
   }
 
-  async preflightApproval(intent: CanaryApprovalIntent): Promise<CanaryApprovalPreflight> {
+  async preflightApproval(intent: CanaryExactApprovalIntent): Promise<CanaryApprovalPreflight> {
     this.assertApprovalAuthority(intent);
     const chainClock = await this.getChainClock();
     const [tokenCode, tokenBalance, allowanceBefore] = await Promise.all([
@@ -238,7 +245,7 @@ export class ViemCanaryExecutor {
     };
   }
 
-  async signApproval(intent: CanaryApprovalIntent, preflight: CanaryApprovalPreflight): Promise<SignedCanaryTransaction> {
+  async signApproval(intent: CanaryExactApprovalIntent, preflight: CanaryApprovalPreflight): Promise<SignedCanaryTransaction> {
     this.assertApprovalAuthority(intent);
     assertApprovalPreflightBinding(intent, preflight, this.account.address);
     assertFeeAndGasCaps(preflight.gas, preflight.maxFeePerGas, preflight.maxPriorityFeePerGas, this.caps);
@@ -313,14 +320,23 @@ export class ViemCanaryExecutor {
     assertCanaryQuoteBlockHash(intent.quoteBlockHash, block.hash);
   }
 
-  private assertApprovalAuthority(intent: CanaryApprovalIntent): void {
-    if (intent.version !== CANARY_E0_APPROVAL_R0) throw new Error(`CANARY_APPROVAL_VERSION_INVALID:${intent.version}`);
-    if (getAddress(intent.owner) !== getAddress(this.account.address)) throw new Error('CANARY_APPROVAL_OWNER_MUST_EQUAL_WALLET');
-    if (getAddress(intent.spender) !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_APPROVAL_SPENDER_MISMATCH:${intent.spender}`);
-    assertCanaryApprovalCalldata(intent);
+  private assertApprovalAuthority(intent: CanaryExactApprovalIntent): void {
+    if (intent.version === CANARY_E0_APPROVAL_R0) {
+      if (getAddress(intent.owner) !== getAddress(this.account.address)) throw new Error('CANARY_APPROVAL_OWNER_MUST_EQUAL_WALLET');
+      if (getAddress(intent.spender) !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_APPROVAL_SPENDER_MISMATCH:${intent.spender}`);
+      assertCanaryApprovalCalldata(intent);
+      return;
+    }
+    if (intent.version === CANARY_E0_ENTRY_APPROVAL_R0) {
+      if (getAddress(intent.owner) !== getAddress(this.account.address)) throw new Error('CANARY_ENTRY_APPROVAL_OWNER_MUST_EQUAL_WALLET');
+      if (getAddress(intent.spender) !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_ENTRY_APPROVAL_SPENDER_MISMATCH:${intent.spender}`);
+      assertCanaryEntryApprovalCalldata(intent);
+      return;
+    }
+    throw new Error(`CANARY_APPROVAL_VERSION_INVALID:${String((intent as { version?: unknown }).version)}`);
   }
 
-  private async assertApprovalSimulation(intent: CanaryApprovalIntent): Promise<void> {
+  private async assertApprovalSimulation(intent: CanaryExactApprovalIntent): Promise<void> {
     const simulated = await this.publicClient.call({ account: this.account.address, to: intent.token, data: intent.calldata, value: 0n });
     if (!simulated.data || simulated.data === '0x') throw new Error('CANARY_APPROVAL_SIMULATION_RESULT_MISSING');
     const result = decodeFunctionResult({ abi: erc20ApprovalAbi, functionName: 'approve', data: simulated.data });
@@ -351,7 +367,7 @@ export async function assertSignedCanaryTransactionEnvelope(
 }
 
 export async function assertSignedApprovalTransaction(
-  intent: CanaryApprovalIntent,
+  intent: CanaryExactApprovalIntent,
   signed: SignedCanaryTransaction,
   expectedWallet: Address
 ): Promise<void> {
@@ -378,7 +394,7 @@ export function assertCanaryDeadlineAgainstChainClock(deadlineEpochSeconds: bigi
   }
 }
 
-function assertApprovalPreflightBinding(intent: CanaryApprovalIntent, preflight: CanaryApprovalPreflight, wallet: Address): void {
+function assertApprovalPreflightBinding(intent: CanaryExactApprovalIntent, preflight: CanaryApprovalPreflight, wallet: Address): void {
   if (preflight.actionId !== intent.actionId) throw new Error('CANARY_APPROVAL_PREFLIGHT_ACTION_ID_MISMATCH');
   if (getAddress(preflight.wallet) !== getAddress(wallet)) throw new Error('CANARY_APPROVAL_PREFLIGHT_WALLET_MISMATCH');
   if (getAddress(preflight.token) !== getAddress(intent.token)) throw new Error('CANARY_APPROVAL_PREFLIGHT_TOKEN_MISMATCH');
