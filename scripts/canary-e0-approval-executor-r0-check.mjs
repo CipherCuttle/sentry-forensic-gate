@@ -16,6 +16,7 @@ import { CanaryApprovalStore } from '../dist/canary/approvalStore.js';
 import { CanaryStore } from '../dist/canary/store.js';
 import {
   assertSignedApprovalTransaction,
+  assertSignedCanaryTransactionEnvelope,
   ViemCanaryExecutor
 } from '../dist/canary/viemCanaryExecutor.js';
 import {
@@ -60,7 +61,7 @@ let allowance = 0n;
 let tokenBalance = ACQUIRED;
 let simulationResult = true;
 let callCount = 0;
-let nonce = 9;
+const nonce = 9;
 const fakePublicClient = {
   async getChainId() { return INK_CHAIN_ID; },
   async getBlock() {
@@ -161,6 +162,7 @@ assert.equal(signed.nonce, nonce);
 assert.equal(signed.transactionHash, keccak256(signed.serializedTransaction));
 assert.equal(signed.serializedTransactionKeccak256, signed.transactionHash);
 await assertSignedApprovalTransaction(approval, signed, TEST_WALLET);
+await assertSignedCanaryTransactionEnvelope(signed, TEST_WALLET, caps);
 
 const parsed = parseTransaction(signed.serializedTransaction);
 assert.equal(parsed.chainId, INK_CHAIN_ID);
@@ -179,6 +181,7 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-e0-approval-execut
 const dbPath = path.join(tempDir, 'canary.sqlite');
 const buyStore = new CanaryStore(dbPath);
 const approvalStore = new CanaryApprovalStore(dbPath);
+let fakeBroadcastCalls = 0;
 try {
   const now = 1_700_000_000_000;
   assert.equal(buyStore.insert({
@@ -229,6 +232,22 @@ try {
   assert.equal(unresolved[0].transactionHash, signed.transactionHash);
   assert.equal(unresolved[0].serializedTransaction, signed.serializedTransaction);
 
+  // Test-only in-memory broadcaster: proves mutation is rejected before the side
+  // effect, then proves the exact persisted bytes can cross the same broadcast API.
+  executor.walletClient = {
+    async sendRawTransaction({ serializedTransaction }) {
+      fakeBroadcastCalls += 1;
+      return keccak256(serializedTransaction);
+    }
+  };
+  await assert.rejects(
+    () => executor.broadcastExact({ ...signed, serializedTransaction: '0x02' }),
+    /CANARY_BROADCAST_SIGNED_IDENTITY_MISMATCH/
+  );
+  assert.equal(fakeBroadcastCalls, 0, 'mutated signed bytes must be rejected before sendRawTransaction');
+  assert.equal(await executor.broadcastExact(signed), signed.transactionHash);
+  assert.equal(fakeBroadcastCalls, 1);
+
   approvalStore.markSubmitted(approval.actionId);
   approvalStore.markSafeHalt(approval.actionId, 'SIMULATED_TIMEOUT_AFTER_EXACT_BROADCAST_BOUNDARY');
   unresolved = approvalStore.listUnresolved();
@@ -257,12 +276,15 @@ console.log(JSON.stringify({
   signedValue: '0',
   signedHash: signed.transactionHash,
   persistedBeforeBroadcastBoundary: true,
+  preBroadcastMutationBlockedBeforeSideEffect: true,
+  fakeBroadcastCalls,
+  networkBroadcastInvoked: false,
   signTimeAllowanceRecheck: 'ZERO_ONLY',
   signTimeBalanceRecheck: 'REQUIRED',
   preflightIdentityBinding: 'REQUIRED',
   gasAndFeeCapsRecheckedAtSigning: true,
+  gasAndFeeCapsRecheckedBeforeBroadcast: true,
   ambiguousOutcomePolicy: 'SAFE_HALT_RECONCILE_KNOWN_HASH_NO_RETRY',
-  broadcastInvoked: false,
   live: false,
   walletSecretUsed: false,
   testOnlyDeterministicKey: true
