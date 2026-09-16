@@ -27,9 +27,9 @@ export interface CanaryCycleReport {
   reject: number;
   unknown: number;
   action: 'NONE' | 'DRY_PASS' | 'ENTRY_APPROVAL_SUBMITTED' | 'ENTRY_APPROVAL_INCLUDED' | 'SUBMITTED' | 'INCLUDED' | 'BLOCKED_UNRESOLVED' | 'BLOCKED_SETUP';
-  launchId?: string;
-  transactionHash?: Hex;
-  reason?: string;
+  launchId?: string | undefined;
+  transactionHash?: Hex | undefined;
+  reason?: string | undefined;
 }
 
 export async function syncCanarySniper(params: {
