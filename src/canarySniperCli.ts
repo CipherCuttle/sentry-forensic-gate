@@ -97,6 +97,7 @@ try {
     const canary = await syncCanarySniper({ store, canaryStore, baselineSource, executor, options: canaryOptions });
     const roundTrip = await syncCanaryE0RoundTripWiring({
       enabled: roundTripEnabled,
+      deferForBuyCycle: canary.action === 'SUBMITTED' || canary.action === 'INCLUDED',
       launchStore: store,
       buyStore: canaryStore,
       approvalStore,

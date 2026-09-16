@@ -223,21 +223,30 @@ try {
   assert.equal(buyStore.getCommittedBuy()?.actionId, buy.actionId);
 
   const disabled = await syncCanaryE0RoundTripWiring({
-    enabled: false, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
+    enabled: false, deferForBuyCycle: false, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
   });
   assert.equal(disabled.action, 'DISABLED');
   assert.equal(broadcastCalls, 0);
 
   const dryArmed = await syncCanaryE0RoundTripWiring({
-    enabled: true, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor: null, options
+    enabled: true, deferForBuyCycle: false, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor: null, options
   });
   assert.equal(dryArmed.action, 'DRY_ARMED');
   assert.equal(approvalSignCalls, 0);
   assert.equal(exitSignCalls, 0);
   assert.equal(quoteCalls, 0);
 
+  const deferredBuyPoll = await syncCanaryE0RoundTripWiring({
+    enabled: true, deferForBuyCycle: true, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
+  });
+  assert.equal(deferredBuyPoll.action, 'DEFERRED_BUY_POLL');
+  assert.equal(approvalSignCalls, 0, 'buy side-effect poll must never also sign approval');
+  assert.equal(exitSignCalls, 0);
+  assert.equal(broadcastCalls, 0);
+  assert.equal(quoteCalls, 0);
+
   const approval = await syncCanaryE0RoundTripWiring({
-    enabled: true, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
+    enabled: true, deferForBuyCycle: false, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
   });
   assert.equal(approval.action, 'APPROVAL_INCLUDED');
   assert.equal(approvalSignCalls, 1);
@@ -246,7 +255,7 @@ try {
   assert.equal(quoteCalls, 0, 'approval poll must not also quote/sign exit');
 
   const exitSubmit = await syncCanaryE0RoundTripWiring({
-    enabled: true, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
+    enabled: true, deferForBuyCycle: false, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
   });
   assert.equal(exitSubmit.action, 'EXIT_SUBMITTED');
   assert.equal(exitSubmit.quoteBlockNumber, 101n);
@@ -256,7 +265,7 @@ try {
   assert.equal(broadcastCalls, 2);
 
   const ambiguous = await syncCanaryE0RoundTripWiring({
-    enabled: true, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
+    enabled: true, deferForBuyCycle: false, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
   });
   assert.equal(ambiguous.action, 'BLOCKED_UNRESOLVED');
   assert.match(ambiguous.runtime?.reason ?? '', /CANARY_E0_EXIT_TX_NOT_YET_OBSERVED_NO_RETRY/);
@@ -266,13 +275,13 @@ try {
 
   exitReceiptVisible = true;
   const included = await syncCanaryE0RoundTripWiring({
-    enabled: true, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
+    enabled: true, deferForBuyCycle: false, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
   });
   assert.equal(included.action, 'EXIT_INCLUDED');
   assert.equal(quoteCalls, 1);
 
   const complete = await syncCanaryE0RoundTripWiring({
-    enabled: true, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
+    enabled: true, deferForBuyCycle: false, launchStore, buyStore, approvalStore, exitStore, quoteSource, executor, options
   });
   assert.equal(complete.action, 'COMPLETE');
   assert.equal(approvalSignCalls, 1);
@@ -312,6 +321,7 @@ console.log(JSON.stringify({
   freshExitQuoteCalls: quoteCalls,
   freshExitAuthorityChecks: authorityCalls,
   persistedCommittedBuyRehydrated: true,
+  buyPollDefersRoundTripSideEffect: true,
   oneChildTransactionPerPoll: true,
   dryArmedNoSideEffects: true,
   knownHashNoRequoteResignRebroadcast: true,

@@ -38,6 +38,7 @@ export interface CanaryE0RoundTripQuoteSource {
 export type CanaryE0RoundTripWiringAction =
   | 'DISABLED'
   | 'DRY_ARMED'
+  | 'DEFERRED_BUY_POLL'
   | 'WAITING_BUY'
   | 'BUY_NOT_INCLUDED'
   | CanaryE0RoundTripRuntimeAction;
@@ -53,6 +54,7 @@ export interface CanaryE0RoundTripWiringReport {
 
 export async function syncCanaryE0RoundTripWiring(params: {
   enabled: boolean;
+  deferForBuyCycle: boolean;
   launchStore: CanaryE0RoundTripLaunchStore;
   buyStore: CanaryStore;
   approvalStore: CanaryApprovalStore;
@@ -63,6 +65,7 @@ export async function syncCanaryE0RoundTripWiring(params: {
 }): Promise<CanaryE0RoundTripWiringReport> {
   if (!params.enabled) return report('DISABLED');
   if (!params.executor) return report('DRY_ARMED');
+  if (params.deferForBuyCycle) return report('DEFERRED_BUY_POLL');
 
   const buy = params.buyStore.getCommittedBuy();
   if (!buy) return report('WAITING_BUY');

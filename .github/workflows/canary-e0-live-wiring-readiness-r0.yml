@@ -45,6 +45,7 @@ jobs:
           grep -q '"fixedPrimaryTradeUsd": 1' canary-e0-live-wiring-readiness-r0.json
           grep -q '"validationLossBudgetUsd": 5' canary-e0-live-wiring-readiness-r0.json
           grep -q '"persistedCommittedBuyRehydrated": true' canary-e0-live-wiring-readiness-r0.json
+          grep -q '"buyPollDefersRoundTripSideEffect": true' canary-e0-live-wiring-readiness-r0.json
           grep -q '"oneChildTransactionPerPoll": true' canary-e0-live-wiring-readiness-r0.json
           grep -q '"cliLiveRoundTripKillSwitch": true' canary-e0-live-wiring-readiness-r0.json
           grep -q '"networkBroadcastInvoked": false' canary-e0-live-wiring-readiness-r0.json
