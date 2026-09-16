@@ -6,6 +6,7 @@ on:
       - agent/canary-e0-approval-executor-r0
     paths:
       - 'src/canary/viemCanaryExecutor.ts'
+      - 'src/canary/cycle.ts'
       - 'src/canary/approval.ts'
       - 'src/canary/approvalStore.ts'
       - 'scripts/canary-boundary-check.mjs'
