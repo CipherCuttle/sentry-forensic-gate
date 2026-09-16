@@ -115,7 +115,7 @@ const executor = new ViemCanaryExecutor({
   caps,
   publicClient: fakePublicClient
 });
-assert.equal(getAddress(executor.account.address), getAddress(TEST_WALLET));
+assert.equal(getAddress(executor.walletAddress), getAddress(TEST_WALLET));
 
 // Dirty allowance is a hard block before simulation/signing.
 allowance = 1n;
