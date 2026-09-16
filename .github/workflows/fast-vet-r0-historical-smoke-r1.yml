@@ -8,7 +8,6 @@ on:
       - 'scripts/fast-vet-check.mjs'
       - 'scripts/fast-vet-r0-historical-smoke-r1.mjs'
       - 'docs/FAST_VET_R0_HISTORICAL_SMOKE_R1.md'
-      - 'package.json'
       - '.github/workflows/fast-vet-r0-historical-smoke-r1.yml'
 
 permissions:
