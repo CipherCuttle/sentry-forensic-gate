@@ -135,13 +135,13 @@
     "docs/FAST_VET_R0_AUTHORIZATION_R1.md",
     "fixtures/fast-vet-r0-authorization-r1.json",
     "docs/PRD.md",
-    "scripts/fast-vet-r0-authorization-predecessor-check.mjs",
-    "scripts/fast-vet-r0-source-parity-check.mjs"
+    ".github/verification/fast-vet-r0-predecessor.py",
+    ".github/verification/fast-vet-r0-source-parity.py"
   ],
   "next_action": "RUN_ONE_INDEPENDENT_HOSTILE_REVIEW",
   "notes": [
-    "The authorization CI must query the pinned predecessor GitHub run/artifact, download the actual receipt, hash its bytes, and validate 147x5 accounting.",
-    "The authorization CI must fetch exact PR #13 source objects and deterministically verify normalized decision/shadow semantics against those source bytes.",
+    "The authorization workflow performs GitHub-only predecessor retrieval in workflow shell and passes downloaded files to an offline Python validator; no product/research runtime network escape hatch is added.",
+    "The authorization workflow fetches exact PR #13 source in workflow shell and passes local source bytes to an offline Python semantic-parity validator.",
     "No FAST_VET smoke execution is authorized until review closure."
   ]
 }

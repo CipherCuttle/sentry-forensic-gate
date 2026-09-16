@@ -12,8 +12,8 @@ on:
       - 'scripts/dev-spine-context.mjs'
       - 'scripts/dev-spine-pack.mjs'
       - 'scripts/dev-spine-receipt.mjs'
-      - 'scripts/fast-vet-r0-authorization-predecessor-check.mjs'
-      - 'scripts/fast-vet-r0-source-parity-check.mjs'
+      - '.github/verification/fast-vet-r0-predecessor.py'
+      - '.github/verification/fast-vet-r0-source-parity.py'
       - '.github/workflows/fast-vet-r0-authorization-r1.yml'
 
 permissions:
@@ -35,14 +35,41 @@ jobs:
         run: |
           node scripts/dev-spine-check-test.mjs
           node scripts/dev-spine-check.mjs
-      - name: Verify real predecessor run artifact and receipt provenance
+      - name: Fetch and verify real predecessor provenance
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/fast-vet-r0-authorization-predecessor-check.mjs
+        run: |
+          set -euo pipefail
+          ROOT=.fast-vet-auth/predecessor
+          mkdir -p "$ROOT/unzipped"
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          AUTH="Authorization: Bearer ${GITHUB_TOKEN}"
+          VERSION="X-GitHub-Api-Version: 2022-11-28"
+          curl -fsSL -H "$AUTH" -H "$VERSION" "$API/actions/runs/35001582697" > "$ROOT/run.json"
+          curl -fsSL -H "$AUTH" -H "$VERSION" "$API/actions/artifacts/10410898359" > "$ROOT/artifact.json"
+          curl -fsSL -L -H "$AUTH" -H "$VERSION" "$API/actions/artifacts/10410898359/zip" -o "$ROOT/artifact.zip"
+          unzip -q "$ROOT/artifact.zip" -d "$ROOT/unzipped"
+          python3 .github/verification/fast-vet-r0-predecessor.py "$ROOT"
       - name: Fetch exact pre-existing FAST_VET source
-        run: git fetch --no-tags --depth=1 origin 22fcce4c301e791a59c68b19b198bd1bea104138
+        run: |
+          set -euo pipefail
+          SOURCE=22fcce4c301e791a59c68b19b198bd1bea104138
+          ROOT=.fast-vet-auth/pr13
+          git fetch --no-tags --depth=1 origin "$SOURCE"
+          test "$(git rev-parse FETCH_HEAD)" = "$SOURCE"
+          for path in \
+            docs/FAST_VET_R0.md \
+            src/evaluation/fastVet.ts \
+            src/evaluation/fastVetShadow.ts \
+            scripts/fast-vet-check.mjs \
+            src/forensic/creatorOutcome.ts \
+            src/outcome/forwardTypes.ts
+          do
+            mkdir -p "$ROOT/$(dirname "$path")"
+            git show "$SOURCE:$path" > "$ROOT/$path"
+          done
       - name: Verify normalized rule semantic parity with PR13 source
-        run: node scripts/fast-vet-r0-source-parity-check.mjs
+        run: python3 .github/verification/fast-vet-r0-source-parity.py .fast-vet-auth/pr13
       - name: Prove this PR contains no FAST_VET implementation
         run: |
           test ! -e src/evaluation/fastVet.ts
