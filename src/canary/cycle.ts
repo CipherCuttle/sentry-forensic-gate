@@ -3,6 +3,7 @@ import type { SqliteStore } from '../db/sqliteStore.js';
 import { evaluateFastVet } from '../evaluation/fastVet.js';
 import { projectCreatorOutcomeFeatures } from '../forensic/creatorOutcome.js';
 import type { ViemExecutableBaselineSource } from '../tsunami/viemBaselineSource.js';
+import { applyHistoricalCreatorSeed } from './historicalCreatorSeed.js';
 import { buildCanarySwapIntent, CANARY_PRIMARY_NOTIONAL_USD_MICROS, deriveCanaryActionId } from './swapIntent.js';
 import { CanaryStore } from './store.js';
 import type { CanaryActionRecord } from './types.js';
@@ -65,7 +66,9 @@ export async function syncCanarySniper(params: {
     const launch = await params.store.getLaunch(baseline.launchId);
     if (!launch) continue;
     considered += 1;
-    const vet = evaluateFastVet({ baseline, creatorFeature: featureByBaseline.get(baseline.baselineId) ?? null });
+    const liveFeature = featureByBaseline.get(baseline.baselineId) ?? null;
+    const creatorFeature = liveFeature ? applyHistoricalCreatorSeed(liveFeature, launch.creator) : null;
+    const vet = evaluateFastVet({ baseline, creatorFeature });
     if (vet.decision === 'PASS') pass += 1;
     else if (vet.decision === 'REJECT') reject += 1;
     else unknown += 1;
