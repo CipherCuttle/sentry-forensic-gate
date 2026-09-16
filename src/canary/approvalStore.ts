@@ -225,6 +225,11 @@ export class CanaryApprovalStore {
     return rows.map(fromRow);
   }
 
+  getByParentBuyActionId(parentBuyActionId: string): CanaryApprovalActionRecord | null {
+    const row = this.db.prepare('SELECT * FROM canary_approval_actions WHERE parent_buy_action_id = ?').get(parentBuyActionId) as ApprovalRow | undefined;
+    return row ? fromRow(row) : null;
+  }
+
   private assertRecordIntentIdentity(record: CanaryApprovalActionRecord): void {
     if (record.intent.version !== CANARY_E0_APPROVAL_R0) throw new Error('CANARY_APPROVAL_VERSION_INVALID');
     if (record.intent.actionId !== record.actionId) throw new Error('CANARY_APPROVAL_INTENT_ACTION_ID_MISMATCH');
