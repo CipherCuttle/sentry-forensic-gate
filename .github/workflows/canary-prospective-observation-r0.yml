@@ -11,11 +11,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: canary-prospective-observation-r0-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dry-observation:
     if: github.ref == 'refs/heads/agent/canary-prospective-observation-r0'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,6 +51,7 @@ jobs:
           echo "SENTRY_CONFIRMATIONS=0" >> "$GITHUB_ENV"
           echo "BASELINE_CONFIRMATIONS=0" >> "$GITHUB_ENV"
           echo "OUTCOME_CONFIRMATIONS=2" >> "$GITHUB_ENV"
+          echo "CANARY_POLL_INTERVAL_MS=500" >> "$GITHUB_ENV"
           printf 'OBSERVATION_WINDOW head=%s start=%s\n' "$HEAD" "$START"
 
       - name: Assert no wallet secret is present
@@ -57,11 +62,80 @@ jobs:
           test "${CANARY_LIVE}" = 'false'
           echo 'CANARY_NO_KEY_BOUNDARY=PASS'
 
-      - name: Run one prospective dry cycle
+      - name: Watch prospective dry cycles until DRY_PASS or bounded timeout
         shell: bash
         run: |
           set -euo pipefail
-          node dist/canarySniperCli.js --once | tee canary-prospective-observation-r0.jsonl
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { spawn } from 'node:child_process';
+
+          const MAX_OBSERVE_MS = 330 * 60 * 1000;
+          const outputPath = 'canary-prospective-observation-r0.jsonl';
+          fs.writeFileSync(outputPath, '');
+
+          const child = spawn(process.execPath, ['dist/canarySniperCli.js'], {
+            env: process.env,
+            stdio: ['ignore', 'pipe', 'pipe']
+          });
+
+          let buffer = '';
+          let stopReason = 'BOUNDED_TIMEOUT';
+          let stopRequested = false;
+          let moneySignal = false;
+          let reportsSeen = 0;
+
+          function requestStop(reason) {
+            if (stopRequested) return;
+            stopRequested = true;
+            stopReason = reason;
+            child.kill('SIGTERM');
+          }
+
+          const timer = setTimeout(() => requestStop('BOUNDED_TIMEOUT'), MAX_OBSERVE_MS);
+
+          child.stderr.on('data', (chunk) => process.stderr.write(chunk));
+          child.stdout.on('data', (chunk) => {
+            const text = chunk.toString();
+            process.stdout.write(text);
+            buffer += text;
+            while (true) {
+              const newline = buffer.indexOf('\n');
+              if (newline < 0) break;
+              const line = buffer.slice(0, newline).trim();
+              buffer = buffer.slice(newline + 1);
+              if (!line) continue;
+              fs.appendFileSync(outputPath, line + '\n');
+              if (!line.startsWith('{')) continue;
+              let report;
+              try { report = JSON.parse(line); } catch { continue; }
+              if (report.runtimeVersion !== 'CANARY_SNIPER_R0') continue;
+              reportsSeen += 1;
+              if (report.live !== false || report.canary?.transactionHash || ['SUBMITTED', 'INCLUDED'].includes(report.canary?.action)) {
+                moneySignal = true;
+                child.kill('SIGKILL');
+                return;
+              }
+              if (report.canary?.action === 'DRY_PASS') requestStop('DRY_PASS_OBSERVED');
+            }
+          });
+
+          const result = await new Promise((resolve) => child.once('close', (code, signal) => resolve({ code, signal })));
+          clearTimeout(timer);
+
+          fs.writeFileSync('canary-prospective-observation-r0-stop.json', JSON.stringify({
+            stopReason,
+            reportsSeen,
+            childCode: result.code,
+            childSignal: result.signal,
+            moneySignal
+          }, null, 2) + '\n');
+
+          if (moneySignal) throw new Error('OBSERVATION_MONEY_MOVING_SIGNAL');
+          if (!stopRequested && result.code !== 0) throw new Error(`OBSERVATION_RUNTIME_EXIT:${result.code}:${result.signal ?? 'NONE'}`);
+          if (reportsSeen < 1) throw new Error('OBSERVATION_NO_REPORTS');
+          console.log(`OBSERVATION_STOP_REASON=${stopReason}`);
+          NODE
 
       - name: Verify and seal dry observation receipt
         shell: bash
@@ -73,40 +147,61 @@ jobs:
 
           const lines = fs.readFileSync('canary-prospective-observation-r0.jsonl', 'utf8')
             .split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-          const jsonLines = lines.filter((x) => x.startsWith('{'));
-          if (jsonLines.length !== 1) throw new Error(`OBSERVATION_JSON_COUNT:${jsonLines.length}`);
-          const report = JSON.parse(jsonLines[0]);
-          if (report.runtimeVersion !== 'CANARY_SNIPER_R0') throw new Error('OBSERVATION_RUNTIME_DRIFT');
-          if (report.live !== false) throw new Error('OBSERVATION_NOT_DRY');
-          const action = report.canary?.action;
-          if (!['NONE', 'DRY_PASS', 'BLOCKED_UNRESOLVED', 'BLOCKED_SETUP'].includes(action)) {
-            throw new Error(`OBSERVATION_UNEXPECTED_ACTION:${action}`);
+          const reports = lines
+            .filter((x) => x.startsWith('{'))
+            .map((x) => JSON.parse(x))
+            .filter((x) => x.runtimeVersion === 'CANARY_SNIPER_R0');
+          if (reports.length < 1) throw new Error('OBSERVATION_JSON_COUNT_ZERO');
+
+          const allowed = new Set(['NONE', 'DRY_PASS', 'BLOCKED_UNRESOLVED', 'BLOCKED_SETUP']);
+          for (const report of reports) {
+            if (report.live !== false) throw new Error('OBSERVATION_NOT_DRY');
+            const action = report.canary?.action;
+            if (!allowed.has(action)) throw new Error(`OBSERVATION_UNEXPECTED_ACTION:${action}`);
+            if (action === 'SUBMITTED' || action === 'INCLUDED' || report.canary?.transactionHash) {
+              throw new Error('OBSERVATION_MONEY_MOVING_SIGNAL');
+            }
           }
-          if (action === 'SUBMITTED' || action === 'INCLUDED' || report.canary?.transactionHash) {
-            throw new Error('OBSERVATION_MONEY_MOVING_SIGNAL');
+
+          const stop = JSON.parse(fs.readFileSync('canary-prospective-observation-r0-stop.json', 'utf8'));
+          const dryPasses = reports.filter((x) => x.canary?.action === 'DRY_PASS');
+          const considered = reports.reduce((n, x) => n + Number(x.canary?.candidatesConsidered ?? 0), 0);
+          const pass = reports.reduce((n, x) => n + Number(x.canary?.pass ?? 0), 0);
+          const reject = reports.reduce((n, x) => n + Number(x.canary?.reject ?? 0), 0);
+          const unknown = reports.reduce((n, x) => n + Number(x.canary?.unknown ?? 0), 0);
+          const firstDryPass = dryPasses[0] ?? null;
+
+          if (stop.stopReason === 'DRY_PASS_OBSERVED' && dryPasses.length < 1) {
+            throw new Error('OBSERVATION_STOP_WITHOUT_DRY_PASS');
           }
+
           const core = {
-            schema: 'canary-prospective-observation-r0-receipt/v1',
+            schema: 'canary-prospective-observation-r0-receipt/v2',
             sourceHead: process.env.GITHUB_SHA,
             branch: process.env.GITHUB_REF_NAME,
             live: false,
             privateKeyPresent: Boolean(process.env.CANARY_PRIVATE_KEY),
-            observedHead: process.env.OBSERVED_HEAD,
+            observedHeadAtStart: process.env.OBSERVED_HEAD,
             startBlock: process.env.SENTRY_START_BLOCK,
             candidateMaxAgeBlocks: process.env.CANARY_CANDIDATE_MAX_AGE_BLOCKS,
-            report
+            cycleCount: reports.length,
+            firstHeadBlock: reports[0]?.canary?.headBlock ?? null,
+            lastHeadBlock: reports.at(-1)?.canary?.headBlock ?? null,
+            candidatesConsidered: considered,
+            pass,
+            reject,
+            unknown,
+            dryPassCount: dryPasses.length,
+            dryPassLaunchId: firstDryPass?.canary?.launchId ?? null,
+            stopReason: stop.stopReason
           };
           const canonical = JSON.stringify(core);
           const evidenceDigest = createHash('sha256').update(canonical).digest('hex');
           fs.writeFileSync('canary-prospective-observation-r0-receipt.json', JSON.stringify({ ...core, evidenceDigest }, null, 2) + '\n');
           console.log(JSON.stringify({
-            verdict: 'CANARY_PROSPECTIVE_OBSERVATION_R0_COMPLETE',
+            verdict: dryPasses.length ? 'CANARY_PROSPECTIVE_DRY_PASS_OBSERVED' : 'CANARY_PROSPECTIVE_OBSERVATION_WINDOW_COMPLETE',
             evidenceDigest,
-            action,
-            pass: report.canary?.pass,
-            reject: report.canary?.reject,
-            unknown: report.canary?.unknown,
-            candidatesConsidered: report.canary?.candidatesConsidered
+            ...core
           }, null, 2));
           NODE
 
@@ -114,5 +209,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: canary-prospective-observation-r0-evidence
-          path: canary-prospective-observation-r0-receipt.json
+          path: |
+            canary-prospective-observation-r0-receipt.json
+            canary-prospective-observation-r0-stop.json
+            canary-prospective-observation-r0.jsonl
           if-no-files-found: error
