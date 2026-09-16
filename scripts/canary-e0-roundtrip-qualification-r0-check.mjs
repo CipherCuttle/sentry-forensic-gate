@@ -40,6 +40,7 @@ import {
 const HASH = `0x${'44'.repeat(32)}`;
 const OTHER_HASH = `0x${'55'.repeat(32)}`;
 const LAUNCHED = '0x1111111111111111111111111111111111111111';
+const OTHER_LAUNCHED = '0x3333333333333333333333333333333333333333';
 const RECIPIENT = '0x2222222222222222222222222222222222222222';
 
 const buy = await buildCanarySwapIntent({
@@ -53,7 +54,7 @@ const exit = await buildCanaryExitIntent({
   buyIntent: buy,
   quoteBlockNumber: 101n,
   quoteBlockHash: OTHER_HASH,
-  amountIn: 1_500_000n,
+  amountIn: 2_000_000n,
   quotedAmountOut: 900_000n,
   slippageBps: 500,
   chainTimestampSeconds: 1_700_000_001,
@@ -70,7 +71,7 @@ assert.equal(exit.tokenIn.toLowerCase(), buy.tokenOut.toLowerCase());
 assert.equal(exit.tokenOut.toLowerCase(), buy.tokenIn.toLowerCase());
 assert.equal(exit.recipient.toLowerCase(), buy.recipient.toLowerCase());
 assert.equal(exit.fee, buy.fee);
-assert.equal(exit.amountIn, 1_500_000n);
+assert.equal(exit.amountIn, 2_000_000n);
 assert.equal(exit.amountOutMinimum, 855_000n);
 assert.equal(exit.value, 0n);
 
@@ -82,7 +83,7 @@ const params = inner.args[0];
 assert.equal(params.tokenIn.toLowerCase(), LAUNCHED.toLowerCase());
 assert.equal(params.tokenOut.toLowerCase(), WETH9.toLowerCase());
 assert.equal(params.recipient.toLowerCase(), RECIPIENT.toLowerCase());
-assert.equal(params.amountIn, 1_500_000n);
+assert.equal(params.amountIn, 2_000_000n);
 assert.equal(params.amountOutMinimum, 855_000n);
 
 const forgedBuy = { ...buy, actionId: 'forged-buy-id' };
@@ -142,18 +143,49 @@ try {
   assert.equal(unresolved[0].actionId, exit.actionId);
   assert.equal(unresolved[0].intent.parentBuyActionId, buy.actionId);
 
-  const tooLarge = await buildCanaryExitIntent({
+  const partial = await buildCanaryExitIntent({
     buyIntent: buy, quoteBlockNumber: 102n, quoteBlockHash: OTHER_HASH,
-    amountIn: 2_000_001n, quotedAmountOut: 100n, slippageBps: 100,
+    amountIn: 1_999_999n, quotedAmountOut: 100n, slippageBps: 100,
     chainTimestampSeconds: 1_700_000_002, deadlineSeconds: 30
+  });
+  assert.throws(() => exitStoreA.insertReserved({
+    ...exitRecord,
+    actionId: partial.actionId,
+    intent: partial,
+    createdAtMs: now + 2,
+    updatedAtMs: now + 2
+  }), /CANARY_EXIT_AMOUNT_MUST_EQUAL_ACQUIRED/);
+
+  const tooLarge = await buildCanaryExitIntent({
+    buyIntent: buy, quoteBlockNumber: 103n, quoteBlockHash: OTHER_HASH,
+    amountIn: 2_000_001n, quotedAmountOut: 100n, slippageBps: 100,
+    chainTimestampSeconds: 1_700_000_003, deadlineSeconds: 30
   });
   assert.throws(() => exitStoreA.insertReserved({
     ...exitRecord,
     actionId: tooLarge.actionId,
     intent: tooLarge,
-    createdAtMs: now + 2,
-    updatedAtMs: now + 2
-  }), /CANARY_EXIT_AMOUNT_EXCEEDS_ACQUIRED/);
+    createdAtMs: now + 3,
+    updatedAtMs: now + 3
+  }), /CANARY_EXIT_AMOUNT_MUST_EQUAL_ACQUIRED/);
+
+  // Buy EconomicActionID intentionally ignores quote/market details. Prove that a
+  // caller cannot exploit that by presenting a different buy-shaped intent with
+  // the same parent action ID and exiting the wrong token.
+  const tamperedBuy = { ...buy, tokenOut: OTHER_LAUNCHED };
+  assert.equal(tamperedBuy.actionId, buy.actionId);
+  const tamperedExit = await buildCanaryExitIntent({
+    buyIntent: tamperedBuy, quoteBlockNumber: 104n, quoteBlockHash: OTHER_HASH,
+    amountIn: 2_000_000n, quotedAmountOut: 100n, slippageBps: 100,
+    chainTimestampSeconds: 1_700_000_004, deadlineSeconds: 30
+  });
+  assert.throws(() => exitStoreA.insertReserved({
+    ...exitRecord,
+    actionId: tamperedExit.actionId,
+    intent: tamperedExit,
+    createdAtMs: now + 4,
+    updatedAtMs: now + 4
+  }), /CANARY_EXIT_PERSISTED_PARENT_INTENT_BINDING_MISMATCH/);
 } finally {
   exitStoreB.close();
   exitStoreA.close();
