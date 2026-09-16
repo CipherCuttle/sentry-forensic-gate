@@ -17,9 +17,9 @@ export interface CanaryE0EntryApprovalRuntimeReport {
   version: typeof CANARY_E0_ENTRY_APPROVAL_RUNTIME_R0;
   action: CanaryE0EntryApprovalRuntimeAction;
   buyActionId: string;
-  entryApprovalActionId?: string;
-  transactionHash?: Hex;
-  reason?: string;
+  entryApprovalActionId?: string | undefined;
+  transactionHash?: Hex | undefined;
+  reason?: string | undefined;
 }
 
 export async function reconcileCanaryE0EntryApproval(params: {
