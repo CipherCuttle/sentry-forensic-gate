@@ -5,6 +5,7 @@ import {
   CANARY_PRIMARY_NOTIONAL_USD_MICROS,
   CANARY_SNIPER_R0,
   deriveCanaryActionId,
+  INK_SWAP_ROUTER_02,
   type CanarySwapIntent
 } from './swapIntent.js';
 
@@ -36,6 +37,7 @@ export interface CanaryApprovalIntent {
   parentExitActionId: string;
   launchId: string;
   baselineId: string;
+  owner: Address;
   token: Address;
   spender: Address;
   amount: bigint;
@@ -49,6 +51,7 @@ export async function deriveCanaryApprovalActionId(params: {
   parentExitActionId: string;
   launchId: string;
   baselineId: string;
+  owner: Address;
   token: Address;
   spender: Address;
   amount: bigint;
@@ -57,14 +60,17 @@ export async function deriveCanaryApprovalActionId(params: {
     throw new Error('CANARY_APPROVAL_IDENTITY_REQUIRED');
   }
   assertExactApprovalAmount(params.amount);
+  const spender = getAddress(params.spender);
+  if (spender !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_APPROVAL_SPENDER_MUST_EQUAL_ROUTER:${spender}`);
   return sha256Hex({
     kind: CANARY_E0_APPROVAL_R0,
     parentBuyActionId: params.parentBuyActionId,
     parentExitActionId: params.parentExitActionId,
     launchId: params.launchId,
     baselineId: params.baselineId,
+    owner: getAddress(params.owner),
     token: getAddress(params.token),
-    spender: getAddress(params.spender),
+    spender,
     amount: params.amount,
     notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS
   });
@@ -79,18 +85,21 @@ export async function buildCanaryApprovalIntent(params: {
   const expectedBuyActionId = await deriveCanaryActionId(params.buyIntent.launchId, params.buyIntent.baselineId);
   if (params.buyIntent.actionId !== expectedBuyActionId) throw new Error('CANARY_APPROVAL_PARENT_BUY_IDENTITY_DRIFT');
 
+  const owner = getAddress(params.buyIntent.recipient);
+  const token = getAddress(params.buyIntent.tokenOut);
+  const spender = getAddress(params.buyIntent.router);
+  if (spender !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_APPROVAL_SPENDER_MUST_EQUAL_ROUTER:${spender}`);
   const parentExitActionId = await deriveCanaryExitActionId({
     parentBuyActionId: params.buyIntent.actionId,
     launchId: params.buyIntent.launchId,
     baselineId: params.buyIntent.baselineId
   });
-  const token = getAddress(params.buyIntent.tokenOut);
-  const spender = getAddress(params.buyIntent.router);
   const actionId = await deriveCanaryApprovalActionId({
     parentBuyActionId: params.buyIntent.actionId,
     parentExitActionId,
     launchId: params.buyIntent.launchId,
     baselineId: params.buyIntent.baselineId,
+    owner,
     token,
     spender,
     amount: params.acquiredAmount
@@ -103,7 +112,7 @@ export async function buildCanaryApprovalIntent(params: {
     functionName: 'approve',
     args: [spender, params.acquiredAmount]
   });
-  assertCanaryApprovalCalldata({ token, spender, amount: params.acquiredAmount, calldata });
+  assertCanaryApprovalCalldata({ spender, amount: params.acquiredAmount, calldata });
   return {
     version: CANARY_E0_APPROVAL_R0,
     actionId,
@@ -111,6 +120,7 @@ export async function buildCanaryApprovalIntent(params: {
     parentExitActionId,
     launchId: params.buyIntent.launchId,
     baselineId: params.buyIntent.baselineId,
+    owner,
     token,
     spender,
     amount: params.acquiredAmount,
@@ -125,8 +135,9 @@ export function classifyCanaryApprovalAllowance(current: bigint, required: bigin
   return 'BLOCKED_DIRTY_ALLOWANCE';
 }
 
-export function assertCanaryApprovalCalldata(intent: Pick<CanaryApprovalIntent, 'spender' | 'amount' | 'calldata'> & { token?: Address }): void {
+export function assertCanaryApprovalCalldata(intent: Pick<CanaryApprovalIntent, 'spender' | 'amount' | 'calldata'>): void {
   assertExactApprovalAmount(intent.amount);
+  if (getAddress(intent.spender) !== INK_SWAP_ROUTER_02) throw new Error('CANARY_APPROVAL_CALLDATA_SPENDER_NOT_CANONICAL');
   const decoded = decodeFunctionData({ abi: erc20ApprovalAbi, data: intent.calldata });
   if (decoded.functionName !== 'approve') throw new Error('CANARY_APPROVAL_CALLDATA_FUNCTION_INVALID');
   const [spender, amount] = decoded.args;
@@ -143,5 +154,6 @@ function assertCanonicalParentBuy(intent: CanarySwapIntent): void {
   if (intent.version !== CANARY_SNIPER_R0) throw new Error('CANARY_APPROVAL_PARENT_VERSION_INVALID');
   if (intent.notionalUsdMicros !== CANARY_PRIMARY_NOTIONAL_USD_MICROS) throw new Error('CANARY_APPROVAL_PARENT_NOTIONAL_INVALID');
   if (intent.value !== 0n) throw new Error('CANARY_APPROVAL_PARENT_VALUE_INVALID');
+  if (getAddress(intent.router) !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_APPROVAL_PARENT_ROUTER_INVALID:${intent.router}`);
   if (!intent.actionId || !intent.launchId || !intent.baselineId) throw new Error('CANARY_APPROVAL_PARENT_IDENTITY_MISSING');
 }
