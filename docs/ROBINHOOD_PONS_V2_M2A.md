@@ -98,7 +98,7 @@ The existing Ink `$1` canary is untouched.
 
 ## Next M2 slices
 
-After factory authority is independently pinned:
+With the factory epoch now pinned:
 
 1. activate prospective Pons launch observation from a reviewed start block;
 2. implement decision-block market resolution with explicit `CURVE` / `SWEPT` / `V4_POOL` / terminal handling;

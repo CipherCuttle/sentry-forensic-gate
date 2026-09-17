@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { keccak256 } from 'viem';
 import { ROBINHOOD_CHAIN_ID, PONS_V2_NATIVE_PAIR_TOKEN } from '../dist/adapters/robinhood/ponsV2/contracts.js';
+import { CURRENT_PONS_V2_AUTHORITY } from '../dist/adapters/robinhood/ponsV2/authority.js';
 import { ViemPonsV2LaunchAdapter } from '../dist/adapters/robinhood/ponsV2/viemLaunchAdapter.js';
 
 const factory = '0x1111111111111111111111111111111111111111';
@@ -11,6 +12,14 @@ const factoryCode = '0x60016000556002600055';
 const factoryRuntimeCodeHash = keccak256(factoryCode);
 const blockHash = `0x${'aa'.repeat(32)}`;
 const txHash = `0x${'bb'.repeat(32)}`;
+
+assert.equal(CURRENT_PONS_V2_AUTHORITY.chainId, ROBINHOOD_CHAIN_ID);
+assert.equal(CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase(), '0x7ed598bcef8bd9edd8c97a195c6d13f40801ec7e');
+assert.equal(CURRENT_PONS_V2_AUTHORITY.fromBlock, 26_841_846n);
+assert.equal(
+  CURRENT_PONS_V2_AUTHORITY.factoryRuntimeCodeHash,
+  '0x89a27da6f703e0a7cdd4f233e7cb57604ff75b164530962d3ff7cf8483a67d84'
+);
 
 const authority = {
   authorityId: 'TEST_ONLY_PONS_V2_EPOCH',

@@ -17,6 +17,14 @@ export interface PonsV2Authority {
   factoryRuntimeCodeHash: Hex;
 }
 
+export const CURRENT_PONS_V2_AUTHORITY: Readonly<PonsV2Authority> = Object.freeze({
+  authorityId: 'ROBINHOOD_PONS_V2_FACTORY_2026_08_03_R1',
+  chainId: ROBINHOOD_CHAIN_ID,
+  factory: '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e',
+  fromBlock: 26_841_846n,
+  factoryRuntimeCodeHash: '0x89a27da6f703e0a7cdd4f233e7cb57604ff75b164530962d3ff7cf8483a67d84'
+});
+
 export function validatePonsV2Authority(authority: Readonly<PonsV2Authority>): void {
   if (!authority.authorityId.trim()) throw new Error('PONS_V2_AUTHORITY_ID_MISSING');
   if (authority.chainId !== ROBINHOOD_CHAIN_ID) {
