@@ -45,6 +45,8 @@ let allowance = 0n;
 let signCalls = 0;
 let fakeBroadcastBoundaryCalls = 0;
 let receiptCalls = 0;
+let reservationCapabilityObserved = false;
+let frozenParentBuyAuthorityObserved = false;
 const executor = {
   walletAddress: TEST_WALLET,
   async preflightApproval(intent) {
@@ -67,7 +69,21 @@ const executor = {
       maxPriorityFeePerGas: 1_000_000n
     };
   },
-  async signApproval(intent) {
+  async signEntryApprovalReserved({ intent, preflight, store: authorityStore, signingCapability }) {
+    assert.equal(preflight.actionId, intent.actionId);
+    authorityStore.assertSigningAuthority(intent.actionId, signingCapability);
+    reservationCapabilityObserved = true;
+    const frozenParentBuy = await authorityStore.consumeSigningAuthority(intent.actionId, signingCapability);
+    assert.equal(frozenParentBuy.actionId, intent.parentBuyActionId);
+    assert.equal(frozenParentBuy.launchId, intent.launchId);
+    assert.equal(frozenParentBuy.baselineId, intent.baselineId);
+    assert.equal(getAddress(frozenParentBuy.tokenIn), getAddress(intent.token));
+    assert.equal(getAddress(frozenParentBuy.tokenOut), getAddress(intent.buyTokenOut));
+    assert.equal(frozenParentBuy.fee, intent.buyFee);
+    assert.equal(frozenParentBuy.amountIn, intent.amount);
+    assert.equal(frozenParentBuy.quoteBlockNumber, intent.sourceQuoteBlockNumber);
+    assert.equal(frozenParentBuy.quoteBlockHash.toLowerCase(), intent.sourceQuoteBlockHash.toLowerCase());
+    frozenParentBuyAuthorityObserved = true;
     signCalls += 1;
     return {
       actionId: intent.actionId,
@@ -106,6 +122,8 @@ try {
   assert.equal(first.action, 'ENTRY_APPROVAL_INCLUDED');
   assert.equal(signCalls, 1);
   assert.equal(fakeBroadcastBoundaryCalls, 1);
+  assert.equal(reservationCapabilityObserved, true);
+  assert.equal(frozenParentBuyAuthorityObserved, true);
   assert.equal(store.getCommitted()?.state, 'INCLUDED');
 
   const second = await advanceCanaryE0EntryApproval({ plannedBuy: buy, store, executor });
@@ -152,6 +170,14 @@ assert.ok(cycleSource.includes('committedEntry.intent.amount > calibration.baseA
 assert.ok(cycleSource.includes('getCompleteBaseline(committedEntry.launchId, committedEntry.baselineId)'), 'committed approval must rehydrate exact baseline');
 assert.ok(cycleSource.includes('CANARY_E0_ENTRY_APPROVAL_CANDIDATE_NO_LONGER_PASS'), 'candidate re-evaluation must fail closed after approval');
 
+const runtimeSource = fs.readFileSync(new URL('../src/canary/entryApprovalRuntime.ts', import.meta.url), 'utf8');
+assert.ok(runtimeSource.includes('insertReserved({'));
+assert.ok(runtimeSource.includes('}, params.plannedBuy);'), 'reservation must persist authoritative parent BUY');
+assert.ok(runtimeSource.includes("inserted.status !== 'INSERTED'"), 'duplicate reservation must not sign');
+assert.ok(runtimeSource.includes('signEntryApprovalReserved({'), 'ENTRY approval must use reservation-gated signer');
+assert.ok(runtimeSource.includes('signingCapability: inserted.signingCapability'), 'winning capability must reach signing boundary');
+assert.ok(!runtimeSource.includes('executor.signApproval(intent, preflight)'), 'generic approval signing must not be used for ENTRY');
+
 const cliSource = fs.readFileSync(new URL('../src/canarySniperCli.ts', import.meta.url), 'utf8');
 const kill = "if (entryApprovalEnabled && live) throw new Error('CANARY_E0_ENTRY_APPROVAL_LIVE_NOT_AUTHORIZED');";
 const dbMarker = "const dbPath = resolve(process.env.DB_PATH";
@@ -176,6 +202,9 @@ console.log(JSON.stringify({
   freshDollarCapCannotBeExceeded: true,
   exactBaselineRehydrationRequired: true,
   candidateReevaluationFailClosed: true,
+  reservationCapabilityGatesSigning: reservationCapabilityObserved,
+  frozenParentBuyAuthorityPreserved: frozenParentBuyAuthorityObserved,
+  genericEntrySigningForbidden: true,
   cliLiveEntryApprovalKillSwitch: true,
   cleanupRevokeQualified: false,
   networkBroadcastInvoked: false,
