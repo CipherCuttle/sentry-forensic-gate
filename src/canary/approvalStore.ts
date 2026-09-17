@@ -258,8 +258,8 @@ export class CanaryApprovalStore {
   private assertRecordIntentIdentity(record: CanaryApprovalActionRecord): void {
     if (record.intent.version !== CANARY_E0_APPROVAL_R0) throw new Error('CANARY_APPROVAL_VERSION_INVALID');
     if (record.intent.actionId !== record.actionId) throw new Error('CANARY_APPROVAL_INTENT_ACTION_ID_MISMATCH');
-    if (record.intent.parentBuyActionId !== record.parentBuyActionId) throw new Error('CANARY_APPROVAL_PARENT_BUY_MISMATCH');
-    if (record.intent.parentExitActionId !== record.parentExitActionId) throw new Error('CANARY_APPROVAL_PARENT_EXIT_MISMATCH');
+    if (record.intent.parentBuyActionId !== record.parentBuyActionId) throw new Error('CANARY_APPROVAL_PARENT_BUY_ID_MISMATCH');
+    if (record.intent.parentExitActionId !== record.parentExitActionId) throw new Error('CANARY_APPROVAL_PARENT_EXIT_ID_MISMATCH');
     if (record.intent.launchId !== record.launchId || record.intent.baselineId !== record.baselineId) {
       throw new Error('CANARY_APPROVAL_INTENT_IDENTITY_MISMATCH');
     }
