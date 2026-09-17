@@ -1,11 +1,27 @@
+import { randomBytes } from 'node:crypto';
 import Database from 'better-sqlite3';
-import { keccak256 } from 'viem';
+import { getAddress, keccak256 } from 'viem';
 import type { Hex } from '../domain.js';
-import { assertCanaryEntryApprovalCalldata, deriveCanaryEntryApprovalActionId, type CanaryEntryApprovalIntent } from './entryApproval.js';
-import { deriveCanaryActionId } from './swapIntent.js';
+import { sha256Hex } from '../evidence/canonical.js';
+import { WETH9 } from '../tsunami/contracts.js';
+import {
+  assertCanaryEntryApprovalCalldata,
+  assertCanaryEntryApprovalMatchesParentBuy,
+  CANARY_E0_ENTRY_APPROVAL_R0,
+  deriveCanaryEntryApprovalActionId,
+  type CanaryEntryApprovalIntent
+} from './entryApproval.js';
+import {
+  CANARY_PRIMARY_NOTIONAL_USD_MICROS,
+  deriveCanaryActionId,
+  type CanarySwapIntent
+} from './swapIntent.js';
 import type { CanaryActionState } from './types.js';
 
-export type CanaryEntryApprovalInsertResult = 'INSERTED' | 'DUPLICATE' | 'ENTRY_SLOT_TAKEN';
+export type CanaryEntryApprovalInsertResult =
+  | { status: 'INSERTED'; signingCapability: string }
+  | { status: 'DUPLICATE'; signingCapability: null }
+  | { status: 'ENTRY_SLOT_TAKEN'; signingCapability: null };
 
 export interface CanaryEntryApprovalActionRecord {
   actionId: string;
@@ -26,6 +42,8 @@ export interface CanaryEntryApprovalActionRecord {
 
 export class CanaryEntryApprovalStore {
   private readonly db: Database.Database;
+  private readonly signingCapabilities = new Map<string, string>();
+  private readonly consumedSigningActions = new Set<string>();
 
   constructor(path: string) {
     this.db = new Database(path);
@@ -36,6 +54,8 @@ export class CanaryEntryApprovalStore {
         action_id TEXT PRIMARY KEY,
         singleton_key INTEGER NOT NULL UNIQUE CHECK(singleton_key = 1),
         parent_buy_action_id TEXT NOT NULL UNIQUE,
+        parent_buy_digest TEXT NOT NULL,
+        parent_buy_intent_json TEXT NOT NULL,
         launch_id TEXT NOT NULL UNIQUE,
         baseline_id TEXT NOT NULL,
         state TEXT NOT NULL,
@@ -51,25 +71,38 @@ export class CanaryEntryApprovalStore {
       );
       CREATE INDEX IF NOT EXISTS idx_canary_entry_approval_state ON canary_entry_approval_actions(state);
     `);
+    this.ensureParentBuyAuthorityColumns();
   }
 
-  close(): void { this.db.close(); }
+  close(): void {
+    this.signingCapabilities.clear();
+    this.consumedSigningActions.clear();
+    this.db.close();
+  }
 
-  async insertReserved(record: CanaryEntryApprovalActionRecord): Promise<CanaryEntryApprovalInsertResult> {
+  async insertReserved(
+    record: CanaryEntryApprovalActionRecord,
+    parentBuyIntent: CanarySwapIntent
+  ): Promise<CanaryEntryApprovalInsertResult> {
     if (record.state !== 'RESERVED') throw new Error(`CANARY_ENTRY_APPROVAL_INITIAL_STATE_INVALID:${record.state}`);
     if (record.observedAllowanceBefore !== 0n) throw new Error(`CANARY_ENTRY_APPROVAL_DIRTY_ALLOWANCE:${record.observedAllowanceBefore}`);
     await this.assertRecordIdentity(record);
+    await assertCanaryEntryApprovalMatchesParentBuy(record.intent, parentBuyIntent);
     assertCanaryEntryApprovalCalldata(record.intent);
+    const parentBuyDigest = await sha256Hex(parentBuyIntent);
+    const parentBuyJson = jsonSafeStringify(parentBuyIntent);
 
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO canary_entry_approval_actions (
-        action_id, singleton_key, parent_buy_action_id, launch_id, baseline_id, state, intent_json,
-        observed_allowance_before, observed_allowance_after, nonce, transaction_hash,
-        serialized_transaction, last_error, created_at_ms, updated_at_ms
-      ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        action_id, singleton_key, parent_buy_action_id, parent_buy_digest, parent_buy_intent_json,
+        launch_id, baseline_id, state, intent_json, observed_allowance_before, observed_allowance_after,
+        nonce, transaction_hash, serialized_transaction, last_error, created_at_ms, updated_at_ms
+      ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       record.actionId,
       record.parentBuyActionId,
+      parentBuyDigest,
+      parentBuyJson,
       record.launchId,
       record.baselineId,
       record.state,
@@ -83,10 +116,14 @@ export class CanaryEntryApprovalStore {
       record.createdAtMs,
       record.updatedAtMs
     );
-    if (result.changes === 1) return 'INSERTED';
+    if (result.changes === 1) {
+      const signingCapability = randomBytes(32).toString('hex');
+      this.signingCapabilities.set(record.actionId, signingCapability);
+      return { status: 'INSERTED', signingCapability };
+    }
 
     const existing = this.db.prepare(`
-      SELECT action_id, parent_buy_action_id, launch_id, baseline_id
+      SELECT action_id, parent_buy_action_id, parent_buy_digest, parent_buy_intent_json, launch_id, baseline_id
       FROM canary_entry_approval_actions
       LIMIT 1
     `).get() as ExistingRow | undefined;
@@ -96,8 +133,44 @@ export class CanaryEntryApprovalStore {
       existing.parent_buy_action_id === record.parentBuyActionId &&
       existing.launch_id === record.launchId &&
       existing.baseline_id === record.baselineId
-    ) return 'DUPLICATE';
-    return 'ENTRY_SLOT_TAKEN';
+    ) {
+      if (!existing.parent_buy_digest || !existing.parent_buy_intent_json) {
+        throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BUY_AUTHORITY_MISSING');
+      }
+      if (existing.parent_buy_digest !== parentBuyDigest) {
+        throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BUY_DIGEST_MISMATCH');
+      }
+      return { status: 'DUPLICATE', signingCapability: null };
+    }
+    return { status: 'ENTRY_SLOT_TAKEN', signingCapability: null };
+  }
+
+  assertSigningAuthority(actionId: string, signingCapability: string): void {
+    this.assertSigningCapability(actionId, signingCapability);
+  }
+
+  async getAuthoritativeParentBuyIntent(actionId: string): Promise<CanarySwapIntent> {
+    const row = this.db.prepare(`
+      SELECT state, parent_buy_digest, parent_buy_intent_json
+      FROM canary_entry_approval_actions WHERE action_id = ?
+    `).get(actionId) as ParentBuyAuthorityRow | undefined;
+    if (!row) throw new Error(`CANARY_ENTRY_APPROVAL_ACTION_MISSING:${actionId}`);
+    if (row.state !== 'RESERVED') throw new Error(`CANARY_ENTRY_APPROVAL_SIGN_STATE_INVALID:${row.state}`);
+    if (!row.parent_buy_digest || !row.parent_buy_intent_json) {
+      throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BUY_AUTHORITY_MISSING');
+    }
+    const parentBuyIntent = reviveBuyIntent(row.parent_buy_intent_json);
+    const digest = await sha256Hex(parentBuyIntent);
+    if (digest !== row.parent_buy_digest) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BUY_DIGEST_DRIFT');
+    return parentBuyIntent;
+  }
+
+  async consumeSigningAuthority(actionId: string, signingCapability: string): Promise<CanarySwapIntent> {
+    this.assertSigningCapability(actionId, signingCapability);
+    const parentBuyIntent = await this.getAuthoritativeParentBuyIntent(actionId);
+    this.signingCapabilities.delete(actionId);
+    this.consumedSigningActions.add(actionId);
+    return parentBuyIntent;
   }
 
   getByParentBuyActionId(parentBuyActionId: string): CanaryEntryApprovalActionRecord | null {
@@ -120,7 +193,13 @@ export class CanaryEntryApprovalStore {
     return rows.map(fromRow);
   }
 
-  markSigned(actionId: string, params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }): void {
+  markSigned(
+    actionId: string,
+    params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }
+  ): void {
+    if (!this.consumedSigningActions.has(actionId)) {
+      throw new Error(`CANARY_ENTRY_APPROVAL_SIGNING_AUTHORITY_NOT_CONSUMED:${actionId}`);
+    }
     if (!Number.isSafeInteger(params.nonce) || params.nonce < 0) throw new Error(`CANARY_ENTRY_APPROVAL_NONCE_INVALID:${params.nonce}`);
     const derivedHash = keccak256(params.serializedTransaction);
     if (derivedHash.toLowerCase() !== params.transactionHash.toLowerCase()) {
@@ -131,6 +210,7 @@ export class CanaryEntryApprovalStore {
       transaction_hash: params.transactionHash.toLowerCase(),
       serialized_transaction: params.serializedTransaction
     });
+    this.consumedSigningActions.delete(actionId);
   }
 
   markSubmitted(actionId: string): void {
@@ -145,6 +225,8 @@ export class CanaryEntryApprovalStore {
     }
     this.db.prepare('UPDATE canary_entry_approval_actions SET state = ?, last_error = ?, updated_at_ms = ? WHERE action_id = ?')
       .run('SAFE_HALT', error.slice(0, 512), Date.now(), actionId);
+    this.signingCapabilities.delete(actionId);
+    this.consumedSigningActions.delete(actionId);
   }
 
   markIncluded(actionId: string, observedAllowanceAfter: bigint): void {
@@ -180,7 +262,17 @@ export class CanaryEntryApprovalStore {
       .run('REVERTED', Date.now(), actionId);
   }
 
+  private assertSigningCapability(actionId: string, signingCapability: string): void {
+    const expected = this.signingCapabilities.get(actionId);
+    if (!expected || signingCapability !== expected) {
+      throw new Error(`CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID:${actionId}`);
+    }
+  }
+
   private async assertRecordIdentity(record: CanaryEntryApprovalActionRecord): Promise<void> {
+    if (record.intent.version !== CANARY_E0_ENTRY_APPROVAL_R0) throw new Error('CANARY_ENTRY_APPROVAL_VERSION_INVALID');
+    if (record.intent.notionalUsdMicros !== CANARY_PRIMARY_NOTIONAL_USD_MICROS) throw new Error('CANARY_ENTRY_APPROVAL_NOTIONAL_INVALID');
+    if (getAddress(record.intent.token) !== getAddress(WETH9)) throw new Error('CANARY_ENTRY_APPROVAL_TOKEN_MUST_EQUAL_WETH9');
     if (record.intent.actionId !== record.actionId) throw new Error('CANARY_ENTRY_APPROVAL_INTENT_ACTION_ID_MISMATCH');
     if (record.intent.parentBuyActionId !== record.parentBuyActionId) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BUY_MISMATCH');
     if (record.intent.launchId !== record.launchId || record.intent.baselineId !== record.baselineId) {
@@ -225,11 +317,24 @@ export class CanaryEntryApprovalStore {
     const result = this.db.prepare(`UPDATE canary_entry_approval_actions SET ${assignments.join(', ')} WHERE action_id = ? AND state = ?`).run(...values);
     if (result.changes !== 1) throw new Error(`CANARY_ENTRY_APPROVAL_STATE_TRANSITION_FAILED:${actionId}:${expected}:${next}`);
   }
+
+  private ensureParentBuyAuthorityColumns(): void {
+    const columns = this.db.prepare('PRAGMA table_info(canary_entry_approval_actions)').all() as Array<{ name: string }>;
+    const names = new Set(columns.map((column) => column.name));
+    if (!names.has('parent_buy_digest')) {
+      this.db.exec('ALTER TABLE canary_entry_approval_actions ADD COLUMN parent_buy_digest TEXT');
+    }
+    if (!names.has('parent_buy_intent_json')) {
+      this.db.exec('ALTER TABLE canary_entry_approval_actions ADD COLUMN parent_buy_intent_json TEXT');
+    }
+  }
 }
 
 type ExistingRow = {
   action_id: string;
   parent_buy_action_id: string;
+  parent_buy_digest: string | null;
+  parent_buy_intent_json: string | null;
   launch_id: string;
   baseline_id: string;
 };
@@ -245,6 +350,12 @@ type EntryRow = ExistingRow & {
   last_error: string | null;
   created_at_ms: number;
   updated_at_ms: number;
+};
+
+type ParentBuyAuthorityRow = {
+  state: CanaryActionState;
+  parent_buy_digest: string | null;
+  parent_buy_intent_json: string | null;
 };
 
 type ReconcileRow = {
@@ -279,6 +390,17 @@ function reviveIntent(json: string): CanaryEntryApprovalIntent {
     if (typeof raw[key] === 'string' && /^\d+$/.test(raw[key] as string)) raw[key] = BigInt(raw[key] as string);
   }
   return raw as unknown as CanaryEntryApprovalIntent;
+}
+
+function reviveBuyIntent(json: string): CanarySwapIntent {
+  const raw = JSON.parse(json) as Record<string, unknown>;
+  for (const key of [
+    'quoteBlockNumber', 'notionalUsdMicros', 'amountIn', 'quotedAmountOut',
+    'amountOutMinimum', 'deadlineEpochSeconds', 'value'
+  ]) {
+    if (typeof raw[key] === 'string' && /^\d+$/.test(raw[key] as string)) raw[key] = BigInt(raw[key] as string);
+  }
+  return raw as unknown as CanarySwapIntent;
 }
 
 function jsonSafeStringify(value: unknown): string {
