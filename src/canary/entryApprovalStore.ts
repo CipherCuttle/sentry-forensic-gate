@@ -167,8 +167,8 @@ export class CanaryEntryApprovalStore {
 
   async consumeSigningAuthority(actionId: string, signingCapability: string): Promise<CanarySwapIntent> {
     this.assertSigningCapability(actionId, signingCapability);
-    const parentBuyIntent = await this.getAuthoritativeParentBuyIntent(actionId);
     this.signingCapabilities.delete(actionId);
+    const parentBuyIntent = await this.getAuthoritativeParentBuyIntent(actionId);
     this.consumedSigningActions.add(actionId);
     return parentBuyIntent;
   }
