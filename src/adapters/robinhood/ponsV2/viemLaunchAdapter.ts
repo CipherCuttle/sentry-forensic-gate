@@ -239,6 +239,16 @@ export class ViemPonsV2LaunchAdapter implements ChainLaunchAdapter {
       throw new Error(`PONS_V2_TOKEN_METADATA_MALFORMED:${input.args.token}`);
     }
 
+    // Re-read the launch block after all evidence reads. A reorg between the
+    // first hash check and these historical reads must not produce a mixed-state
+    // normalized candidate.
+    const canonicalHashAfter = await this.getBlockHash(input.blockNumber);
+    if (norm(canonicalHashAfter) !== norm(input.blockHash)) {
+      throw new Error(
+        `PONS_V2_REORG_DURING_READ:block=${input.blockNumber}:expected=${input.blockHash}:actual=${canonicalHashAfter}`
+      );
+    }
+
     const factory = normHex(this.authority.factory);
     const txHash = normHex(input.transactionHash);
     const token = normHex(input.args.token);

@@ -43,13 +43,18 @@ function makeClient({
   chainId = ROBINHOOD_CHAIN_ID,
   factoryBytecode = factoryCode,
   record = baseRecord,
-  canonicalBlockHash = blockHash
+  canonicalBlockHash = blockHash,
+  blockHashSequence
 } = {}) {
+  let blockHashReadIndex = 0;
   return {
     async getBlockNumber() { return 150n; },
     async getChainId() { return chainId; },
     async getBlock({ blockNumber }) {
-      return { number: blockNumber, hash: canonicalBlockHash, timestamp: 1_789_700_000n };
+      const hash = blockHashSequence
+        ? blockHashSequence[Math.min(blockHashReadIndex++, blockHashSequence.length - 1)]
+        : canonicalBlockHash;
+      return { number: blockNumber, hash, timestamp: 1_789_700_000n };
     },
     async getBytecode({ address }) {
       if (address.toLowerCase() === factory.toLowerCase()) return factoryBytecode;
@@ -169,6 +174,17 @@ const reorg = new ViemPonsV2LaunchAdapter({
 });
 await assert.rejects(
   () => reorg.catchUp(100n, 120n),
+  /PONS_V2_REORG_DURING_READ/
+);
+
+const midReadReorg = new ViemPonsV2LaunchAdapter({
+  authority,
+  client: makeClient({
+    blockHashSequence: [blockHash, `0x${'dd'.repeat(32)}`]
+  })
+});
+await assert.rejects(
+  () => midReadReorg.catchUp(100n, 120n),
   /PONS_V2_REORG_DURING_READ/
 );
 
