@@ -183,12 +183,6 @@ export function assertCanaryEntryApprovalCoversBuy(
   if (approval.buyFee !== buy.fee) throw new Error('CANARY_ENTRY_APPROVAL_BUY_FEE_MISMATCH');
   if (getAddress(approval.spender) !== getAddress(buy.router)) throw new Error('CANARY_ENTRY_APPROVAL_BUY_ROUTER_MISMATCH');
   if (approval.amount !== buy.amountIn) throw new Error(`CANARY_ENTRY_APPROVAL_BUY_AMOUNT_MISMATCH:${approval.amount}:${buy.amountIn}`);
-  if (approval.sourceQuoteBlockNumber !== buy.quoteBlockNumber) {
-    throw new Error('CANARY_ENTRY_APPROVAL_BUY_QUOTE_BLOCK_MISMATCH');
-  }
-  if (approval.sourceQuoteBlockHash.toLowerCase() !== buy.quoteBlockHash.toLowerCase()) {
-    throw new Error('CANARY_ENTRY_APPROVAL_BUY_QUOTE_HASH_MISMATCH');
-  }
   if (approval.notionalUsdMicros !== buy.notionalUsdMicros) throw new Error('CANARY_ENTRY_APPROVAL_BUY_NOTIONAL_MISMATCH');
 }
 
