@@ -38,31 +38,20 @@ The launch record is queryable through `getLaunchedToken(token)`.
 
 Pons V2 launches begin on a constant-product bonding curve. Graduation later moves reserves into a Uniswap V4 pool. The pair asset may be native ETH or an approved ERC-20. Later M2 quoting must therefore resolve the launch phase at the decision block instead of assuming a single pool venue.
 
-## Factory authority is intentionally unresolved
+## Canonical Pons V2 factory authority
 
-As of 2026-09-18, current official Pons surfaces disagree on the V2 factory address:
+The reviewed current factory epoch is pinned to:
 
-- the Pons documentation still publishes `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e`;
-- the current official `ponsfamily` repository README publishes `0x7E1EAbd52Ae29598e6483F72dCf1a70b14284dB8`.
+- factory `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e`;
+- deployment block `26,841,846`;
+- deployment transaction `0x3817f297aa7c2ef78789bffac57491ceedc218fef962d47ed36c272699deddeb`;
+- deployed runtime bytecode length `24,177` bytes;
+- runtime-code hash `0x89a27da6f703e0a7cdd4f233e7cb57604ff75b164530962d3ff7cf8483a67d84`;
+- authority ID `ROBINHOOD_PONS_V2_FACTORY_2026_08_03_R1`.
 
-M2A does **not** choose between them and does not expose a default factory.
+Current Pons source/docs, Bitquery's Pons V2 reference, and Blockscout's verified deployment metadata converge on this factory. Blockscout identifies the exact creation transaction and reports unchanged deployed bytecode.
 
-A runtime must be constructed with an explicit reviewed `PonsV2Authority` containing:
-
-- an authority ID;
-- Robinhood chain ID `4663`;
-- factory address;
-- first authorized block;
-- optional last authorized block;
-- expected factory runtime-code hash.
-
-Every authority check verifies the chain, epoch boundary, factory bytecode presence, and code hash at the requested block.
-
-Until an external authority-reconciliation step pins the canonical factory epoch and its code hash, the production Pons lane is:
-
-`BLOCKED_BY_FACTORY_AUTHORITY_RECONCILIATION`
-
-This is deliberate fail-closed behavior, not an invitation to use whichever address appears newest.
+`CURRENT_PONS_V2_AUTHORITY` is the reviewed production-shadow read authority. Every authority check still verifies the chain ID, epoch boundary, factory bytecode presence, and exact runtime-code hash at the requested block. No floating or automatically discovered "latest" factory is accepted.
 
 ## Launch normalization
 
