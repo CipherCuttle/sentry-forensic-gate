@@ -163,7 +163,7 @@ async function executeApproval(params: {
     createdAtMs: now,
     updatedAtMs: now
   });
-  if (inserted !== 'INSERTED') {
+  if (inserted.status !== 'INSERTED') {
     return report(params.buyActionId, 'BLOCKED_UNRESOLVED', {
       approvalActionId: intent.actionId,
       reason: 'CANARY_E0_APPROVAL_RESERVATION_DUPLICATE_NO_SIGN'
@@ -173,7 +173,7 @@ async function executeApproval(params: {
   let signed: SignedCanaryTransaction;
   try {
     signed = await params.executor.signApproval(intent, preflight);
-    params.approvalStore.markSigned(intent.actionId, signed);
+    params.approvalStore.markSigned(intent.actionId, inserted.signingCapability, signed);
   } catch (error) {
     params.approvalStore.markSafeHalt(intent.actionId, stableError(error));
     return report(params.buyActionId, 'BLOCKED_UNRESOLVED', {
