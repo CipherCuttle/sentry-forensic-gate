@@ -6,12 +6,21 @@ on:
       - agent/canary-e0-live-authorization-readiness-r0
     paths:
       - 'src/canary/approval.ts'
+      - 'src/canary/approvalStore.ts'
       - 'src/canary/entryApproval.ts'
       - 'src/canary/entryApprovalStore.ts'
+      - 'src/canary/exitStore.ts'
+      - 'src/canary/roundTripRuntime.ts'
       - 'src/canary/viemCanaryExecutor.ts'
       - 'src/canary/swapIntent.ts'
       - 'scripts/canary-boundary-check.mjs'
+      - 'scripts/canary-e0-roundtrip-qualification-r0-check.mjs'
+      - 'scripts/canary-e0-approval-lifecycle-r0-check.mjs'
+      - 'scripts/canary-e0-approval-executor-r0-check.mjs'
+      - 'scripts/canary-e0-roundtrip-runtime-r0-check.mjs'
+      - 'scripts/canary-e0-live-wiring-readiness-r0-check.mjs'
       - 'scripts/canary-e0-entry-approval-r0-check.mjs'
+      - '.github/workflows/canary-e0-live-wiring-readiness-r0.yml'
       - '.github/workflows/canary-e0-entry-approval-r0.yml'
   workflow_dispatch:
 
@@ -21,7 +30,7 @@ permissions:
 jobs:
   qualify-entry-approval:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,6 +39,15 @@ jobs:
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile --lockfile=false
       - run: pnpm build
+      - name: Preserve reviewed predecessor authority
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set -euo pipefail
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-roundtrip-qualification-r0-check.mjs
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-approval-lifecycle-r0-check.mjs
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-approval-executor-r0-check.mjs
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-roundtrip-runtime-r0-check.mjs
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-live-wiring-readiness-r0-check.mjs
       - name: Preserve narrow wallet-authority boundary
         run: node scripts/canary-boundary-check.mjs
       - name: Preserve repository research-only boundary
@@ -51,6 +69,13 @@ jobs:
           grep -q '"exactIncludedAllowanceRequired": true' canary-e0-entry-approval-r0.json
           grep -q '"buyPreflightSatisfiedAfterExactApproval": true' canary-e0-entry-approval-r0.json
           grep -q '"singletonEntryApprovalSlot": true' canary-e0-entry-approval-r0.json
+          grep -q '"reservationBeforeSigning": true' canary-e0-entry-approval-r0.json
+          grep -q '"reservationCapabilityWinnerOnly": true' canary-e0-entry-approval-r0.json
+          grep -q '"duplicateReservationCannotSign": true' canary-e0-entry-approval-r0.json
+          grep -q '"forgedCapabilityRejected": true' canary-e0-entry-approval-r0.json
+          grep -q '"crossStoreCapabilityRejected": true' canary-e0-entry-approval-r0.json
+          grep -q '"oneShotCapabilityConsumed": true' canary-e0-entry-approval-r0.json
+          grep -q '"restartReservedFailsClosed": true' canary-e0-entry-approval-r0.json
           grep -q '"sameViemCanaryExecutorUsed": true' canary-e0-entry-approval-r0.json
           grep -q '"networkBroadcastInvoked": false' canary-e0-entry-approval-r0.json
       - uses: actions/upload-artifact@v4
