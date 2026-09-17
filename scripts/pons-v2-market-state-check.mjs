@@ -162,6 +162,11 @@ await assert.rejects(
   /PONS_V2_MARKET_LAUNCH_RECORD_MISMATCH:PAIR_TOKEN/
 );
 
+await assert.rejects(
+  () => resolve({ record: { ...baseRecord, deployer: '0x7777777777777777777777777777777777777777' } }),
+  /PONS_V2_MARKET_LAUNCH_RECORD_MISMATCH:DEPLOYER/
+);
+
 const reorg = new ViemPonsV2MarketStateResolver({
   authority,
   client: makeClient({

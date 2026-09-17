@@ -247,6 +247,7 @@ export class ViemPonsV2MarketStateResolver {
   ): void {
     if (!record.exists) throw new Error(`PONS_V2_MARKET_LAUNCH_RECORD_MISSING:${launch.launchId}`);
     requireSameAddress('TOKEN', record.token, launch.token);
+    requireSameAddress('DEPLOYER', record.deployer, launch.creator);
     requireSameAddress('CURVE', record.curve, launchAuthority.curve);
     requireSameAddress('PAIR_TOKEN', record.pairToken, launchAuthority.pairToken);
     if (record.graduationThreshold !== launchAuthority.graduationThreshold) {
