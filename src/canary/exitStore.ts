@@ -1,9 +1,16 @@
 import Database from 'better-sqlite3';
-import { keccak256 } from 'viem';
+import { encodeFunctionData, keccak256 } from 'viem';
 import type { Hex } from '../domain.js';
 import type { CanaryActionState } from './types.js';
-import type { CanaryExitIntent } from './roundTrip.js';
-import type { CanarySwapIntent } from './swapIntent.js';
+import { CANARY_E0_ROUNDTRIP_R0, type CanaryExitIntent } from './roundTrip.js';
+import {
+  CANARY_MAX_SLIPPAGE_BPS,
+  CANARY_PRIMARY_NOTIONAL_USD_MICROS,
+  CANARY_SNIPER_R0,
+  INK_SWAP_ROUTER_02,
+  swapRouter02Abi,
+  type CanarySwapIntent
+} from './swapIntent.js';
 
 export type CanaryExitInsertResult = 'INSERTED' | 'DUPLICATE';
 
@@ -62,6 +69,7 @@ export class CanaryExitStore {
     if (record.intent.launchId !== record.launchId || record.intent.baselineId !== record.baselineId) {
       throw new Error('CANARY_EXIT_INTENT_IDENTITY_MISMATCH');
     }
+    assertExitCalldataMatchesIntent(record.intent);
 
     const transaction = this.db.transaction(() => {
       const parent = this.db.prepare(`
@@ -246,6 +254,46 @@ type ExitReconcileRow = {
   serialized_transaction: Hex | null;
   output_balance_before: string | null;
 };
+
+function assertExitCalldataMatchesIntent(exit: CanaryExitIntent): void {
+  if (exit.roundTripVersion !== CANARY_E0_ROUNDTRIP_R0 || exit.leg !== 'EXIT') {
+    throw new Error('CANARY_EXIT_VERSION_OR_LEG_INVALID');
+  }
+  if (exit.version !== CANARY_SNIPER_R0) throw new Error('CANARY_EXIT_SWAP_VERSION_INVALID');
+  if (!sameHex(exit.router, INK_SWAP_ROUTER_02)) throw new Error('CANARY_EXIT_ROUTER_INVALID');
+  if (exit.notionalUsdMicros !== CANARY_PRIMARY_NOTIONAL_USD_MICROS) throw new Error('CANARY_EXIT_NOTIONAL_INVALID');
+  if (exit.value !== 0n) throw new Error('CANARY_EXIT_VALUE_INVALID');
+  if (!Number.isInteger(exit.fee) || exit.fee < 0 || exit.fee > 1_000_000) throw new Error('CANARY_EXIT_FEE_INVALID');
+  if (exit.amountIn <= 0n || exit.quotedAmountOut <= 0n) throw new Error('CANARY_EXIT_QUOTE_INVALID');
+  if (!Number.isInteger(exit.slippageBps) || exit.slippageBps < 1 || exit.slippageBps > CANARY_MAX_SLIPPAGE_BPS) {
+    throw new Error('CANARY_EXIT_SLIPPAGE_INVALID');
+  }
+  const expectedMinimum = (exit.quotedAmountOut * BigInt(10_000 - exit.slippageBps)) / 10_000n;
+  if (expectedMinimum <= 0n || exit.amountOutMinimum !== expectedMinimum) {
+    throw new Error('CANARY_EXIT_MIN_OUT_INVALID');
+  }
+  if (exit.deadlineEpochSeconds <= 0n) throw new Error('CANARY_EXIT_DEADLINE_INVALID');
+
+  const exactInputCalldata = encodeFunctionData({
+    abi: swapRouter02Abi,
+    functionName: 'exactInputSingle',
+    args: [{
+      tokenIn: exit.tokenIn,
+      tokenOut: exit.tokenOut,
+      fee: exit.fee,
+      recipient: exit.recipient,
+      amountIn: exit.amountIn,
+      amountOutMinimum: exit.amountOutMinimum,
+      sqrtPriceLimitX96: 0n
+    }]
+  });
+  const expectedCalldata = encodeFunctionData({
+    abi: swapRouter02Abi,
+    functionName: 'multicall',
+    args: [exit.deadlineEpochSeconds, [exactInputCalldata]]
+  });
+  if (!sameHex(exit.calldata, expectedCalldata)) throw new Error('CANARY_EXIT_CALLDATA_MISMATCH');
+}
 
 function assertExitBoundToPersistedParent(exit: CanaryExitIntent, parent: ParentBuyRow, buy: CanarySwapIntent): void {
   if (buy.actionId !== parent.action_id || buy.launchId !== parent.launch_id || buy.baselineId !== parent.baseline_id) {

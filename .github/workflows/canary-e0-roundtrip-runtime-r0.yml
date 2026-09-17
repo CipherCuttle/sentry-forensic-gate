@@ -28,6 +28,15 @@ jobs:
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile --lockfile=false
       - run: pnpm build
+      - name: Preserve approval reservation capability fence
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set -euo pipefail
+          grep -q "inserted.status !== 'INSERTED'" src/canary/roundTripRuntime.ts
+          grep -q 'inserted.signingCapability' src/canary/roundTripRuntime.ts
+          grep -q 'signingCapabilities = new Map' src/canary/approvalStore.ts
+          grep -q 'CANARY_APPROVAL_SIGNING_CAPABILITY_INVALID' src/canary/approvalStore.ts
+          echo 'CANARY_E0_ROUNDTRIP_RESERVATION_CAPABILITY_FENCE=PASS'
       - name: Preserve narrow canary wallet authority
         run: node scripts/canary-boundary-check.mjs
       - name: Preserve research-only boundary outside executor

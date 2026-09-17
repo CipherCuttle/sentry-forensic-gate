@@ -239,7 +239,7 @@ const crashExitStore = new CanaryExitStore(crashDb);
 try {
   seedIncludedBuy(crashBuyStore, buy);
   const approval = await buildCanaryApprovalIntent({ buyIntent: buy, acquiredAmount: ACQUIRED });
-  assert.equal(await crashApprovalStore.insertReserved({
+  const crashReservation = await crashApprovalStore.insertReserved({
     actionId: approval.actionId,
     parentBuyActionId: approval.parentBuyActionId,
     parentExitActionId: approval.parentExitActionId,
@@ -255,7 +255,9 @@ try {
     lastError: null,
     createdAtMs: 1_700_000_010_000,
     updatedAtMs: 1_700_000_010_000
-  }), 'INSERTED');
+  });
+  assert.equal(crashReservation.status, 'INSERTED');
+  assert.match(crashReservation.signingCapability, /^[0-9a-f]{64}$/);
   const signsBefore = approvalSignCalls;
   const broadcastsBefore = broadcastCalls;
   const crashResult = await advanceCanaryE0RoundTrip({
