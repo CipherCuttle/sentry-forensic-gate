@@ -158,29 +158,10 @@ allowance = 1n;
 await assert.rejects(() => executor.signApproval(entryApproval, preflight), /CANARY_APPROVAL_ALLOWANCE_CHANGED/);
 allowance = 0n;
 
-const signed = await executor.signApproval(entryApproval, preflight);
-assert.equal(signed.actionId, entryApproval.actionId);
-assert.equal(signed.transactionHash, keccak256(signed.serializedTransaction));
-await assertSignedApprovalTransaction(entryApproval, signed, TEST_WALLET);
-await assertSignedCanaryTransactionEnvelope(signed, TEST_WALLET, caps);
-const parsed = parseTransaction(signed.serializedTransaction);
-assert.equal(parsed.chainId, INK_CHAIN_ID);
-assert.equal(getAddress(parsed.to), getAddress(WETH9));
-assert.equal(parsed.value ?? 0n, 0n);
-assert.equal(parsed.data, entryApproval.calldata);
-assert.equal(getAddress(await recoverTransactionAddress({ serializedTransaction: signed.serializedTransaction })), getAddress(TEST_WALLET));
-
-// After the exact base-token approval is included, the existing BUY preflight sees
-// sufficient allowance. No second wallet framework or manual pre-approval is needed.
-allowance = ENTRY_AMOUNT;
-const buyPreflight = await executor.preflight(buy);
-assert.equal(buyPreflight.inputAllowance, ENTRY_AMOUNT);
-assert.equal(buyPreflight.inputBalance, BASE_BALANCE);
-assert.ok(swapSimulationCalls >= 1);
-
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-e0-entry-approval-r0-'));
 const dbPath = path.join(tempDir, 'canary.sqlite');
 const store = new CanaryEntryApprovalStore(dbPath);
+let signed;
 try {
   const now = 1_700_000_000_000;
   const record = {
@@ -199,15 +180,82 @@ try {
     createdAtMs: now,
     updatedAtMs: now
   };
-  assert.equal(await store.insertReserved(record), 'INSERTED');
-  assert.equal(await store.insertReserved(record), 'DUPLICATE');
-  store.markSigned(entryApproval.actionId, {
+
+  // Reservation ownership is an ephemeral instance-local capability. Only the INSERT winner may sign.
+  const reservation = await store.insertReserved(record);
+  assert.equal(reservation.status, 'INSERTED');
+  assert.match(reservation.signingCapability, /^[0-9a-f]{64}$/);
+  const duplicate = await store.insertReserved(record);
+  assert.equal(duplicate.status, 'DUPLICATE');
+  assert.equal(duplicate.signingCapability, null);
+
+  const hostileSigned = {
+    nonce: 0,
+    transactionHash: keccak256('0x00'),
+    serializedTransaction: '0x00'
+  };
+  assert.throws(
+    () => store.markSigned(entryApproval.actionId, '', hostileSigned),
+    /CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID/
+  );
+  assert.throws(
+    () => store.markSigned(entryApproval.actionId, '00'.repeat(32), hostileSigned),
+    /CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID/
+  );
+
+  const duplicateStore = new CanaryEntryApprovalStore(dbPath);
+  try {
+    const duplicateWorker = await duplicateStore.insertReserved(record);
+    assert.equal(duplicateWorker.status, 'DUPLICATE');
+    assert.equal(duplicateWorker.signingCapability, null);
+    assert.throws(
+      () => duplicateStore.markSigned(entryApproval.actionId, reservation.signingCapability, hostileSigned),
+      /CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID/
+    );
+  } finally {
+    duplicateStore.close();
+  }
+
+  // Restart loses the non-persisted capability and therefore strands RESERVED fail-closed.
+  const restartDbPath = path.join(tempDir, 'restart.sqlite');
+  const restartWriter = new CanaryEntryApprovalStore(restartDbPath);
+  const restartReservation = await restartWriter.insertReserved(record);
+  assert.equal(restartReservation.status, 'INSERTED');
+  restartWriter.close();
+  const restartReader = new CanaryEntryApprovalStore(restartDbPath);
+  try {
+    assert.equal(restartReader.getCommitted()?.state, 'RESERVED');
+    assert.throws(
+      () => restartReader.markSigned(entryApproval.actionId, restartReservation.signingCapability, hostileSigned),
+      /CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID/
+    );
+  } finally {
+    restartReader.close();
+  }
+
+  // The actual signing operation occurs only after this worker won the reservation.
+  signed = await executor.signApproval(entryApproval, preflight);
+  assert.equal(signed.actionId, entryApproval.actionId);
+  assert.equal(signed.transactionHash, keccak256(signed.serializedTransaction));
+  await assertSignedApprovalTransaction(entryApproval, signed, TEST_WALLET);
+  await assertSignedCanaryTransactionEnvelope(signed, TEST_WALLET, caps);
+
+  store.markSigned(entryApproval.actionId, reservation.signingCapability, {
     nonce: signed.nonce,
     transactionHash: signed.transactionHash,
     serializedTransaction: signed.serializedTransaction
   });
+  assert.throws(
+    () => store.markSigned(entryApproval.actionId, reservation.signingCapability, {
+      nonce: signed.nonce,
+      transactionHash: signed.transactionHash,
+      serializedTransaction: signed.serializedTransaction
+    }),
+    /CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID/
+  );
+
   store.markSubmitted(entryApproval.actionId);
-  await assert.throws(
+  assert.throws(
     () => store.markIncluded(entryApproval.actionId, ENTRY_AMOUNT + 1n),
     /CANARY_ENTRY_APPROVAL_INCLUDED_ALLOWANCE_NOT_EXACT/
   );
@@ -232,7 +280,7 @@ try {
     deadlineSeconds: 30
   });
   const secondApproval = await buildCanaryEntryApprovalIntent(secondBuy);
-  assert.equal(await store.insertReserved({
+  const secondReservation = await store.insertReserved({
     ...record,
     actionId: secondApproval.actionId,
     parentBuyActionId: secondApproval.parentBuyActionId,
@@ -241,11 +289,29 @@ try {
     intent: secondApproval,
     createdAtMs: now + 1,
     updatedAtMs: now + 1
-  }), 'ENTRY_SLOT_TAKEN');
+  });
+  assert.equal(secondReservation.status, 'ENTRY_SLOT_TAKEN');
+  assert.equal(secondReservation.signingCapability, null);
 } finally {
   store.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
+
+assert.ok(signed, 'entry approval must have been signed after reservation ownership was established');
+const parsed = parseTransaction(signed.serializedTransaction);
+assert.equal(parsed.chainId, INK_CHAIN_ID);
+assert.equal(getAddress(parsed.to), getAddress(WETH9));
+assert.equal(parsed.value ?? 0n, 0n);
+assert.equal(parsed.data, entryApproval.calldata);
+assert.equal(getAddress(await recoverTransactionAddress({ serializedTransaction: signed.serializedTransaction })), getAddress(TEST_WALLET));
+
+// After the exact base-token approval is included, the existing BUY preflight sees
+// sufficient allowance. No second wallet framework or manual pre-approval is needed.
+allowance = ENTRY_AMOUNT;
+const buyPreflight = await executor.preflight(buy);
+assert.equal(buyPreflight.inputAllowance, ENTRY_AMOUNT);
+assert.equal(buyPreflight.inputBalance, BASE_BALANCE);
+assert.ok(swapSimulationCalls >= 1);
 
 const executorSource = fs.readFileSync(new URL('../src/canary/viemCanaryExecutor.ts', import.meta.url), 'utf8');
 const validatorMarker = 'await assertSignedCanaryTransactionEnvelope(signed, this.account.address, this.caps)';
@@ -268,6 +334,13 @@ console.log(JSON.stringify({
   exactIncludedAllowanceRequired: true,
   buyPreflightSatisfiedAfterExactApproval: true,
   singletonEntryApprovalSlot: true,
+  reservationBeforeSigning: true,
+  reservationCapabilityWinnerOnly: true,
+  duplicateReservationCannotSign: true,
+  forgedCapabilityRejected: true,
+  crossStoreCapabilityRejected: true,
+  oneShotCapabilityConsumed: true,
+  restartReservedFailsClosed: true,
   sameViemCanaryExecutorUsed: true,
   preBroadcastSignedEnvelopeValidationPreserved: true,
   networkBroadcastInvoked: false,
