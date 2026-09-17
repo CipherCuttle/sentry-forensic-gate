@@ -28,20 +28,24 @@ export type FastVetReason =
   | 'KNOWN_PRIOR_ADVERSE_CREATOR';
 
 export type FastVetBaselineStatus = 'COMPLETE' | 'UNVERIFIED';
+export type FastVetBaselinePolicyVersion =
+  | 'EXECUTABLE_BASELINE_R1'
+  | 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1';
 
 /**
  * Chain-neutral evidence surface consumed by FAST_VET_R0.
  *
  * Existing ExecutableBaselineBatch values satisfy this structurally. Authority,
- * decision-point and reverse-semantics fields stay mandatory even though the
- * frozen decision function does not branch on them: future adapters must supply
- * evidence with the same provenance strength rather than a policy-shaped stub.
+ * reviewed policy version, decision-point and reverse-semantics fields stay
+ * mandatory even though the frozen decision function does not branch on them:
+ * future adapters must supply evidence with the same provenance strength rather
+ * than a policy-shaped stub.
  */
 export interface FastVetBaselineEvidence {
   baselineId: string;
   authorityDigest: string;
   launchId: string;
-  policyVersion: string;
+  policyVersion: FastVetBaselinePolicyVersion;
   decisionBlock: bigint;
   decisionBlockHash: Hex;
   status: FastVetBaselineStatus;

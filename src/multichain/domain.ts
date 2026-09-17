@@ -1,4 +1,5 @@
 import type { Hex } from '../domain.js';
+import type { FastVetBaselineEvidence } from '../evaluation/fastVet.js';
 
 export const MULTICHAIN_SHADOW_RESEARCH_AUTHORITY = 'SHADOW_RESEARCH_ONLY_EDGE_UNPROVEN' as const;
 export const MULTICHAIN_ADAPTER_MODE = 'SHADOW_ONLY' as const;
@@ -100,24 +101,17 @@ export interface PortableBaselineLeg {
 
 /**
  * Portable evidence contract accepted by the unchanged FAST_VET_R0 decision logic.
+ * It extends FAST_VET's reviewed evidence contract directly so the two cannot drift.
  * reverseSemantics is intentionally frozen so quote diagnostics cannot become paper PnL.
  */
-export interface PortableBaselineBatch {
-  baselineId: string;
-  authorityDigest: string;
-  launchId: string;
+export interface PortableBaselineBatch extends FastVetBaselineEvidence {
   chainId: number;
   ecosystem: ResearchEcosystem;
   launchProtocol: LaunchProtocolId;
-  policyVersion: string;
-  decisionBlock: bigint;
-  decisionBlockHash: Hex;
   observedAtMs: number;
-  status: 'COMPLETE' | 'UNVERIFIED';
   reason?: string;
   market: NormalizedMarket | null;
   legs: readonly PortableBaselineLeg[];
-  reverseSemantics: 'INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL';
   sourceAuthority: SourceAuthorityEnvelope;
 }
 
