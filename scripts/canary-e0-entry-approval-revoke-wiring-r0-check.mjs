@@ -15,7 +15,8 @@ import {
 } from '../dist/canary/swapIntent.js';
 import { WETH9 } from '../dist/tsunami/contracts.js';
 
-const OWNER = '0x19E7E376E7C213B7E7e46cc70A5dD086DAff2A';
+const OWNER = '0x19e7e376e7c213b7e7e46cc70a5dd086daff2a';
+const WRONG_OWNER = '0x0000000000000000000000000000000000000001';
 const LAUNCHED = '0x1111111111111111111111111111111111111111';
 const HASH = `0x${'44'.repeat(32)}`;
 const ENTRY_AMOUNT = 1_000_000n;
@@ -108,6 +109,26 @@ await withStores('sentry-revoke-wiring-clean-', async ({ entryStore, revokeStore
     () => entryStore.markCleanupTerminal(terminal.actionId, 'CANDIDATE_EXPIRED'),
     /CANARY_ENTRY_APPROVAL_CLEANUP_TERMINAL_REASON_DRIFT/
   );
+});
+
+// Hostile identity case: a different executor wallet must be rejected before even reading allowance.
+let wrongOwnerAllowanceReads = 0;
+await withStores('sentry-revoke-wiring-owner-', async ({ entryStore, revokeStore, parent }) => {
+  const executor = {
+    walletAddress: WRONG_OWNER,
+    async getTokenAllowance() { wrongOwnerAllowanceReads += 1; return 0n; },
+    async preflightEntryApprovalRevoke() { throw new Error('NO_PREFLIGHT_EXPECTED'); },
+    async signEntryApprovalRevoke() { throw new Error('NO_SIGN_EXPECTED'); },
+    async broadcastExact() { throw new Error('NO_BROADCAST_EXPECTED'); },
+    async getReceiptIfPresent() { throw new Error('NO_RECEIPT_EXPECTED'); }
+  };
+  const result = await cleanupCanaryE0EntryApproval({
+    trigger: 'PARENT_BUY_INCLUDED', parentApproval: parent, entryApprovalStore: entryStore, revokeStore, executor
+  });
+  assert.equal(result.action, 'BLOCKED_SETUP');
+  assert.equal(result.reason, 'CANARY_E0_ENTRY_APPROVAL_CLEANUP_OWNER_MUST_EQUAL_EXECUTOR_WALLET');
+  assert.equal(wrongOwnerAllowanceReads, 0);
+  assert.equal(entryStore.getCommitted()?.state, 'INCLUDED');
 });
 
 // Deterministic expiry: one exact revoke may be signed, then the parent approval is terminal.
@@ -256,6 +277,7 @@ const quoteTryStart = cycleSource.indexOf('// Cleanup is intentionally forbidden
 const quoteTryEnd = cycleSource.indexOf('\n    } catch (error) {', quoteTryStart);
 assert.ok(quoteTryStart >= 0 && quoteTryEnd > quoteTryStart);
 assert.ok(!cycleSource.slice(quoteTryStart, quoteTryEnd).includes('runCleanup({'), 'transient quote path must not invoke cleanup');
+assert.match(wiringSource, /CLEANUP_OWNER_MUST_EQUAL_EXECUTOR_WALLET/);
 
 const revokeFlag = cliSource.indexOf('CANARY_E0_ENTRY_APPROVAL_REVOKE_ENABLED');
 const revokeRequiresEntry = cliSource.indexOf('CANARY_E0_ENTRY_APPROVAL_REVOKE_REQUIRES_ENTRY_APPROVAL');
@@ -276,6 +298,7 @@ console.log(JSON.stringify({
   candidateUnknownDoesNotRevoke: true,
   transientQuoteFailureDoesNotRevoke: true,
   parentBuyTerminalizedBeforeCleanup: true,
+  ownerMismatchBlockedBeforeAllowanceRead: wrongOwnerAllowanceReads === 0,
   alreadyZeroNoSign: alreadyCleanSignCalls === 0 && alreadyCleanBroadcastCalls === 0,
   exactRevokeSignCalls: revokeSignCalls,
   exactRevokeBroadcastCalls: revokeBroadcastCalls,
