@@ -138,21 +138,12 @@ try {
   assert.equal(signCalls, 1, 'included approval must not sign again');
   assert.equal(fakeBroadcastBoundaryCalls, 1, 'included approval must not rebroadcast');
 
-  const quoteBlockDrift = await advanceCanaryE0EntryApproval({
-    plannedBuy: await makeBuy({ quoteBlockNumber: 101n }),
+  const freshQuote = await advanceCanaryE0EntryApproval({
+    plannedBuy: await makeBuy({ quoteBlockNumber: 101n, quoteBlockHash: OTHER_HASH }),
     store,
     executor
   });
-  assert.equal(quoteBlockDrift.action, 'BLOCKED_SETUP');
-  assert.match(quoteBlockDrift.reason ?? '', /CANARY_ENTRY_APPROVAL_BUY_QUOTE_BLOCK_MISMATCH/);
-
-  const quoteHashDrift = await advanceCanaryE0EntryApproval({
-    plannedBuy: await makeBuy({ quoteBlockHash: OTHER_HASH }),
-    store,
-    executor
-  });
-  assert.equal(quoteHashDrift.action, 'BLOCKED_SETUP');
-  assert.match(quoteHashDrift.reason ?? '', /CANARY_ENTRY_APPROVAL_BUY_QUOTE_HASH_MISMATCH/);
+  assert.equal(freshQuote.action, 'READY_TO_BUY', 'later BUY poll must allow a fresh quote while frozen spend/market identity stays unchanged');
 
   const amountDrift = await advanceCanaryE0EntryApproval({
     plannedBuy: await makeBuy({ amountIn: ENTRY_AMOUNT - 1n }),
@@ -262,7 +253,7 @@ console.log(JSON.stringify({
   approvalAndBuySeparatedAcrossPolls: true,
   exactApprovedAmountBoundToBuy: true,
   buyTokenAndFeeIdentityBound: true,
-  sourceQuoteAuthorityFrozen: true,
+  freshRequotePreserved: true,
   concurrentCapabilityConsumeOneShot: true,
   widenedAllowanceBlocked: true,
   freshDollarCapCannotBeExceeded: true,
