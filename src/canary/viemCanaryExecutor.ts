@@ -259,15 +259,18 @@ export class ViemCanaryExecutor {
 
   async signEntryApprovalReserved(params: {
     intent: CanaryEntryApprovalIntent;
-    parentBuyIntent: CanarySwapIntent;
     preflight: CanaryApprovalPreflight;
     store: CanaryEntryApprovalStore;
     signingCapability: string;
   }): Promise<SignedCanaryTransaction> {
     if (!(params.store instanceof CanaryEntryApprovalStore)) throw new Error('CANARY_ENTRY_APPROVAL_STORE_AUTHORITY_INVALID');
     params.store.assertSigningAuthority(params.intent.actionId, params.signingCapability);
-    await assertCanaryEntryApprovalMatchesParentBuy(params.intent, params.parentBuyIntent);
-    return this.signApprovalBound(params.intent, params.preflight);
+    const authoritativeParentBuyIntent = await params.store.getAuthoritativeParentBuyIntent(params.intent.actionId);
+    await assertCanaryEntryApprovalMatchesParentBuy(params.intent, authoritativeParentBuyIntent);
+    return this.signApprovalBound(params.intent, params.preflight, async () => {
+      const consumedParentBuyIntent = await params.store.consumeSigningAuthority(params.intent.actionId, params.signingCapability);
+      await assertCanaryEntryApprovalMatchesParentBuy(params.intent, consumedParentBuyIntent);
+    });
   }
 
   async broadcastExact(signed: SignedCanaryTransaction): Promise<Hex> {
@@ -310,7 +313,11 @@ export class ViemCanaryExecutor {
     return this.publicClient.readContract({ address: token, abi: erc20CanaryAbi, functionName: 'allowance', args: [this.account.address, spender] });
   }
 
-  private async signApprovalBound(intent: CanaryExactApprovalIntent, preflight: CanaryApprovalPreflight): Promise<SignedCanaryTransaction> {
+  private async signApprovalBound(
+    intent: CanaryExactApprovalIntent,
+    preflight: CanaryApprovalPreflight,
+    beforeSign?: () => Promise<void>
+  ): Promise<SignedCanaryTransaction> {
     this.assertApprovalAuthority(intent);
     assertApprovalPreflightBinding(intent, preflight, this.account.address);
     assertFeeAndGasCaps(preflight.gas, preflight.maxFeePerGas, preflight.maxPriorityFeePerGas, this.caps);
@@ -324,6 +331,7 @@ export class ViemCanaryExecutor {
       throw new Error(`CANARY_APPROVAL_ALLOWANCE_CHANGED:${currentAllowance}`);
     }
     await this.assertApprovalSimulation(intent);
+    if (beforeSign) await beforeSign();
 
     const nonce = await this.publicClient.getTransactionCount({ address: this.account.address, blockTag: 'pending' });
     const serializedTransaction = await this.account.signTransaction({
