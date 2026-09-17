@@ -67,10 +67,14 @@ jobs:
           grep -q '"singletonEntryApprovalSlot": true' canary-e0-entry-approval-r0.json
           grep -q '"sameViemCanaryExecutorUsed": true' canary-e0-entry-approval-r0.json
           grep -q '"parentBuyExactBindingRequired": true' canary-e0-entry-approval-r0.json
+          grep -q '"frozenParentBuyLoadedFromStore": true' canary-e0-entry-approval-r0.json
           grep -q '"reservationCapabilityGatesSigning": true' canary-e0-entry-approval-r0.json
+          grep -q '"capabilityReplayCannotSign": true' canary-e0-entry-approval-r0.json
           grep -q '"duplicateReservationCannotSign": true' canary-e0-entry-approval-r0.json
           grep -q '"restartReservedCannotSign": true' canary-e0-entry-approval-r0.json
           grep -q '"intentBoundBroadcastValidation": true' canary-e0-entry-approval-r0.json
+          grep -q '"unknownSignedAuthorityBlocked": true' canary-e0-entry-approval-r0.json
+          grep -q '"preBroadcastSignedEnvelopeValidationPreserved": true' canary-e0-entry-approval-r0.json
           grep -q '"networkBroadcastInvoked": false' canary-e0-entry-approval-r0.json
       - uses: actions/upload-artifact@v4
         with:
