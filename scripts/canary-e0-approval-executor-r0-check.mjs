@@ -216,7 +216,7 @@ try {
     createdAtMs: now,
     updatedAtMs: now
   }), 'INSERTED');
-  assert.equal(await approvalStore.insertReserved({
+  const reservation = await approvalStore.insertReserved({
     actionId: approval.actionId,
     parentBuyActionId: approval.parentBuyActionId,
     parentExitActionId: approval.parentExitActionId,
@@ -232,9 +232,11 @@ try {
     lastError: null,
     createdAtMs: now + 1,
     updatedAtMs: now + 1
-  }), 'INSERTED');
+  });
+  assert.equal(reservation.status, 'INSERTED');
+  assert.match(reservation.signingCapability, /^[0-9a-f]{64}$/);
 
-  approvalStore.markSigned(approval.actionId, {
+  approvalStore.markSigned(approval.actionId, reservation.signingCapability, {
     nonce: signed.nonce,
     transactionHash: signed.transactionHash,
     serializedTransaction: signed.serializedTransaction
