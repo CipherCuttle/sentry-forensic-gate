@@ -65,3 +65,20 @@ export const erc20MetadataReadAbi = [
     outputs: [{ name: '', type: 'string' }]
   }
 ] as const;
+
+export const ponsV2CurveStateReadAbi = [
+  {
+    type: 'function',
+    name: 'graduated',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'bool' }]
+  },
+  {
+    type: 'function',
+    name: 'readyToGraduate',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'bool' }]
+  }
+] as const;
