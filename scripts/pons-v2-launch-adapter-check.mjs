@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { keccak256 } from 'viem';
-import { ROBINHOOD_CHAIN_ID, ZERO_ADDRESS } from '../dist/adapters/robinhood/ponsV2/contracts.js';
+import { ROBINHOOD_CHAIN_ID, PONS_V2_NATIVE_PAIR_TOKEN } from '../dist/adapters/robinhood/ponsV2/contracts.js';
 import { ViemPonsV2LaunchAdapter } from '../dist/adapters/robinhood/ponsV2/viemLaunchAdapter.js';
 
 const factory = '0x1111111111111111111111111111111111111111';
@@ -26,7 +26,7 @@ const baseRecord = {
   curve,
   deployer,
   creatorFeeRecipient: deployer,
-  pairToken: ZERO_ADDRESS,
+  pairToken: PONS_V2_NATIVE_PAIR_TOKEN,
   graduationThreshold: 50_000_000_000_000_000_000n,
   poolFee: 0,
   tickSpacing: 60,
@@ -67,7 +67,7 @@ function makeClient({
           token,
           curve,
           deployer,
-          pairToken: ZERO_ADDRESS,
+          pairToken: PONS_V2_NATIVE_PAIR_TOKEN,
           launchConfigId: 3n,
           graduationThreshold: baseRecord.graduationThreshold
         }
@@ -118,7 +118,7 @@ assert.deepEqual(
   },
   {
     curve,
-    pairToken: ZERO_ADDRESS,
+    pairToken: PONS_V2_NATIVE_PAIR_TOKEN,
     launchConfigId: '3',
     graduationThreshold: baseRecord.graduationThreshold.toString(),
     authorityId: authority.authorityId

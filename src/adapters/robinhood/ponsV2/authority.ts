@@ -1,5 +1,5 @@
 import type { Hex } from '../../../domain.js';
-import { ROBINHOOD_CHAIN_ID, ZERO_ADDRESS } from './contracts.js';
+import { ROBINHOOD_CHAIN_ID, PONS_V2_NATIVE_PAIR_TOKEN } from './contracts.js';
 
 /**
  * Reviewed Pons V2 factory epoch.
@@ -22,7 +22,7 @@ export function validatePonsV2Authority(authority: Readonly<PonsV2Authority>): v
   if (authority.chainId !== ROBINHOOD_CHAIN_ID) {
     throw new Error(`PONS_V2_AUTHORITY_CHAIN_MISMATCH:expected=${ROBINHOOD_CHAIN_ID}:actual=${authority.chainId}`);
   }
-  if (!/^0x[0-9a-fA-F]{40}$/.test(authority.factory) || norm(authority.factory) === norm(ZERO_ADDRESS)) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(authority.factory) || norm(authority.factory) === norm(PONS_V2_NATIVE_PAIR_TOKEN)) {
     throw new Error(`PONS_V2_AUTHORITY_FACTORY_INVALID:${authority.factory}`);
   }
   if (

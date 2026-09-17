@@ -3,7 +3,7 @@ import type { Hex } from '../../../domain.js';
 export const ROBINHOOD_CHAIN_ID = 4663 as const;
 export const DEFAULT_ROBINHOOD_RPC_URL = 'https://rpc.mainnet.chain.robinhood.com';
 export const ROBINHOOD_EXPLORER_URL = 'https://robinhoodchain.blockscout.com';
-export const ZERO_ADDRESS: Hex = '0x0000000000000000000000000000000000000000';
+export const PONS_V2_NATIVE_PAIR_TOKEN: Hex = '0x0000000000000000000000000000000000000000';
 
 export const ponsV2TokenLaunchedEvent = {
   type: 'event',
