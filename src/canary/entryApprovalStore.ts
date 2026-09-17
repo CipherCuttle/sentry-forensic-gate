@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { keccak256 } from 'viem';
 import type { Hex } from '../domain.js';
@@ -5,7 +6,10 @@ import { assertCanaryEntryApprovalCalldata, deriveCanaryEntryApprovalActionId, t
 import { deriveCanaryActionId } from './swapIntent.js';
 import type { CanaryActionState } from './types.js';
 
-export type CanaryEntryApprovalInsertResult = 'INSERTED' | 'DUPLICATE' | 'ENTRY_SLOT_TAKEN';
+export type CanaryEntryApprovalInsertResult =
+  | { status: 'INSERTED'; signingCapability: string }
+  | { status: 'DUPLICATE'; signingCapability: null }
+  | { status: 'ENTRY_SLOT_TAKEN'; signingCapability: null };
 
 export interface CanaryEntryApprovalActionRecord {
   actionId: string;
@@ -26,6 +30,7 @@ export interface CanaryEntryApprovalActionRecord {
 
 export class CanaryEntryApprovalStore {
   private readonly db: Database.Database;
+  private readonly signingCapabilities = new Map<string, string>();
 
   constructor(path: string) {
     this.db = new Database(path);
@@ -53,7 +58,10 @@ export class CanaryEntryApprovalStore {
     `);
   }
 
-  close(): void { this.db.close(); }
+  close(): void {
+    this.signingCapabilities.clear();
+    this.db.close();
+  }
 
   async insertReserved(record: CanaryEntryApprovalActionRecord): Promise<CanaryEntryApprovalInsertResult> {
     if (record.state !== 'RESERVED') throw new Error(`CANARY_ENTRY_APPROVAL_INITIAL_STATE_INVALID:${record.state}`);
@@ -83,7 +91,11 @@ export class CanaryEntryApprovalStore {
       record.createdAtMs,
       record.updatedAtMs
     );
-    if (result.changes === 1) return 'INSERTED';
+    if (result.changes === 1) {
+      const signingCapability = randomBytes(32).toString('hex');
+      this.signingCapabilities.set(record.actionId, signingCapability);
+      return { status: 'INSERTED', signingCapability };
+    }
 
     const existing = this.db.prepare(`
       SELECT action_id, parent_buy_action_id, launch_id, baseline_id
@@ -96,8 +108,8 @@ export class CanaryEntryApprovalStore {
       existing.parent_buy_action_id === record.parentBuyActionId &&
       existing.launch_id === record.launchId &&
       existing.baseline_id === record.baselineId
-    ) return 'DUPLICATE';
-    return 'ENTRY_SLOT_TAKEN';
+    ) return { status: 'DUPLICATE', signingCapability: null };
+    return { status: 'ENTRY_SLOT_TAKEN', signingCapability: null };
   }
 
   getByParentBuyActionId(parentBuyActionId: string): CanaryEntryApprovalActionRecord | null {
@@ -120,7 +132,12 @@ export class CanaryEntryApprovalStore {
     return rows.map(fromRow);
   }
 
-  markSigned(actionId: string, params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }): void {
+  markSigned(
+    actionId: string,
+    signingCapability: string,
+    params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }
+  ): void {
+    this.assertSigningCapability(actionId, signingCapability);
     if (!Number.isSafeInteger(params.nonce) || params.nonce < 0) throw new Error(`CANARY_ENTRY_APPROVAL_NONCE_INVALID:${params.nonce}`);
     const derivedHash = keccak256(params.serializedTransaction);
     if (derivedHash.toLowerCase() !== params.transactionHash.toLowerCase()) {
@@ -131,6 +148,7 @@ export class CanaryEntryApprovalStore {
       transaction_hash: params.transactionHash.toLowerCase(),
       serialized_transaction: params.serializedTransaction
     });
+    this.signingCapabilities.delete(actionId);
   }
 
   markSubmitted(actionId: string): void {
@@ -145,6 +163,7 @@ export class CanaryEntryApprovalStore {
     }
     this.db.prepare('UPDATE canary_entry_approval_actions SET state = ?, last_error = ?, updated_at_ms = ? WHERE action_id = ?')
       .run('SAFE_HALT', error.slice(0, 512), Date.now(), actionId);
+    this.signingCapabilities.delete(actionId);
   }
 
   markIncluded(actionId: string, observedAllowanceAfter: bigint): void {
@@ -178,6 +197,13 @@ export class CanaryEntryApprovalStore {
     this.assertSignedProvenance(row, actionId);
     this.db.prepare('UPDATE canary_entry_approval_actions SET state = ?, updated_at_ms = ? WHERE action_id = ?')
       .run('REVERTED', Date.now(), actionId);
+  }
+
+  private assertSigningCapability(actionId: string, signingCapability: string): void {
+    const expected = this.signingCapabilities.get(actionId);
+    if (!expected || signingCapability !== expected) {
+      throw new Error(`CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID:${actionId}`);
+    }
   }
 
   private async assertRecordIdentity(record: CanaryEntryApprovalActionRecord): Promise<void> {
