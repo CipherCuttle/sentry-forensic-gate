@@ -11,6 +11,7 @@ import { CanaryApprovalStore } from './canary/approvalStore.js';
 import { CanaryEntryApprovalStore } from './canary/entryApprovalStore.js';
 import { CanaryEntryApprovalRevokeStore } from './canary/entryApprovalRevokeStore.js';
 import { CanaryExitStore } from './canary/exitStore.js';
+import { assertCanaryE0LiveAuthorization } from './canary/liveAuthorization.js';
 import { CanaryStore } from './canary/store.js';
 import { syncCanarySniper, type CanaryCycleOptions } from './canary/cycle.js';
 import { syncCanaryE0RoundTripWiring } from './canary/roundTripWiring.js';
@@ -32,9 +33,14 @@ const roundTripEnabled = process.env.CANARY_E0_ROUNDTRIP_ENABLED === 'true';
 if (entryApprovalRevokeEnabled && !entryApprovalEnabled) {
   throw new Error('CANARY_E0_ENTRY_APPROVAL_REVOKE_REQUIRES_ENTRY_APPROVAL');
 }
-if (entryApprovalEnabled && live) throw new Error('CANARY_E0_ENTRY_APPROVAL_LIVE_NOT_AUTHORIZED');
-if (entryApprovalRevokeEnabled && live) throw new Error('CANARY_E0_ENTRY_APPROVAL_REVOKE_LIVE_NOT_AUTHORIZED');
-if (roundTripEnabled && live) throw new Error('CANARY_E0_ROUNDTRIP_LIVE_NOT_AUTHORIZED');
+assertCanaryE0LiveAuthorization({
+  live,
+  entryApprovalEnabled,
+  entryApprovalRevokeEnabled,
+  roundTripEnabled,
+  authorization: process.env.CANARY_E0_LIVE_AUTHORIZATION,
+  maxNotionalUsdMicros: process.env.CANARY_E0_LIVE_MAX_NOTIONAL_USD_MICROS
+});
 const startBlockRaw = process.env.SENTRY_START_BLOCK;
 if (!startBlockRaw) throw new Error('SENTRY_START_BLOCK is required; refuse to guess historical authority');
 const startBlock = BigInt(startBlockRaw);
