@@ -67,6 +67,8 @@ const entryApproval = await buildCanaryEntryApprovalIntent(buy);
 assert.notEqual(entryApproval.actionId, buy.actionId);
 assert.equal(entryApproval.parentBuyActionId, buy.actionId);
 assert.equal(getAddress(entryApproval.token), getAddress(WETH9));
+assert.equal(getAddress(entryApproval.buyTokenOut), getAddress(LAUNCHED));
+assert.equal(entryApproval.buyFee, buy.fee);
 assert.equal(entryApproval.amount, ENTRY_AMOUNT);
 assert.equal(entryApproval.notionalUsdMicros, CANARY_PRIMARY_NOTIONAL_USD_MICROS);
 
@@ -249,6 +251,8 @@ try {
     baselineId: entryApproval.baselineId,
     owner: entryApproval.owner,
     token: entryApproval.token,
+    buyTokenOut: entryApproval.buyTokenOut,
+    buyFee: entryApproval.buyFee,
     spender: entryApproval.spender,
     amount: forgedAmount,
     sourceQuoteBlockNumber: entryApproval.sourceQuoteBlockNumber,
