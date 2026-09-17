@@ -1,3 +1,4 @@
+import { getAddress } from 'viem';
 import type { Hex } from '../domain.js';
 import type { CanaryEntryApprovalActionRecord } from './entryApprovalStore.js';
 import { CanaryEntryApprovalStore } from './entryApprovalStore.js';
@@ -43,6 +44,11 @@ export async function cleanupCanaryE0EntryApproval(params: {
   if (params.parentApproval.state !== 'INCLUDED') {
     return report(params, 'BLOCKED_SETUP', {
       reason: `CANARY_E0_ENTRY_APPROVAL_CLEANUP_PARENT_NOT_INCLUDED:${params.parentApproval.state}`
+    });
+  }
+  if (getAddress(params.parentApproval.intent.owner) !== getAddress(params.executor.walletAddress)) {
+    return report(params, 'BLOCKED_SETUP', {
+      reason: 'CANARY_E0_ENTRY_APPROVAL_CLEANUP_OWNER_MUST_EQUAL_EXECUTOR_WALLET'
     });
   }
 
