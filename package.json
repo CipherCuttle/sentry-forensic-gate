@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.15.0",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "selfcheck": "node scripts/selfcheck.mjs",
@@ -18,7 +20,8 @@
     "historicalcompatibilitycheck": "node scripts/historical-compatibility-config-check.mjs",
     "historicalbaselinepolicycheck": "node scripts/historical-baseline-policy-config-check.mjs",
     "multichaincheck": "node scripts/multichain-m1-check.mjs",
-    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck && pnpm historicalbaselinepolicycheck && pnpm multichaincheck",
+    "ponsv2check": "node scripts/pons-v2-launch-adapter-check.mjs",
+    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck && pnpm historicalbaselinepolicycheck && pnpm multichaincheck && pnpm ponsv2check",
     "start:truth": "node dist/cli.js",
     "start:baseline": "node dist/baselineCli.js",
     "start:creator-outcome": "node dist/creatorOutcomeCli.js",
@@ -40,5 +43,9 @@
     "typescript": "5.8.3",
     "@types/node": "20.19.43"
   },
-  "pnpm": { "onlyBuiltDependencies": ["better-sqlite3"] }
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
 }
