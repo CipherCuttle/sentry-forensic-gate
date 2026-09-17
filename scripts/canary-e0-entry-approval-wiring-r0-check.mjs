@@ -234,14 +234,14 @@ assert.ok(runtimeSource.includes('signingCapability: inserted.signingCapability'
 assert.ok(!runtimeSource.includes('executor.signApproval(intent, preflight)'), 'generic approval signing must not be used for ENTRY');
 
 const cliSource = fs.readFileSync(new URL('../src/canarySniperCli.ts', import.meta.url), 'utf8');
-const kill = "if (entryApprovalEnabled && live) throw new Error('CANARY_E0_ENTRY_APPROVAL_LIVE_NOT_AUTHORIZED');";
-const dbMarker = "const dbPath = resolve(process.env.DB_PATH";
-const keyMarker = 'const privateKey = process.env.CANARY_PRIVATE_KEY';
-const networkMarker = 'const truthSource = new ViemSentryLaunchSource';
-assert.ok(cliSource.indexOf(kill) >= 0);
-assert.ok(cliSource.indexOf(kill) < cliSource.indexOf(dbMarker));
-assert.ok(cliSource.indexOf(kill) < cliSource.indexOf(keyMarker));
-assert.ok(cliSource.indexOf(kill) < cliSource.indexOf(networkMarker));
+const liveAuthorizationGate = cliSource.indexOf('assertCanaryE0LiveAuthorization({');
+const dbMarker = cliSource.indexOf("const dbPath = resolve(process.env.DB_PATH");
+const keyMarker = cliSource.indexOf('const privateKey = process.env.CANARY_PRIVATE_KEY');
+const networkMarker = cliSource.indexOf('const truthSource = new ViemSentryLaunchSource');
+assert.ok(liveAuthorizationGate >= 0, 'live authorization gate must protect entry approval');
+assert.ok(liveAuthorizationGate < dbMarker, 'live authorization gate must precede DB setup');
+assert.ok(liveAuthorizationGate < keyMarker, 'live authorization gate must precede private-key read');
+assert.ok(liveAuthorizationGate < networkMarker, 'live authorization gate must precede network setup');
 assert.ok(cliSource.includes('entryApprovalStore,'), 'real canary cycle must receive the entry approval store when enabled');
 
 console.log(JSON.stringify({
