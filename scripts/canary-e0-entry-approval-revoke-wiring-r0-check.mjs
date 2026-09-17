@@ -49,7 +49,7 @@ async function withStores(prefix, fn) {
   const revokeStore = new CanaryEntryApprovalRevokeStore(dbPath);
   try {
     const now = Date.now();
-    assert.equal(await entryStore.insertReserved({
+    const reservation = await entryStore.insertReserved({
       actionId: entryIntent.actionId,
       parentBuyActionId: entryIntent.parentBuyActionId,
       launchId: entryIntent.launchId,
@@ -64,7 +64,10 @@ async function withStores(prefix, fn) {
       lastError: null,
       createdAtMs: now,
       updatedAtMs: now
-    }), 'INSERTED');
+    }, buy);
+    assert.equal(reservation.status, 'INSERTED');
+    assert.ok(reservation.signingCapability);
+    await entryStore.consumeSigningAuthority(entryIntent.actionId, reservation.signingCapability);
     const serializedTransaction = '0x01';
     const transactionHash = keccak256(serializedTransaction);
     entryStore.markSigned(entryIntent.actionId, { nonce: 1, transactionHash, serializedTransaction });
