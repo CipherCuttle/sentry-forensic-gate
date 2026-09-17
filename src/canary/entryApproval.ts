@@ -1,5 +1,6 @@
 import { encodeFunctionData, getAddress, type Address, type Hex } from 'viem';
 import { sha256Hex } from '../evidence/canonical.js';
+import { WETH9 } from '../tsunami/contracts.js';
 import {
   assertCanaryApprovalCalldata,
   ERC20_MAX_UINT256,
@@ -47,6 +48,8 @@ export async function deriveCanaryEntryApprovalActionId(params: {
   }
   assertEntryApprovalAmount(params.amount);
   if (params.sourceQuoteBlockNumber < 0n) throw new Error('CANARY_ENTRY_APPROVAL_QUOTE_BLOCK_INVALID');
+  const token = getAddress(params.token);
+  if (token !== getAddress(WETH9)) throw new Error(`CANARY_ENTRY_APPROVAL_TOKEN_MUST_EQUAL_WETH9:${token}`);
   const spender = getAddress(params.spender);
   if (spender !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_ENTRY_APPROVAL_SPENDER_MUST_EQUAL_ROUTER:${spender}`);
   return sha256Hex({
@@ -55,7 +58,7 @@ export async function deriveCanaryEntryApprovalActionId(params: {
     launchId: params.launchId,
     baselineId: params.baselineId,
     owner: getAddress(params.owner),
-    token: getAddress(params.token),
+    token,
     spender,
     amount: params.amount,
     sourceQuoteBlockNumber: params.sourceQuoteBlockNumber,
@@ -73,6 +76,7 @@ export async function buildCanaryEntryApprovalIntent(buyIntent: CanarySwapIntent
   const owner = getAddress(buyIntent.recipient);
   const token = getAddress(buyIntent.tokenIn);
   const spender = getAddress(buyIntent.router);
+  if (token !== getAddress(WETH9)) throw new Error(`CANARY_ENTRY_APPROVAL_TOKEN_MUST_EQUAL_WETH9:${token}`);
   if (spender !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_ENTRY_APPROVAL_SPENDER_MUST_EQUAL_ROUTER:${spender}`);
 
   const actionId = await deriveCanaryEntryApprovalActionId({
@@ -112,6 +116,35 @@ export async function buildCanaryEntryApprovalIntent(buyIntent: CanarySwapIntent
   };
 }
 
+export async function assertCanaryEntryApprovalMatchesParentBuy(
+  intent: CanaryEntryApprovalIntent,
+  buyIntent: CanarySwapIntent
+): Promise<void> {
+  const expected = await buildCanaryEntryApprovalIntent(buyIntent);
+  if (intent.version !== expected.version) throw new Error('CANARY_ENTRY_APPROVAL_VERSION_INVALID');
+  if (intent.actionId !== expected.actionId) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_ACTION_ID_MISMATCH');
+  if (intent.parentBuyActionId !== expected.parentBuyActionId) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_BUY_ID_MISMATCH');
+  if (intent.launchId !== expected.launchId || intent.baselineId !== expected.baselineId) {
+    throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_IDENTITY_MISMATCH');
+  }
+  if (getAddress(intent.owner) !== getAddress(expected.owner)) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_OWNER_MISMATCH');
+  if (getAddress(intent.token) !== getAddress(expected.token)) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_TOKEN_MISMATCH');
+  if (getAddress(intent.spender) !== getAddress(expected.spender)) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_SPENDER_MISMATCH');
+  if (intent.amount !== expected.amount) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_AMOUNT_MISMATCH');
+  if (intent.sourceQuoteBlockNumber !== expected.sourceQuoteBlockNumber) {
+    throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_QUOTE_BLOCK_MISMATCH');
+  }
+  if (intent.sourceQuoteBlockHash.toLowerCase() !== expected.sourceQuoteBlockHash.toLowerCase()) {
+    throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_QUOTE_HASH_MISMATCH');
+  }
+  if (intent.notionalUsdMicros !== CANARY_PRIMARY_NOTIONAL_USD_MICROS) {
+    throw new Error('CANARY_ENTRY_APPROVAL_NOTIONAL_INVALID');
+  }
+  if (intent.calldata.toLowerCase() !== expected.calldata.toLowerCase()) {
+    throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BINDING_CALLDATA_MISMATCH');
+  }
+}
+
 export function assertCanaryEntryApprovalCalldata(
   intent: Pick<CanaryEntryApprovalIntent, 'spender' | 'amount' | 'calldata'>
 ): void {
@@ -131,5 +164,6 @@ function assertCanonicalBuy(intent: CanarySwapIntent): void {
   }
   if (intent.value !== 0n) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_VALUE_INVALID');
   if (getAddress(intent.router) !== INK_SWAP_ROUTER_02) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_ROUTER_INVALID');
+  if (getAddress(intent.tokenIn) !== getAddress(WETH9)) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_TOKEN_IN_INVALID');
   if (!intent.actionId || !intent.launchId || !intent.baselineId) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_IDENTITY_MISSING');
 }
