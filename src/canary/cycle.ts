@@ -107,6 +107,13 @@ export async function syncCanarySniper(params: {
         });
         return cleanupReport(headBlock, 0, 0, 0, 0, parent.launchId, finalized);
       }
+      if (reconciled?.action === 'ALREADY_CLEAN') {
+        return {
+          headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
+          action: 'BLOCKED_SETUP', launchId: unresolvedRevokes[0]!.launchId,
+          reason: 'CANARY_E0_ENTRY_APPROVAL_REVOKE_RECONCILE_ALREADY_CLEAN_INVALID'
+        };
+      }
       if (reconciled) {
         return {
           headBlock, candidatesConsidered: 0, pass: 0, reject: 0, unknown: 0,
