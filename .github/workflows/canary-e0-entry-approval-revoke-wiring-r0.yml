@@ -50,6 +50,7 @@ jobs:
           grep -q '"candidateUnknownDoesNotRevoke": true' canary-e0-entry-approval-revoke-wiring-r0.json
           grep -q '"transientQuoteFailureDoesNotRevoke": true' canary-e0-entry-approval-revoke-wiring-r0.json
           grep -q '"parentBuyTerminalizedBeforeCleanup": true' canary-e0-entry-approval-revoke-wiring-r0.json
+          grep -q '"ownerMismatchBlockedBeforeAllowanceRead": true' canary-e0-entry-approval-revoke-wiring-r0.json
           grep -q '"alreadyZeroNoSign": true' canary-e0-entry-approval-revoke-wiring-r0.json
           grep -q '"exactRevokeSignCalls": 1' canary-e0-entry-approval-revoke-wiring-r0.json
           grep -q '"exactRevokeBroadcastCalls": 1' canary-e0-entry-approval-revoke-wiring-r0.json
