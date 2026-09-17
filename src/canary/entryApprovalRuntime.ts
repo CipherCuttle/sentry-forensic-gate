@@ -130,11 +130,11 @@ async function executeEntryApproval(params: {
     lastError: null,
     createdAtMs: now,
     updatedAtMs: now
-  });
-  if (inserted !== 'INSERTED') {
+  }, params.plannedBuy);
+  if (inserted.status !== 'INSERTED') {
     return report(params.plannedBuy.actionId, 'BLOCKED_UNRESOLVED', {
       entryApprovalActionId: intent.actionId,
-      reason: inserted === 'ENTRY_SLOT_TAKEN'
+      reason: inserted.status === 'ENTRY_SLOT_TAKEN'
         ? 'CANARY_E0_ENTRY_APPROVAL_SLOT_TAKEN'
         : 'CANARY_E0_ENTRY_APPROVAL_RESERVATION_DUPLICATE_NO_SIGN'
     });
@@ -142,7 +142,12 @@ async function executeEntryApproval(params: {
 
   let signed: SignedCanaryTransaction;
   try {
-    signed = await params.executor.signApproval(intent, preflight);
+    signed = await params.executor.signEntryApprovalReserved({
+      intent,
+      preflight,
+      store: params.store,
+      signingCapability: inserted.signingCapability
+    });
     params.store.markSigned(intent.actionId, signed);
   } catch (error) {
     params.store.markSafeHalt(intent.actionId, stableError(error));
