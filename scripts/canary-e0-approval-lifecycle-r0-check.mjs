@@ -157,15 +157,48 @@ try {
     intent: { ...approval, calldata: malformedCalldata }
   }), /CANARY_APPROVAL_CALLDATA_AMOUNT_MISMATCH/);
 
-  assert.equal(await approvalStoreA.insertReserved(approvalRecord), 'INSERTED');
-  assert.equal(await approvalStoreB.insertReserved(approvalRecord), 'DUPLICATE', 'concurrent observers must converge on one approval action');
+  const winnerReservation = await approvalStoreA.insertReserved(approvalRecord);
+  assert.equal(winnerReservation.status, 'INSERTED');
+  assert.match(winnerReservation.signingCapability, /^[0-9a-f]{64}$/);
+  const loserReservation = await approvalStoreB.insertReserved(approvalRecord);
+  assert.equal(loserReservation.status, 'DUPLICATE', 'concurrent observers must converge on one approval action');
+  assert.equal(loserReservation.signingCapability, null, 'duplicate reservation must not receive signing authority');
   assert.equal(approvalStoreA.listUnresolved().length, 1);
 
   const serializedTransaction = '0x02';
   const signed = { nonce: 8, transactionHash: keccak256(serializedTransaction), serializedTransaction };
-  assert.throws(() => approvalStoreA.markSigned(approval.actionId, { ...signed, transactionHash: `0x${'77'.repeat(32)}` }), /CANARY_APPROVAL_SIGNED_IDENTITY_MISMATCH/);
-  approvalStoreA.markSigned(approval.actionId, signed);
+  const forgedCapability = '00'.repeat(32);
+
+  // Even with the winner token copied into another store instance, the loser has
+  // no local reservation lease and cannot transition the shared row to SIGNED.
+  assert.throws(
+    () => approvalStoreB.markSigned(approval.actionId, winnerReservation.signingCapability, signed),
+    /CANARY_APPROVAL_SIGNING_CAPABILITY_INVALID/
+  );
+  assert.throws(
+    () => approvalStoreA.markSigned(approval.actionId, forgedCapability, signed),
+    /CANARY_APPROVAL_SIGNING_CAPABILITY_INVALID/
+  );
+  assert.equal(approvalStoreA.listUnresolved()[0].state, 'RESERVED');
+
+  // Bad signed identity must not consume the legitimate capability; the winner
+  // may retry the local validation with the same lease and correct signed bytes.
+  assert.throws(
+    () => approvalStoreA.markSigned(
+      approval.actionId,
+      winnerReservation.signingCapability,
+      { ...signed, transactionHash: `0x${'77'.repeat(32)}` }
+    ),
+    /CANARY_APPROVAL_SIGNED_IDENTITY_MISMATCH/
+  );
+  approvalStoreA.markSigned(approval.actionId, winnerReservation.signingCapability, signed);
   assert.equal(approvalStoreA.listUnresolved()[0].state, 'SIGNED');
+  assert.throws(
+    () => approvalStoreA.markSigned(approval.actionId, winnerReservation.signingCapability, signed),
+    /CANARY_APPROVAL_SIGNING_CAPABILITY_INVALID/,
+    'successful signing must consume the reservation capability'
+  );
+
   approvalStoreA.markSubmitted(approval.actionId);
   approvalStoreA.markSafeHalt(approval.actionId, 'SIMULATED_RPC_TIMEOUT_AFTER_BROADCAST');
   const halted = approvalStoreA.listUnresolved();
@@ -192,7 +225,9 @@ const crashBuyStore = new CanaryStore(crashDbPath);
 const crashApprovalStore = new CanaryApprovalStore(crashDbPath);
 try {
   assert.equal(crashBuyStore.insert(parentRecord), 'INSERTED');
-  assert.equal(await crashApprovalStore.insertReserved(approvalRecord), 'INSERTED');
+  const crashReservation = await crashApprovalStore.insertReserved(approvalRecord);
+  assert.equal(crashReservation.status, 'INSERTED');
+  assert.match(crashReservation.signingCapability, /^[0-9a-f]{64}$/);
   crashApprovalStore.markSafeHalt(approval.actionId, 'SIMULATED_CRASH_BEFORE_SIGN');
   assert.throws(() => crashApprovalStore.markIncluded(approval.actionId, ACQUIRED), /CANARY_APPROVAL_RECONCILE_SIGNED_PROVENANCE_MISSING/);
   assert.throws(() => crashApprovalStore.markReverted(approval.actionId), /CANARY_APPROVAL_RECONCILE_SIGNED_PROVENANCE_MISSING/);
@@ -235,6 +270,7 @@ console.log(JSON.stringify({
   preApprovalAllowancePolicy: 'ZERO_ONLY',
   dirtyAllowancePolicy: 'FAIL_CLOSED',
   infiniteAllowance: 'FORBIDDEN',
+  reservationSigningFence: 'EPHEMERAL_256_BIT_INSERT_WINNER_CAPABILITY',
   persistedBeforeBroadcast: ['actionId', 'nonce', 'transactionHash', 'serializedTransaction'],
   preSignHaltPolicy: 'CANNOT_RECONCILE_WITHOUT_SIGNED_PROVENANCE',
   ambiguousOutcomePolicy: 'SAFE_HALT_RECONCILE_KNOWN_HASH_NO_RETRY',

@@ -24,6 +24,14 @@ jobs:
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile --lockfile=false
       - run: pnpm build
+      - name: Preserve reviewed round-trip predecessor authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-roundtrip-qualification-r0-check.mjs
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-approval-lifecycle-r0-check.mjs
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-approval-executor-r0-check.mjs
+          env -u CANARY_PRIVATE_KEY CANARY_LIVE=false node scripts/canary-e0-roundtrip-runtime-r0-check.mjs
       - name: Preserve narrow canary wallet authority
         run: node scripts/canary-boundary-check.mjs
       - name: Preserve research-only boundary outside executor

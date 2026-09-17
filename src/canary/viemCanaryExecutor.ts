@@ -26,11 +26,14 @@ import {
 } from './approval.js';
 import {
   assertCanaryEntryApprovalCalldata,
+  assertCanaryEntryApprovalMatchesParentBuy,
   CANARY_E0_ENTRY_APPROVAL_R0,
   type CanaryEntryApprovalIntent
 } from './entryApproval.js';
+import { CanaryEntryApprovalStore } from './entryApprovalStore.js';
 import {
   CANARY_MAX_DEADLINE_SECONDS,
+  CANARY_PRIMARY_NOTIONAL_USD_MICROS,
   INK_SWAP_ROUTER_02,
   swapRouter02Abi,
   type CanarySwapIntent
@@ -113,6 +116,8 @@ export class ViemCanaryExecutor {
   private readonly publicClient: PublicClient;
   private readonly walletClient: WalletClient;
   private readonly caps: CanaryExecutorCaps;
+  private readonly signedApprovalIntents = new Map<string, Readonly<CanaryExactApprovalIntent>>();
+  private readonly signedSwapHashes = new Set<string>();
 
   constructor(options: ViemCanaryExecutorOptions) {
     if (!/^0x[0-9a-fA-F]{64}$/.test(options.privateKey)) throw new Error('CANARY_PRIVATE_KEY_FORMAT_INVALID');
@@ -233,7 +238,7 @@ export class ViemCanaryExecutor {
       data: intent.calldata
     });
     const transactionHash = keccak256(serializedTransaction);
-    return {
+    const signed = {
       actionId: intent.actionId,
       nonce,
       transactionHash,
@@ -242,53 +247,47 @@ export class ViemCanaryExecutor {
       gas: preflight.gas,
       maxFeePerGas: preflight.maxFeePerGas,
       maxPriorityFeePerGas: preflight.maxPriorityFeePerGas
-    };
+    } satisfies SignedCanaryTransaction;
+    this.signedSwapHashes.add(transactionHash.toLowerCase());
+    return signed;
   }
 
-  async signApproval(intent: CanaryExactApprovalIntent, preflight: CanaryApprovalPreflight): Promise<SignedCanaryTransaction> {
-    this.assertApprovalAuthority(intent);
-    assertApprovalPreflightBinding(intent, preflight, this.account.address);
-    assertFeeAndGasCaps(preflight.gas, preflight.maxFeePerGas, preflight.maxPriorityFeePerGas, this.caps);
-    await this.getChainClock();
-    const [tokenBalance, currentAllowance] = await Promise.all([
-      this.publicClient.readContract({ address: intent.token, abi: erc20CanaryAbi, functionName: 'balanceOf', args: [this.account.address] }),
-      this.publicClient.readContract({ address: intent.token, abi: erc20CanaryAbi, functionName: 'allowance', args: [this.account.address, intent.spender] })
-    ]);
-    if (tokenBalance < intent.amount) throw new Error(`CANARY_APPROVAL_TOKEN_BALANCE_CHANGED:${tokenBalance}:${intent.amount}`);
-    if (classifyCanaryApprovalAllowance(currentAllowance, intent.amount) !== 'APPROVE_EXACT') {
-      throw new Error(`CANARY_APPROVAL_ALLOWANCE_CHANGED:${currentAllowance}`);
-    }
-    await this.assertApprovalSimulation(intent);
+  async signApproval(intent: CanaryApprovalIntent, preflight: CanaryApprovalPreflight): Promise<SignedCanaryTransaction> {
+    if (intent.version !== CANARY_E0_APPROVAL_R0) throw new Error('CANARY_ENTRY_APPROVAL_SIGN_REQUIRES_RESERVATION_CAPABILITY');
+    return this.signApprovalBound(intent, preflight);
+  }
 
-    const nonce = await this.publicClient.getTransactionCount({ address: this.account.address, blockTag: 'pending' });
-    const serializedTransaction = await this.account.signTransaction({
-      chainId: INK_CHAIN_ID,
-      type: 'eip1559',
-      nonce,
-      gas: preflight.gas,
-      maxFeePerGas: preflight.maxFeePerGas,
-      maxPriorityFeePerGas: preflight.maxPriorityFeePerGas,
-      to: intent.token,
-      value: 0n,
-      data: intent.calldata
+  async signEntryApprovalReserved(params: {
+    intent: CanaryEntryApprovalIntent;
+    preflight: CanaryApprovalPreflight;
+    store: CanaryEntryApprovalStore;
+    signingCapability: string;
+  }): Promise<SignedCanaryTransaction> {
+    if (!(params.store instanceof CanaryEntryApprovalStore)) throw new Error('CANARY_ENTRY_APPROVAL_STORE_AUTHORITY_INVALID');
+    params.store.assertSigningAuthority(params.intent.actionId, params.signingCapability);
+    const authoritativeParentBuyIntent = await params.store.getAuthoritativeParentBuyIntent(params.intent.actionId);
+    await assertCanaryEntryApprovalMatchesParentBuy(params.intent, authoritativeParentBuyIntent);
+    return this.signApprovalBound(params.intent, params.preflight, async () => {
+      const consumedParentBuyIntent = await params.store.consumeSigningAuthority(params.intent.actionId, params.signingCapability);
+      await assertCanaryEntryApprovalMatchesParentBuy(params.intent, consumedParentBuyIntent);
     });
-    const transactionHash = keccak256(serializedTransaction);
-    const signed: SignedCanaryTransaction = {
-      actionId: intent.actionId,
-      nonce,
-      transactionHash,
-      serializedTransaction,
-      serializedTransactionKeccak256: transactionHash,
-      gas: preflight.gas,
-      maxFeePerGas: preflight.maxFeePerGas,
-      maxPriorityFeePerGas: preflight.maxPriorityFeePerGas
-    };
-    await assertSignedApprovalTransaction(intent, signed, this.account.address);
-    return signed;
   }
 
   async broadcastExact(signed: SignedCanaryTransaction): Promise<Hex> {
     await assertSignedCanaryTransactionEnvelope(signed, this.account.address, this.caps);
+    const key = signed.transactionHash.toLowerCase();
+    const approvalIntent = this.signedApprovalIntents.get(key);
+    if (approvalIntent) {
+      await assertSignedApprovalTransaction(approvalIntent, signed, this.account.address);
+      this.signedApprovalIntents.delete(key);
+    } else if (this.signedSwapHashes.has(key)) {
+      const parsed = parseTransaction(signed.serializedTransaction);
+      if (!parsed.to || getAddress(parsed.to) !== INK_SWAP_ROUTER_02) throw new Error('CANARY_SWAP_BROADCAST_ROUTER_MISMATCH');
+      this.signedSwapHashes.delete(key);
+    } else {
+      throw new Error('CANARY_BROADCAST_SIGNED_AUTHORITY_UNKNOWN');
+    }
+
     const returnedHash = await this.walletClient.sendRawTransaction({ serializedTransaction: signed.serializedTransaction });
     if (returnedHash.toLowerCase() !== signed.transactionHash.toLowerCase()) {
       throw new Error(`CANARY_BROADCAST_HASH_MISMATCH:${returnedHash}:${signed.transactionHash}`);
@@ -314,6 +313,54 @@ export class ViemCanaryExecutor {
     return this.publicClient.readContract({ address: token, abi: erc20CanaryAbi, functionName: 'allowance', args: [this.account.address, spender] });
   }
 
+  private async signApprovalBound(
+    intent: CanaryExactApprovalIntent,
+    preflight: CanaryApprovalPreflight,
+    beforeSign?: () => Promise<void>
+  ): Promise<SignedCanaryTransaction> {
+    this.assertApprovalAuthority(intent);
+    assertApprovalPreflightBinding(intent, preflight, this.account.address);
+    assertFeeAndGasCaps(preflight.gas, preflight.maxFeePerGas, preflight.maxPriorityFeePerGas, this.caps);
+    await this.getChainClock();
+    const [tokenBalance, currentAllowance] = await Promise.all([
+      this.publicClient.readContract({ address: intent.token, abi: erc20CanaryAbi, functionName: 'balanceOf', args: [this.account.address] }),
+      this.publicClient.readContract({ address: intent.token, abi: erc20CanaryAbi, functionName: 'allowance', args: [this.account.address, intent.spender] })
+    ]);
+    if (tokenBalance < intent.amount) throw new Error(`CANARY_APPROVAL_TOKEN_BALANCE_CHANGED:${tokenBalance}:${intent.amount}`);
+    if (classifyCanaryApprovalAllowance(currentAllowance, intent.amount) !== 'APPROVE_EXACT') {
+      throw new Error(`CANARY_APPROVAL_ALLOWANCE_CHANGED:${currentAllowance}`);
+    }
+    await this.assertApprovalSimulation(intent);
+    if (beforeSign) await beforeSign();
+
+    const nonce = await this.publicClient.getTransactionCount({ address: this.account.address, blockTag: 'pending' });
+    const serializedTransaction = await this.account.signTransaction({
+      chainId: INK_CHAIN_ID,
+      type: 'eip1559',
+      nonce,
+      gas: preflight.gas,
+      maxFeePerGas: preflight.maxFeePerGas,
+      maxPriorityFeePerGas: preflight.maxPriorityFeePerGas,
+      to: intent.token,
+      value: 0n,
+      data: intent.calldata
+    });
+    const transactionHash = keccak256(serializedTransaction);
+    const signed: SignedCanaryTransaction = {
+      actionId: intent.actionId,
+      nonce,
+      transactionHash,
+      serializedTransaction,
+      serializedTransactionKeccak256: transactionHash,
+      gas: preflight.gas,
+      maxFeePerGas: preflight.maxFeePerGas,
+      maxPriorityFeePerGas: preflight.maxPriorityFeePerGas
+    };
+    await assertSignedApprovalTransaction(intent, signed, this.account.address);
+    this.signedApprovalIntents.set(transactionHash.toLowerCase(), Object.freeze({ ...intent }));
+    return signed;
+  }
+
   private async assertQuoteBlockCanonical(intent: CanarySwapIntent): Promise<void> {
     const block = await this.publicClient.getBlock({ blockNumber: intent.quoteBlockNumber });
     if (!block.hash) throw new Error(`CANARY_QUOTE_BLOCK_HASH_MISSING:${intent.quoteBlockNumber}`);
@@ -329,7 +376,9 @@ export class ViemCanaryExecutor {
     }
     if (intent.version === CANARY_E0_ENTRY_APPROVAL_R0) {
       if (getAddress(intent.owner) !== getAddress(this.account.address)) throw new Error('CANARY_ENTRY_APPROVAL_OWNER_MUST_EQUAL_WALLET');
+      if (getAddress(intent.token) !== getAddress(WETH9)) throw new Error(`CANARY_ENTRY_APPROVAL_TOKEN_MISMATCH:${intent.token}`);
       if (getAddress(intent.spender) !== INK_SWAP_ROUTER_02) throw new Error(`CANARY_ENTRY_APPROVAL_SPENDER_MISMATCH:${intent.spender}`);
+      if (intent.notionalUsdMicros !== CANARY_PRIMARY_NOTIONAL_USD_MICROS) throw new Error('CANARY_ENTRY_APPROVAL_NOTIONAL_INVALID');
       assertCanaryEntryApprovalCalldata(intent);
       return;
     }
