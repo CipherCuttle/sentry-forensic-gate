@@ -84,7 +84,6 @@ async function withStores(prefix, fn) {
   }
 }
 
-// BUY already consumed the exact allowance: terminalize without a wallet signature.
 let alreadyCleanSignCalls = 0;
 let alreadyCleanBroadcastCalls = 0;
 await withStores('sentry-revoke-wiring-clean-', async ({ entryStore, revokeStore, parent }) => {
@@ -114,7 +113,6 @@ await withStores('sentry-revoke-wiring-clean-', async ({ entryStore, revokeStore
   );
 });
 
-// Hostile identity case: a different executor wallet must be rejected before even reading allowance.
 let wrongOwnerAllowanceReads = 0;
 await withStores('sentry-revoke-wiring-owner-', async ({ entryStore, revokeStore, parent }) => {
   const executor = {
@@ -134,7 +132,6 @@ await withStores('sentry-revoke-wiring-owner-', async ({ entryStore, revokeStore
   assert.equal(entryStore.getCommitted()?.state, 'INCLUDED');
 });
 
-// Deterministic expiry: one exact revoke may be signed, then the parent approval is terminal.
 let revokeSignCalls = 0;
 let revokeBroadcastCalls = 0;
 await withStores('sentry-revoke-wiring-expired-', async ({ entryStore, revokeStore, parent }) => {
@@ -203,7 +200,6 @@ await withStores('sentry-revoke-wiring-expired-', async ({ entryStore, revokeSto
   assert.equal(terminal.lastError, 'CANARY_E0_ENTRY_APPROVAL_CLEANUP_TERMINAL:CANDIDATE_EXPIRED');
 });
 
-// Crash seam: an included revoke may be recovered and terminalized without a second signature/broadcast.
 let recoverySignCalls = 0;
 let recoveryBroadcastCalls = 0;
 await withStores('sentry-revoke-wiring-recovery-', async ({ entryStore, revokeStore, parent }) => {
@@ -284,14 +280,15 @@ assert.match(wiringSource, /CLEANUP_OWNER_MUST_EQUAL_EXECUTOR_WALLET/);
 
 const revokeFlag = cliSource.indexOf('CANARY_E0_ENTRY_APPROVAL_REVOKE_ENABLED');
 const revokeRequiresEntry = cliSource.indexOf('CANARY_E0_ENTRY_APPROVAL_REVOKE_REQUIRES_ENTRY_APPROVAL');
-const revokeKill = cliSource.indexOf('CANARY_E0_ENTRY_APPROVAL_REVOKE_LIVE_NOT_AUTHORIZED');
+const liveAuthorizationGate = cliSource.indexOf('assertCanaryE0LiveAuthorization({');
 const dbSetup = cliSource.indexOf('const dbPath');
 const privateKeyRead = cliSource.indexOf('const privateKey');
 const networkExecutor = cliSource.indexOf('new ViemCanaryExecutor');
 assert.ok(revokeFlag >= 0);
 assert.ok(revokeRequiresEntry > revokeFlag);
-assert.ok(revokeKill > revokeRequiresEntry);
-assert.ok(revokeKill < dbSetup && revokeKill < privateKeyRead && revokeKill < networkExecutor);
+assert.ok(liveAuthorizationGate > revokeRequiresEntry, 'live authorization gate must follow revoke dependency validation');
+assert.ok(liveAuthorizationGate < dbSetup && liveAuthorizationGate < privateKeyRead && liveAuthorizationGate < networkExecutor,
+  'live authorization gate must precede DB/key/network setup');
 assert.match(cliSource, /entryApprovalRevokeStore/);
 assert.match(cycleSource, /entryApprovalRevokeStore/);
 
