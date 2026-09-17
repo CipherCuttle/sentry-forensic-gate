@@ -66,6 +66,17 @@ export class CanaryStore {
     return row.count;
   }
 
+  getCommittedBuy(): CanaryActionRecord | null {
+    const rows = this.db.prepare(`
+      SELECT * FROM canary_actions
+      WHERE decision = 'PASS' AND state <> 'SKIPPED'
+      ORDER BY created_at_ms, action_id
+      LIMIT 2
+    `).all() as CanaryActionRow[];
+    if (rows.length > 1) throw new Error('CANARY_MULTIPLE_COMMITTED_BUYS_INVARIANT_BROKEN');
+    return rows[0] ? fromActionRow(rows[0]) : null;
+  }
+
   getAction(actionId: string): CanaryActionRecord | null {
     const row = this.db.prepare('SELECT * FROM canary_actions WHERE action_id = ?').get(actionId) as CanaryActionRow | undefined;
     return row ? fromActionRow(row) : null;
