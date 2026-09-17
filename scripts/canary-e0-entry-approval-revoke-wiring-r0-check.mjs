@@ -15,7 +15,7 @@ import {
 } from '../dist/canary/swapIntent.js';
 import { WETH9 } from '../dist/tsunami/contracts.js';
 
-const OWNER = '0x19e7e376e7c213b7e7e46cc70a5dd086daff2a';
+const OWNER = '0x0000000000000000000000000000000000000002';
 const WRONG_OWNER = '0x0000000000000000000000000000000000000001';
 const LAUNCHED = '0x1111111111111111111111111111111111111111';
 const HASH = `0x${'44'.repeat(32)}`;
