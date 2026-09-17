@@ -180,6 +180,33 @@ export class CanaryEntryApprovalStore {
       .run('REVERTED', Date.now(), actionId);
   }
 
+  markCleanupTerminal(actionId: string, reason: string): void {
+    const row = this.db.prepare(`
+      SELECT state, observed_allowance_after, last_error
+      FROM canary_entry_approval_actions WHERE action_id = ?
+    `).get(actionId) as CleanupRow | undefined;
+    if (!row) throw new Error(`CANARY_ENTRY_APPROVAL_ACTION_MISSING:${actionId}`);
+    const terminalReason = `CANARY_E0_ENTRY_APPROVAL_CLEANUP_TERMINAL:${reason}`.slice(0, 512);
+    if (row.state === 'SKIPPED') {
+      if (row.observed_allowance_after !== '0') {
+        throw new Error(`CANARY_ENTRY_APPROVAL_CLEANUP_TERMINAL_ALLOWANCE_NOT_ZERO:${row.observed_allowance_after ?? 'NULL'}`);
+      }
+      if (row.last_error !== terminalReason) {
+        throw new Error('CANARY_ENTRY_APPROVAL_CLEANUP_TERMINAL_REASON_DRIFT');
+      }
+      return;
+    }
+    if (row.state !== 'INCLUDED') {
+      throw new Error(`CANARY_ENTRY_APPROVAL_CLEANUP_INVALID_STATE:${row.state}`);
+    }
+    const result = this.db.prepare(`
+      UPDATE canary_entry_approval_actions
+      SET state = 'SKIPPED', observed_allowance_after = '0', last_error = ?, updated_at_ms = ?
+      WHERE action_id = ? AND state = 'INCLUDED'
+    `).run(terminalReason, Date.now(), actionId);
+    if (result.changes !== 1) throw new Error(`CANARY_ENTRY_APPROVAL_CLEANUP_TERMINAL_TRANSITION_FAILED:${actionId}`);
+  }
+
   private async assertRecordIdentity(record: CanaryEntryApprovalActionRecord): Promise<void> {
     if (record.intent.actionId !== record.actionId) throw new Error('CANARY_ENTRY_APPROVAL_INTENT_ACTION_ID_MISMATCH');
     if (record.intent.parentBuyActionId !== record.parentBuyActionId) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BUY_MISMATCH');
@@ -252,6 +279,12 @@ type ReconcileRow = {
   transaction_hash: Hex | null;
   serialized_transaction: Hex | null;
   intent_json: string;
+};
+
+type CleanupRow = {
+  state: CanaryActionState;
+  observed_allowance_after: string | null;
+  last_error: string | null;
 };
 
 function fromRow(row: EntryRow): CanaryEntryApprovalActionRecord {
