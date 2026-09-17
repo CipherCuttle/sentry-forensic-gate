@@ -51,8 +51,8 @@ jobs:
           grep -q '"postIncludeAllowanceMustBeZero": true' canary-e0-entry-approval-revoke-r0.json
           grep -q '"knownHashNoResignRebroadcast": true' canary-e0-entry-approval-revoke-r0.json
           grep -q '"sameViemCanaryExecutorUsed": true' canary-e0-entry-approval-revoke-r0.json
-          grep -q '"cycleWiringAdded": false' canary-e0-entry-approval-revoke-r0.json
-          grep -q '"cliWiringAdded": false' canary-e0-entry-approval-revoke-r0.json
+          grep -q '"cycleWiringAdded": true' canary-e0-entry-approval-revoke-r0.json
+          grep -q '"cliWiringAdded": true' canary-e0-entry-approval-revoke-r0.json
           grep -q '"networkBroadcastInvoked": false' canary-e0-entry-approval-revoke-r0.json
           grep -q '"liveCleanupReachable": false' canary-e0-entry-approval-revoke-r0.json
       - uses: actions/upload-artifact@v4

@@ -307,8 +307,8 @@ await withTempStore('sentry-e0-entry-revoke-restart-', async (store) => {
 
 const cycleSource = fs.readFileSync(new URL('../src/canary/cycle.ts', import.meta.url), 'utf8');
 const cliSource = fs.readFileSync(new URL('../src/canarySniperCli.ts', import.meta.url), 'utf8');
-assert.ok(!cycleSource.includes('entryApprovalRevokeRuntime'), 'revoke qualification must not yet be wired into BUY cycle');
-assert.ok(!cliSource.includes('entryApprovalRevoke'), 'revoke qualification must not yet be wired into real CLI');
+assert.ok(cycleSource.includes('entryApprovalRevokeRuntime'), 'successor wiring must preserve revoke runtime integration');
+assert.ok(cliSource.includes('entryApprovalRevoke'), 'successor wiring must preserve revoke CLI integration');
 
 assert.ok(revokeSimulationCalls >= 3, 'revoke simulation must execute in preflight and signing qualification');
 console.log(JSON.stringify({
@@ -330,8 +330,8 @@ console.log(JSON.stringify({
   knownHashNoResignRebroadcast: true,
   sameViemCanaryExecutorUsed: true,
   preBroadcastSignedEnvelopeValidationPreserved: true,
-  cycleWiringAdded: false,
-  cliWiringAdded: false,
+  cycleWiringAdded: true,
+  cliWiringAdded: true,
   networkBroadcastInvoked: false,
   liveCleanupReachable: false,
   realWalletSecretUsed: false,

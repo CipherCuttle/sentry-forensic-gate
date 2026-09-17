@@ -136,6 +136,7 @@ export class ViemCanaryExecutor {
   private readonly walletClient: WalletClient;
   private readonly caps: CanaryExecutorCaps;
   private readonly signedApprovalIntents = new Map<string, Readonly<CanaryExactApprovalIntent>>();
+  private readonly signedEntryApprovalRevokeIntents = new Map<string, Readonly<CanaryEntryApprovalRevokeIntent>>();
   private readonly signedSwapHashes = new Set<string>();
 
   constructor(options: ViemCanaryExecutorOptions) {
@@ -367,6 +368,7 @@ export class ViemCanaryExecutor {
       maxPriorityFeePerGas: preflight.maxPriorityFeePerGas
     };
     await assertSignedEntryApprovalRevokeTransaction(intent, signed, this.account.address);
+    this.signedEntryApprovalRevokeIntents.set(transactionHash.toLowerCase(), Object.freeze({ ...intent }));
     return signed;
   }
 
@@ -374,9 +376,13 @@ export class ViemCanaryExecutor {
     await assertSignedCanaryTransactionEnvelope(signed, this.account.address, this.caps);
     const key = signed.transactionHash.toLowerCase();
     const approvalIntent = this.signedApprovalIntents.get(key);
+    const revokeIntent = this.signedEntryApprovalRevokeIntents.get(key);
     if (approvalIntent) {
       await assertSignedApprovalTransaction(approvalIntent, signed, this.account.address);
       this.signedApprovalIntents.delete(key);
+    } else if (revokeIntent) {
+      await assertSignedEntryApprovalRevokeTransaction(revokeIntent, signed, this.account.address);
+      this.signedEntryApprovalRevokeIntents.delete(key);
     } else if (this.signedSwapHashes.has(key)) {
       const parsed = parseTransaction(signed.serializedTransaction);
       if (!parsed.to || getAddress(parsed.to) !== INK_SWAP_ROUTER_02) throw new Error('CANARY_SWAP_BROADCAST_ROUTER_MISMATCH');
