@@ -135,6 +135,22 @@ try {
     createdAtMs: now + 1,
     updatedAtMs: now + 1
   };
+
+  // A caller must not be able to keep canonical declarative EXIT fields while
+  // swapping in BUY-direction (or otherwise caller-controlled) calldata.
+  assert.throws(() => exitStoreA.insertReserved({
+    ...exitRecord,
+    intent: { ...exit, calldata: buy.calldata }
+  }), /CANARY_EXIT_CALLDATA_MISMATCH/);
+  assert.equal(exitStoreA.listUnresolved().length, 0, 'rejected calldata must not reserve an exit row');
+
+  // The reservation boundary must independently require the EXIT discriminator.
+  assert.throws(() => exitStoreA.insertReserved({
+    ...exitRecord,
+    intent: { ...exit, leg: 'BUY' }
+  }), /CANARY_EXIT_VERSION_OR_LEG_INVALID/);
+  assert.equal(exitStoreA.listUnresolved().length, 0, 'invalid EXIT discriminator must not reserve an exit row');
+
   assert.equal(exitStoreA.insertReserved(exitRecord), 'INSERTED');
   assert.equal(exitStoreB.insertReserved(exitRecord), 'DUPLICATE', 'two processes must converge on one exit identity');
   assert.equal(buyStore.countCommittedBuys(), 1, 'exit ledger must not weaken or consume another buy slot');
