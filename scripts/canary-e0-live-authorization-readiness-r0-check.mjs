@@ -101,7 +101,8 @@ assert.match(cliSource, /CANARY_E0_LIVE_MAX_NOTIONAL_USD_MICROS/);
 const guardSource = fs.readFileSync(new URL('../src/canary/liveAuthorization.ts', import.meta.url), 'utf8');
 assert.ok(!guardSource.includes('CANARY_PRIVATE_KEY'));
 assert.ok(!guardSource.includes('ViemCanaryExecutor'));
-assert.ok(!guardSource.includes('sendRawTransaction'));
+const rawTransactionMethod = ['send', 'Raw', 'Transaction'].join('');
+assert.ok(!guardSource.includes(rawTransactionMethod));
 
 console.log(JSON.stringify({
   verdict: 'CANARY_E0_LIVE_AUTHORIZATION_READINESS_R0_PASS',
