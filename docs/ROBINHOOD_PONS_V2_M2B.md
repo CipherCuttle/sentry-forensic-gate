@@ -38,14 +38,15 @@ Only `CURVE_ACTIVE` produces a `NormalizedMarket` in this slice.
 The resolver consumes the same explicit `PonsV2Authority` as M2A and reuses the M2A authority guard. At the decision block it:
 
 1. verifies Robinhood chain ID and the pinned Pons factory runtime-code hash;
-2. reads the canonical factory launch record;
-3. cross-checks immutable launch identity against the M2A source-authority envelope;
-4. reads curve state only for `NotGraduated`;
-5. checks curve bytecode for an active/ready curve;
-6. re-reads the decision-block hash after all evidence reads;
-7. re-verifies factory authority.
+2. binds the M2A source-authority ID, factory runtime hash, factory, token, deployer, launch ID, event ID, curve, pair token, and graduation threshold to the current authority/launch;
+3. reads the canonical factory launch record and cross-checks immutable launch identity;
+4. checks curve bytecode and the curve's `graduated()` state for every factory phase;
+5. for `NotGraduated`, requires unswept fields and resolves `readyToGraduate()`;
+6. for post-sweep phases, requires curve/factory phase consistency plus the phase-specific swept-field invariants;
+7. re-verifies factory authority;
+8. performs the **final chain-dependent read** by re-reading the decision-block hash.
 
-A moving decision block or contradictory factory/curve phase fails closed.
+A moving decision block, broken M2A authority lineage, or contradictory factory/curve phase fails closed. No chain-dependent read occurs after the final block-hash fence.
 
 ## Deliberate quote boundary
 
