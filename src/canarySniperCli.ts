@@ -43,14 +43,14 @@ const factory = (process.env.SENTRY_LAUNCH_FACTORY as Hex | undefined) ?? DEFAUL
 
 const truthOptions: SentryTruthOptions = {
   startBlock,
-  confirmations: envBigInt('SENTRY_CONFIRMATIONS', 0n),
+  confirmations: envBigInt('SENTRY_CONFIRMATIONS', 2n),
   maxBatchBlocks: envBigInt('SENTRY_MAX_BATCH_BLOCKS', 1000n),
   reorgLookbackBlocks: envBigInt('SENTRY_REORG_LOOKBACK_BLOCKS', 64n),
   pollIntervalMs: envInt('SENTRY_POLL_INTERVAL_MS', 500)
 };
 const baselineOptions: ExecutableBaselineOptions = {
   decisionDelayBlocks: envBigInt('BASELINE_DECISION_DELAY_BLOCKS', 2n),
-  confirmations: envBigInt('BASELINE_CONFIRMATIONS', 0n),
+  confirmations: envBigInt('BASELINE_CONFIRMATIONS', 2n),
   maxLaunchesPerSync: envInt('BASELINE_MAX_LAUNCHES_PER_SYNC', 100)
 };
 const outcomeOptions: ForwardOutcomeOptions = {
@@ -166,7 +166,14 @@ function jsonSafe(value: unknown): unknown {
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
   return new Promise((resolveSleep) => {
-    const timer = setTimeout(resolveSleep, ms);
-    signal.addEventListener('abort', () => { clearTimeout(timer); resolveSleep(); }, { once: true });
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolveSleep();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolveSleep();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
   });
 }
