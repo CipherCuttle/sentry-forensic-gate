@@ -295,15 +295,14 @@ try {
 }
 
 const cliSource = fs.readFileSync('src/canarySniperCli.ts', 'utf8');
-const guardNeedle = "if (roundTripEnabled && live) throw new Error('CANARY_E0_ROUNDTRIP_LIVE_NOT_AUTHORIZED');";
-const guardIndex = cliSource.indexOf(guardNeedle);
+const guardIndex = cliSource.indexOf('assertCanaryE0LiveAuthorization({');
 const startBlockIndex = cliSource.indexOf('const startBlockRaw = process.env.SENTRY_START_BLOCK;');
 const dbIndex = cliSource.indexOf('const dbPath = resolve(');
 const privateKeyIndex = cliSource.indexOf('const privateKey = process.env.CANARY_PRIVATE_KEY');
 const networkIndex = cliSource.indexOf('const truthSource = new ViemSentryLaunchSource');
-assert.ok(guardIndex >= 0, 'live round-trip kill-switch missing');
+assert.ok(guardIndex >= 0, 'live authorization gate missing');
 for (const [label, index] of [['start-block', startBlockIndex], ['db', dbIndex], ['private-key', privateKeyIndex], ['network', networkIndex]]) {
-  assert.ok(index > guardIndex, `live round-trip kill-switch must precede ${label} setup`);
+  assert.ok(index > guardIndex, `live authorization gate must precede ${label} setup`);
 }
 
 console.log(JSON.stringify({
