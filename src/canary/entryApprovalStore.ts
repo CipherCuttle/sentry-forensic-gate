@@ -1,9 +1,15 @@
 import { randomBytes } from 'node:crypto';
 import Database from 'better-sqlite3';
-import { keccak256 } from 'viem';
+import { getAddress, keccak256 } from 'viem';
 import type { Hex } from '../domain.js';
-import { assertCanaryEntryApprovalCalldata, deriveCanaryEntryApprovalActionId, type CanaryEntryApprovalIntent } from './entryApproval.js';
-import { deriveCanaryActionId } from './swapIntent.js';
+import { WETH9 } from '../tsunami/contracts.js';
+import {
+  assertCanaryEntryApprovalCalldata,
+  CANARY_E0_ENTRY_APPROVAL_R0,
+  deriveCanaryEntryApprovalActionId,
+  type CanaryEntryApprovalIntent
+} from './entryApproval.js';
+import { CANARY_PRIMARY_NOTIONAL_USD_MICROS, deriveCanaryActionId } from './swapIntent.js';
 import type { CanaryActionState } from './types.js';
 
 export type CanaryEntryApprovalInsertResult =
@@ -112,6 +118,10 @@ export class CanaryEntryApprovalStore {
     return { status: 'ENTRY_SLOT_TAKEN', signingCapability: null };
   }
 
+  assertSigningAuthority(actionId: string, signingCapability: string): void {
+    this.assertSigningCapability(actionId, signingCapability);
+  }
+
   getByParentBuyActionId(parentBuyActionId: string): CanaryEntryApprovalActionRecord | null {
     const row = this.db.prepare('SELECT * FROM canary_entry_approval_actions WHERE parent_buy_action_id = ?')
       .get(parentBuyActionId) as EntryRow | undefined;
@@ -207,6 +217,9 @@ export class CanaryEntryApprovalStore {
   }
 
   private async assertRecordIdentity(record: CanaryEntryApprovalActionRecord): Promise<void> {
+    if (record.intent.version !== CANARY_E0_ENTRY_APPROVAL_R0) throw new Error('CANARY_ENTRY_APPROVAL_VERSION_INVALID');
+    if (record.intent.notionalUsdMicros !== CANARY_PRIMARY_NOTIONAL_USD_MICROS) throw new Error('CANARY_ENTRY_APPROVAL_NOTIONAL_INVALID');
+    if (getAddress(record.intent.token) !== getAddress(WETH9)) throw new Error('CANARY_ENTRY_APPROVAL_TOKEN_MUST_EQUAL_WETH9');
     if (record.intent.actionId !== record.actionId) throw new Error('CANARY_ENTRY_APPROVAL_INTENT_ACTION_ID_MISMATCH');
     if (record.intent.parentBuyActionId !== record.parentBuyActionId) throw new Error('CANARY_ENTRY_APPROVAL_PARENT_BUY_MISMATCH');
     if (record.intent.launchId !== record.launchId || record.intent.baselineId !== record.baselineId) {
