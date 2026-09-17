@@ -54,7 +54,11 @@ Wall-clock `observedAtMs` remains outside source authority, matching existing re
 
 ## Frozen strategy semantics
 
-`FAST_VET_R0` decision logic and configuration are unchanged. Its TypeScript input is narrowed to an explicit chain-neutral baseline-evidence interface while retaining mandatory provenance fields: authority digest, decision block/hash, policy version, and `INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL` reverse semantics.
+`src/evaluation/fastVet.ts` remains byte-for-byte unchanged. The repository's frozen-source hash therefore remains authoritative.
+
+M1 defines `PortableFastVetBaselineEvidence` as the chain-neutral evidence surface the frozen evaluator actually reads, while retaining mandatory provenance fields: authority digest, reviewed baseline policy version, decision block/hash, and `INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL` reverse semantics.
+
+`evaluatePortableFastVet()` is a compatibility bridge only. It validates those authority invariants and then delegates to the existing frozen `evaluateFastVet()` function. It contains no PASS/REJECT/UNKNOWN decision logic of its own and does not synthesize fake Ink/Tsunami market fields simply to satisfy the legacy TypeScript signature.
 
 The initial baseline ladder remains exactly:
 
@@ -68,6 +72,7 @@ The primary FAST_VET notional remains exactly `$1`.
 
 M1 does not:
 
+- change `src/evaluation/fastVet.ts` or `src/evaluation/fastVetShadow.ts`;
 - change `src/canary/**`;
 - change the existing Ink live authorization;
 - migrate the SQLite schema;

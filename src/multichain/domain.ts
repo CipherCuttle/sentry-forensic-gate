@@ -1,5 +1,5 @@
 import type { Hex } from '../domain.js';
-import type { FastVetBaselineEvidence } from '../evaluation/fastVet.js';
+import type { BaselinePolicyVersion } from '../shadow/baselineTypes.js';
 
 export const MULTICHAIN_SHADOW_RESEARCH_AUTHORITY = 'SHADOW_RESEARCH_ONLY_EDGE_UNPROVEN' as const;
 export const MULTICHAIN_ADAPTER_MODE = 'SHADOW_ONLY' as const;
@@ -100,11 +100,31 @@ export interface PortableBaselineLeg {
 }
 
 /**
- * Portable evidence contract accepted by the unchanged FAST_VET_R0 decision logic.
- * It extends FAST_VET's reviewed evidence contract directly so the two cannot drift.
- * reverseSemantics is intentionally frozen so quote diagnostics cannot become paper PnL.
+ * Exact chain-neutral evidence surface read by the frozen FAST_VET_R0 function.
+ * Provenance fields remain mandatory even where the frozen evaluator does not branch on them.
  */
-export interface PortableBaselineBatch extends FastVetBaselineEvidence {
+export interface PortableFastVetBaselineEvidence {
+  baselineId: string;
+  authorityDigest: string;
+  launchId: string;
+  policyVersion: BaselinePolicyVersion;
+  decisionBlock: bigint;
+  decisionBlockHash: Hex;
+  status: 'COMPLETE' | 'UNVERIFIED';
+  legs: readonly {
+    notionalUsdMicros: bigint;
+    entry: { executable: boolean };
+    reverse: { executable: boolean } | null;
+    independentReverseRecoveryBps: bigint | null;
+  }[];
+  reverseSemantics: 'INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL';
+}
+
+/**
+ * Portable evidence batch for the common research engine. The FAST_VET-readable
+ * surface is inherited directly while protocol-specific market authority stays opaque.
+ */
+export interface PortableBaselineBatch extends PortableFastVetBaselineEvidence {
   chainId: number;
   ecosystem: ResearchEcosystem;
   launchProtocol: LaunchProtocolId;

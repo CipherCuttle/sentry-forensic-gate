@@ -7,6 +7,7 @@ import {
 import {
   MULTICHAIN_SHADOW_RESEARCH_AUTHORITY
 } from '../dist/multichain/domain.js';
+import { evaluatePortableFastVet } from '../dist/multichain/fastVetBridge.js';
 import { normalizeInkSentryLaunch } from '../dist/multichain/inkSentryProjection.js';
 import { assertAdapterIdentity } from '../dist/multichain/ports.js';
 import { DEFAULT_BASELINE_NOTIONALS_USD_MICROS } from '../dist/shadow/baselineTypes.js';
@@ -103,24 +104,54 @@ const cleanCreator = {
   exitFailureCount: 0,
   liquidityCollapseCount: 0
 };
-const pass = evaluateFastVet({ baseline: portableBaseline, creatorFeature: cleanCreator });
+
+function assertFrozenParity(baseline, creatorFeature) {
+  const portable = evaluatePortableFastVet({ baseline, creatorFeature });
+  const frozenDirect = evaluateFastVet({ baseline, creatorFeature });
+  assert.deepEqual(portable, frozenDirect);
+  return portable;
+}
+
+const pass = assertFrozenParity(portableBaseline, cleanCreator);
 assert.equal(pass.decision, 'PASS');
 assert.equal(pass.action, 'BUY_ELIGIBLE');
 assert.deepEqual(pass.reasons, []);
 
-const adverse = evaluateFastVet({
-  baseline: portableBaseline,
-  creatorFeature: { ...cleanCreator, coverage: 'COMPLETE', priorLaunchCount: 1, catastrophicLossCount: 1 }
-});
+const adverse = assertFrozenParity(
+  portableBaseline,
+  { ...cleanCreator, coverage: 'COMPLETE', priorLaunchCount: 1, catastrophicLossCount: 1 }
+);
 assert.equal(adverse.decision, 'REJECT');
 assert.deepEqual(adverse.reasons, ['KNOWN_PRIOR_ADVERSE_CREATOR']);
 
-const incomplete = evaluateFastVet({
-  baseline: portableBaseline,
-  creatorFeature: { ...cleanCreator, coverage: 'PARTIAL', priorLaunchCount: 1 }
-});
+const incomplete = assertFrozenParity(
+  portableBaseline,
+  { ...cleanCreator, coverage: 'PARTIAL', priorLaunchCount: 1 }
+);
 assert.equal(incomplete.decision, 'UNKNOWN');
 assert.deepEqual(incomplete.reasons, ['CREATOR_HISTORY_INCOMPLETE']);
+
+assert.throws(
+  () => evaluatePortableFastVet({
+    baseline: { ...portableBaseline, policyVersion: 'UNREVIEWED_POLICY' },
+    creatorFeature: cleanCreator
+  }),
+  /MULTICHAIN_FAST_VET_POLICY_UNAUTHORIZED:UNREVIEWED_POLICY/
+);
+assert.throws(
+  () => evaluatePortableFastVet({
+    baseline: { ...portableBaseline, reverseSemantics: 'SEQUENTIAL_PNL' },
+    creatorFeature: cleanCreator
+  }),
+  /MULTICHAIN_FAST_VET_REVERSE_SEMANTICS_MISMATCH:SEQUENTIAL_PNL/
+);
+assert.throws(
+  () => evaluatePortableFastVet({
+    baseline: { ...portableBaseline, authorityDigest: '' },
+    creatorFeature: cleanCreator
+  }),
+  /MULTICHAIN_FAST_VET_AUTHORITY_DIGEST_MISSING/
+);
 
 const identity = {
   chainId: 57073,
@@ -152,5 +183,6 @@ console.log(JSON.stringify({
   notionalsUsdMicros: DEFAULT_BASELINE_NOTIONALS_USD_MICROS.map(String),
   inkProjectionPreservesSourceAuthority: true,
   adapterIdentityFailsClosed: true,
-  fastVetDecisionSemanticsPreserved: true
+  frozenFastVetParity: true,
+  frozenFastVetSourceUntouched: true
 }, null, 2));

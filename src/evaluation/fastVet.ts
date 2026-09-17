@@ -1,5 +1,5 @@
-import type { Hex } from '../domain.js';
 import type { CreatorOutcomeCoverage, CreatorOutcomeFeatureReceipt } from '../forensic/creatorOutcome.js';
+import type { ExecutableBaselineBatch } from '../shadow/baselineTypes.js';
 
 export const FAST_VET_R0 = 'FAST_VET_R0' as const;
 export const FAST_VET_PRIMARY_NOTIONAL_USD_MICROS = 1_000_000n;
@@ -27,44 +27,13 @@ export type FastVetReason =
   | 'CREATOR_HISTORY_INCOMPLETE'
   | 'KNOWN_PRIOR_ADVERSE_CREATOR';
 
-export type FastVetBaselineStatus = 'COMPLETE' | 'UNVERIFIED';
-export type FastVetBaselinePolicyVersion =
-  | 'EXECUTABLE_BASELINE_R1'
-  | 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1';
-
-/**
- * Chain-neutral evidence surface consumed by FAST_VET_R0.
- *
- * Existing ExecutableBaselineBatch values satisfy this structurally. Authority,
- * reviewed policy version, decision-point and reverse-semantics fields stay
- * mandatory even though the frozen decision function does not branch on them:
- * future adapters must supply evidence with the same provenance strength rather
- * than a policy-shaped stub.
- */
-export interface FastVetBaselineEvidence {
-  baselineId: string;
-  authorityDigest: string;
-  launchId: string;
-  policyVersion: FastVetBaselinePolicyVersion;
-  decisionBlock: bigint;
-  decisionBlockHash: Hex;
-  status: FastVetBaselineStatus;
-  legs: readonly {
-    notionalUsdMicros: bigint;
-    entry: { executable: boolean };
-    reverse: { executable: boolean } | null;
-    independentReverseRecoveryBps: bigint | null;
-  }[];
-  reverseSemantics: 'INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL';
-}
-
 export interface FastVetInput {
-  baseline: FastVetBaselineEvidence | null;
+  baseline: ExecutableBaselineBatch | null;
   creatorFeature: CreatorOutcomeFeatureReceipt | null;
 }
 
 export interface FastVetEvidenceSummary {
-  baselineStatus: FastVetBaselineStatus | 'MISSING';
+  baselineStatus: ExecutableBaselineBatch['status'] | 'MISSING';
   primaryEntryExecutable: boolean | null;
   primaryReverseExecutable: boolean | null;
   independentReverseRecoveryBps: bigint | null;
@@ -135,7 +104,7 @@ function adverseCreatorCount(feature: CreatorOutcomeFeatureReceipt): number {
 }
 
 function evidenceFrom(
-  baseline: FastVetBaselineEvidence,
+  baseline: ExecutableBaselineBatch,
   feature: CreatorOutcomeFeatureReceipt | null
 ): FastVetEvidenceSummary {
   const primaryLeg = baseline.legs.find((leg) => leg.notionalUsdMicros === FAST_VET_PRIMARY_NOTIONAL_USD_MICROS);

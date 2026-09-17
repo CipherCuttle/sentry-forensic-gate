@@ -28,6 +28,7 @@ export * from './outcome/historicalRedstoneOutcomeSource.js';
 export * from './multichain/domain.js';
 export * from './multichain/ports.js';
 export * from './multichain/inkSentryProjection.js';
+export * from './multichain/fastVetBridge.js';
 export * from './db/schema.js';
 export * from './db/store.js';
 export * from './db/memoryStore.js';
