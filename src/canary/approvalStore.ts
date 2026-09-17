@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { getAddress, keccak256, type Hex } from 'viem';
 import {
@@ -10,7 +11,9 @@ import { deriveCanaryExitActionId } from './roundTrip.js';
 import { deriveCanaryActionId, INK_SWAP_ROUTER_02, type CanarySwapIntent } from './swapIntent.js';
 
 export type CanaryApprovalState = 'RESERVED' | 'SIGNED' | 'SUBMITTED' | 'INCLUDED' | 'REVERTED' | 'SAFE_HALT';
-export type CanaryApprovalInsertResult = 'INSERTED' | 'DUPLICATE';
+export type CanaryApprovalInsertResult =
+  | { status: 'INSERTED'; signingCapability: string }
+  | { status: 'DUPLICATE'; signingCapability: null };
 
 export interface CanaryApprovalActionRecord {
   actionId: string;
@@ -32,6 +35,7 @@ export interface CanaryApprovalActionRecord {
 
 export class CanaryApprovalStore {
   private readonly db: Database.Database;
+  private readonly signingCapabilities = new Map<string, string>();
 
   constructor(path: string) {
     this.db = new Database(path);
@@ -60,7 +64,10 @@ export class CanaryApprovalStore {
     `);
   }
 
-  close(): void { this.db.close(); }
+  close(): void {
+    this.signingCapabilities.clear();
+    this.db.close();
+  }
 
   async insertReserved(record: CanaryApprovalActionRecord): Promise<CanaryApprovalInsertResult> {
     if (record.state !== 'RESERVED') throw new Error(`CANARY_APPROVAL_INITIAL_STATE_INVALID:${record.state}`);
@@ -89,7 +96,7 @@ export class CanaryApprovalStore {
     });
     if (record.actionId !== expectedActionId) throw new Error('CANARY_APPROVAL_ACTION_IDENTITY_DRIFT');
 
-    const transaction = this.db.transaction(() => {
+    const transaction = this.db.transaction((): 'INSERTED' | 'DUPLICATE' => {
       const parent = this.db.prepare(`
         SELECT action_id, launch_id, baseline_id, state, intent_json, output_balance_before, output_balance_after
         FROM canary_actions
@@ -137,7 +144,7 @@ export class CanaryApprovalStore {
         record.observedAllowanceAfter?.toString() ?? null, record.nonce, record.transactionHash,
         record.serializedTransaction, record.lastError, record.createdAtMs, record.updatedAtMs
       );
-      if (result.changes === 1) return 'INSERTED' as const;
+      if (result.changes === 1) return 'INSERTED';
 
       const existing = this.db.prepare(`
         SELECT action_id, parent_buy_action_id, parent_exit_action_id, launch_id, baseline_id
@@ -152,14 +159,24 @@ export class CanaryApprovalStore {
         existing.parent_exit_action_id === record.parentExitActionId &&
         existing.launch_id === record.launchId &&
         existing.baseline_id === record.baselineId
-      ) return 'DUPLICATE' as const;
+      ) return 'DUPLICATE';
       throw new Error(`CANARY_APPROVAL_IDENTITY_CONFLICT:${record.launchId}`);
     });
 
-    return transaction();
+    const status = transaction();
+    if (status === 'DUPLICATE') return { status, signingCapability: null };
+
+    const signingCapability = randomBytes(32).toString('hex');
+    this.signingCapabilities.set(record.actionId, signingCapability);
+    return { status, signingCapability };
   }
 
-  markSigned(actionId: string, params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }): void {
+  markSigned(
+    actionId: string,
+    signingCapability: string,
+    params: { nonce: number; transactionHash: Hex; serializedTransaction: Hex }
+  ): void {
+    this.assertSigningCapability(actionId, signingCapability);
     if (!Number.isSafeInteger(params.nonce) || params.nonce < 0) throw new Error(`CANARY_APPROVAL_NONCE_INVALID:${params.nonce}`);
     const derivedHash = keccak256(params.serializedTransaction);
     if (derivedHash.toLowerCase() !== params.transactionHash.toLowerCase()) {
@@ -170,6 +187,7 @@ export class CanaryApprovalStore {
       transaction_hash: params.transactionHash.toLowerCase(),
       serialized_transaction: params.serializedTransaction
     });
+    this.signingCapabilities.delete(actionId);
   }
 
   markSubmitted(actionId: string): void {
@@ -230,11 +248,18 @@ export class CanaryApprovalStore {
     return row ? fromRow(row) : null;
   }
 
+  private assertSigningCapability(actionId: string, signingCapability: string): void {
+    const expected = this.signingCapabilities.get(actionId);
+    if (!expected || signingCapability !== expected) {
+      throw new Error(`CANARY_APPROVAL_SIGNING_CAPABILITY_INVALID:${actionId}`);
+    }
+  }
+
   private assertRecordIntentIdentity(record: CanaryApprovalActionRecord): void {
     if (record.intent.version !== CANARY_E0_APPROVAL_R0) throw new Error('CANARY_APPROVAL_VERSION_INVALID');
     if (record.intent.actionId !== record.actionId) throw new Error('CANARY_APPROVAL_INTENT_ACTION_ID_MISMATCH');
-    if (record.intent.parentBuyActionId !== record.parentBuyActionId) throw new Error('CANARY_APPROVAL_PARENT_BUY_ID_MISMATCH');
-    if (record.intent.parentExitActionId !== record.parentExitActionId) throw new Error('CANARY_APPROVAL_PARENT_EXIT_ID_MISMATCH');
+    if (record.intent.parentBuyActionId !== record.parentBuyActionId) throw new Error('CANARY_APPROVAL_PARENT_BUY_MISMATCH');
+    if (record.intent.parentExitActionId !== record.parentExitActionId) throw new Error('CANARY_APPROVAL_PARENT_EXIT_MISMATCH');
     if (record.intent.launchId !== record.launchId || record.intent.baselineId !== record.baselineId) {
       throw new Error('CANARY_APPROVAL_INTENT_IDENTITY_MISMATCH');
     }
