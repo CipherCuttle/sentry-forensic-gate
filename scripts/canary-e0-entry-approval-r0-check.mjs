@@ -11,8 +11,11 @@ import {
   parseTransaction,
   recoverTransactionAddress
 } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { erc20ApprovalAbi } from '../dist/canary/approval.js';
+import {
+  CANARY_E0_APPROVAL_R0,
+  deriveCanaryApprovalActionId,
+  erc20ApprovalAbi
+} from '../dist/canary/approval.js';
 import {
   buildCanaryEntryApprovalIntent,
   deriveCanaryEntryApprovalActionId
@@ -339,32 +342,47 @@ try {
     /CANARY_APPROVAL_SIGNED_ACTION_ID_MISMATCH/
   );
 
-  // A separately validly signed approval with mutated calldata/hash is unknown to this executor and cannot broadcast.
+  // A different executor can produce a valid signed approval, but this executor must reject that foreign authority before raw send.
+  const mutatedAmount = ENTRY_AMOUNT + 1n;
   const mutatedCalldata = encodeFunctionData({
     abi: erc20ApprovalAbi,
     functionName: 'approve',
-    args: [INK_SWAP_ROUTER_02, ENTRY_AMOUNT + 1n]
+    args: [INK_SWAP_ROUTER_02, mutatedAmount]
   });
-  const testAccount = privateKeyToAccount(TEST_PRIVATE_KEY);
-  const unknownSerializedTransaction = await testAccount.signTransaction({
-    chainId: INK_CHAIN_ID,
-    type: 'eip1559',
-    nonce: signed.nonce,
-    gas: signed.gas,
-    maxFeePerGas: signed.maxFeePerGas,
-    maxPriorityFeePerGas: signed.maxPriorityFeePerGas,
-    to: WETH9,
-    value: 0n,
-    data: mutatedCalldata
+  const foreignParentExitActionId = 'foreign-valid-exit-authority';
+  const foreignActionId = await deriveCanaryApprovalActionId({
+    parentBuyActionId: buy.actionId,
+    parentExitActionId: foreignParentExitActionId,
+    launchId: buy.launchId,
+    baselineId: buy.baselineId,
+    owner: TEST_WALLET,
+    token: WETH9,
+    spender: INK_SWAP_ROUTER_02,
+    amount: mutatedAmount
   });
-  const unknownTransactionHash = keccak256(unknownSerializedTransaction);
+  const foreignApproval = {
+    version: CANARY_E0_APPROVAL_R0,
+    actionId: foreignActionId,
+    parentBuyActionId: buy.actionId,
+    parentExitActionId: foreignParentExitActionId,
+    launchId: buy.launchId,
+    baselineId: buy.baselineId,
+    owner: TEST_WALLET,
+    token: WETH9,
+    spender: INK_SWAP_ROUTER_02,
+    amount: mutatedAmount,
+    calldata: mutatedCalldata
+  };
+  const foreignExecutor = new ViemCanaryExecutor({ privateKey: TEST_PRIVATE_KEY, caps, publicClient: fakePublicClient });
+  const foreignSigned = await foreignExecutor.signApproval(foreignApproval, {
+    ...preflight,
+    actionId: foreignActionId,
+    amount: mutatedAmount
+  });
+  await assertSignedApprovalTransaction(foreignApproval, foreignSigned, TEST_WALLET);
+  assert.notEqual(foreignSigned.transactionHash, signed.transactionHash);
   await assert.rejects(
-    () => executor.broadcastExact({
-      ...signed,
-      transactionHash: unknownTransactionHash,
-      serializedTransaction: unknownSerializedTransaction,
-      serializedTransactionKeccak256: unknownTransactionHash
-    }),
+    () => executor.broadcastExact(foreignSigned),
     /CANARY_BROADCAST_SIGNED_AUTHORITY_UNKNOWN/
   );
 
