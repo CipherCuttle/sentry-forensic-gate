@@ -4,9 +4,9 @@ import { ROBINHOOD_CHAIN_ID, PONS_V2_NATIVE_PAIR_TOKEN } from './contracts.js';
 /**
  * Reviewed Pons V2 factory epoch.
  *
- * There is intentionally no repository default. Official Pons surfaces currently
- * disagree on the V2 factory address, so a runtime may only activate after a
- * specific factory epoch and runtime-code hash have been independently pinned.
+ * The current reviewed epoch is pinned below, but consumers must still opt into
+ * an explicit authority object. A later factory replacement must create a new
+ * reviewed epoch rather than silently changing the meaning of existing evidence.
  */
 export interface PonsV2Authority {
   authorityId: string;
