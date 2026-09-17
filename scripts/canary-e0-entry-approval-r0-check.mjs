@@ -181,10 +181,10 @@ try {
     updatedAtMs: now
   };
 
-  const reservation = await store.insertReserved(record);
+  const reservation = await store.insertReserved(record, buy);
   assert.equal(reservation.status, 'INSERTED');
   assert.match(reservation.signingCapability, /^[0-9a-f]{64}$/);
-  const duplicate = await competingStore.insertReserved(record);
+  const duplicate = await competingStore.insertReserved(record, buy);
   assert.equal(duplicate.status, 'DUPLICATE');
   assert.equal(duplicate.signingCapability, null);
 
@@ -259,7 +259,7 @@ try {
       ...record,
       actionId: 'forged-token',
       intent: { ...entryApproval, actionId: 'forged-token', token: LAUNCHED }
-    }),
+    }, buy),
     /CANARY_ENTRY_APPROVAL_TOKEN_MUST_EQUAL_WETH9/
   );
   await assert.rejects(
@@ -267,7 +267,7 @@ try {
       ...record,
       actionId: 'forged-notional',
       intent: { ...entryApproval, actionId: 'forged-notional', notionalUsdMicros: CANARY_PRIMARY_NOTIONAL_USD_MICROS + 1n }
-    }),
+    }, buy),
     /CANARY_ENTRY_APPROVAL_NOTIONAL_INVALID/
   );
 
@@ -360,7 +360,7 @@ try {
     intent: secondApproval,
     createdAtMs: now + 1,
     updatedAtMs: now + 1
-  });
+  }, secondBuy);
   assert.equal(secondReservation.status, 'ENTRY_SLOT_TAKEN');
   assert.equal(secondReservation.signingCapability, null);
 } finally {
@@ -391,7 +391,7 @@ let strandedCapability;
     lastError: null,
     createdAtMs: now,
     updatedAtMs: now
-  });
+  }, buy);
   assert.equal(reservation.status, 'INSERTED');
   strandedCapability = reservation.signingCapability;
   first.close();
