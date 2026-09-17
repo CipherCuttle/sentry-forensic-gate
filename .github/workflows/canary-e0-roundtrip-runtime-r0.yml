@@ -1,0 +1,68 @@
+name: canary-e0-roundtrip-runtime-r0
+
+on:
+  push:
+    branches:
+      - agent/canary-e0-roundtrip-runtime-r0
+    paths:
+      - 'src/canary/store.ts'
+      - 'src/canary/approvalStore.ts'
+      - 'src/canary/exitStore.ts'
+      - 'src/canary/roundTripRuntime.ts'
+      - 'scripts/canary-e0-roundtrip-runtime-r0-check.mjs'
+      - '.github/workflows/canary-e0-roundtrip-runtime-r0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-roundtrip-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+      - name: Preserve approval reservation capability fence
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set -euo pipefail
+          grep -q "inserted.status !== 'INSERTED'" src/canary/roundTripRuntime.ts
+          grep -q 'inserted.signingCapability' src/canary/roundTripRuntime.ts
+          grep -q 'signingCapabilities = new Map' src/canary/approvalStore.ts
+          grep -q 'CANARY_APPROVAL_SIGNING_CAPABILITY_INVALID' src/canary/approvalStore.ts
+          echo 'CANARY_E0_ROUNDTRIP_RESERVATION_CAPABILITY_FENCE=PASS'
+      - name: Preserve narrow canary wallet authority
+        run: node scripts/canary-boundary-check.mjs
+      - name: Preserve research-only boundary outside executor
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+      - name: Assert no live wallet secret or live mode
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set -euo pipefail
+          test -z "${CANARY_PRIVATE_KEY:-}"
+          test "${CANARY_LIVE:-false}" = "false"
+          echo 'CANARY_E0_ROUNDTRIP_RUNTIME_NO_LIVE_SECRET=PASS'
+      - name: Qualify round-trip runtime offline
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set -euo pipefail
+          node scripts/canary-e0-roundtrip-runtime-r0-check.mjs | tee canary-e0-roundtrip-runtime-r0.json
+          grep -q '"verdict": "CANARY_E0_ROUNDTRIP_RUNTIME_R0_PASS"' canary-e0-roundtrip-runtime-r0.json
+          grep -q '"oneSideEffectingChildPerAdvance": true' canary-e0-roundtrip-runtime-r0.json
+          grep -q '"exactExitAllowanceRequired": true' canary-e0-roundtrip-runtime-r0.json
+          grep -q '"ambiguousExitNoRebroadcast": true' canary-e0-roundtrip-runtime-r0.json
+          grep -q '"reservedApprovalRestartSafeHalt": true' canary-e0-roundtrip-runtime-r0.json
+          grep -q '"networkBroadcastInvoked": false' canary-e0-roundtrip-runtime-r0.json
+          grep -q '"live": false' canary-e0-roundtrip-runtime-r0.json
+          grep -q '"walletSecretUsed": false' canary-e0-roundtrip-runtime-r0.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canary-e0-roundtrip-runtime-r0-evidence
+          path: canary-e0-roundtrip-runtime-r0.json
+          if-no-files-found: error

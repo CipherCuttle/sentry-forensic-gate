@@ -1,0 +1,21 @@
+{
+  "schema": "historical-full-replay-scope-r1/index-v1",
+  "encoding": "gzip+base64-chunks",
+  "sourceRange": {
+    "fromBlock": "39943476",
+    "toBlock": "49271598",
+    "expectedLaunches": 147,
+    "observedLaunches": 147
+  },
+  "launchIdentitySha256": "b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211",
+  "uniqueIdentityCount": 147,
+  "payloadSha256": "c8188726b28e72a72ffc5c8233a416c2fb531d2e6e3229f8906969d9dc1609a0",
+  "compressedPayloadSha256": "72a2b881c88ed1219b35406b129e5ea58968b0466cafcbe10a4a42468cd85813",
+  "payloadChunks": [
+    "fixtures/historical-full-replay-scope-r1.part-001.b64",
+    "fixtures/historical-full-replay-scope-r1.part-002.b64",
+    "fixtures/historical-full-replay-scope-r1.part-003.b64",
+    "fixtures/historical-full-replay-scope-r1.part-004.b64",
+    "fixtures/historical-full-replay-scope-r1.part-005.b64"
+  ]
+}

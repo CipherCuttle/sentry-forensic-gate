@@ -1,0 +1,51 @@
+name: canary-e0-roundtrip-qualification-r0
+
+on:
+  push:
+    branches:
+      - agent/canary-e0-roundtrip-qualification-r0
+    paths:
+      - 'src/canary/roundTrip.ts'
+      - 'src/canary/exitStore.ts'
+      - 'scripts/canary-e0-roundtrip-qualification-r0-check.mjs'
+      - '.github/workflows/canary-e0-roundtrip-qualification-r0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-roundtrip:
+    if: github.ref == 'refs/heads/agent/canary-e0-roundtrip-qualification-r0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      INK_RPC_URL: https://rpc-gel.inkonchain.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+      - name: Preserve narrow wallet-authority boundary
+        run: node scripts/canary-boundary-check.mjs
+      - name: Assert qualification has no wallet secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${CANARY_PRIVATE_KEY:-}"
+          echo 'CANARY_E0_NO_KEY_BOUNDARY=PASS'
+      - name: Qualify deterministic exit and current Ink authorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/canary-e0-roundtrip-qualification-r0-check.mjs | tee canary-e0-roundtrip-qualification-r0.json
+      - name: Upload qualification evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-e0-roundtrip-qualification-r0-evidence
+          path: canary-e0-roundtrip-qualification-r0.json
+          if-no-files-found: error

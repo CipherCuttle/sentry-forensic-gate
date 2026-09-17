@@ -46,12 +46,14 @@ export interface ViemSentryLaunchSourceOptions {
   factory?: Hex;
   client?: PublicClient;
   now?: () => number;
+  allowUnavailableGenericLaunchTypeFlags?: boolean;
 }
 
 export class ViemSentryLaunchSource {
   readonly factory: Hex;
   private readonly client: PublicClient;
   private readonly now: () => number;
+  private readonly allowUnavailableGenericLaunchTypeFlags: boolean;
 
   constructor(options: ViemSentryLaunchSourceOptions = {}) {
     this.factory = options.factory ?? DEFAULT_SENTRY_LAUNCH_FACTORY;
@@ -60,6 +62,7 @@ export class ViemSentryLaunchSource {
       transport: http(options.rpcUrl ?? DEFAULT_INK_RPC_URL)
     });
     this.now = options.now ?? Date.now;
+    this.allowUnavailableGenericLaunchTypeFlags = options.allowUnavailableGenericLaunchTypeFlags ?? false;
   }
 
   async getHeadBlockNumber(): Promise<bigint> {
@@ -71,7 +74,6 @@ export class ViemSentryLaunchSource {
     if (!block.hash) throw new Error(`Missing block hash for ${blockNumber}`);
     return block.hash;
   }
-
 
   async assertAuthority(blockNumber: bigint): Promise<void> {
     const chainId = await this.client.getChainId();
@@ -260,35 +262,36 @@ export class ViemSentryLaunchSource {
 
   private async classifyGenericLaunch(tokenId: bigint, blockNumber: bigint): Promise<LaunchType> {
     const [isAgent, isKraken, isGoPumpMe] = await Promise.all([
-      this.client.readContract({
-        address: this.factory,
-        abi: sentryLaunchFactoryReadAbi,
-        functionName: 'isAgentPosition',
-        args: [tokenId],
-        blockNumber
-      }),
-      this.client.readContract({
-        address: this.factory,
-        abi: sentryLaunchFactoryReadAbi,
-        functionName: 'isKrakenVerifiedPosition',
-        args: [tokenId],
-        blockNumber
-      }),
-      this.client.readContract({
-        address: this.factory,
-        abi: sentryLaunchFactoryReadAbi,
-        functionName: 'isGoPumpMePosition',
-        args: [tokenId],
-        blockNumber
-      })
+      this.readLaunchTypeFlag('isAgentPosition', tokenId, blockNumber),
+      this.readLaunchTypeFlag('isKrakenVerifiedPosition', tokenId, blockNumber),
+      this.readLaunchTypeFlag('isGoPumpMePosition', tokenId, blockNumber)
     ]);
 
-    const flags = [Boolean(isAgent), Boolean(isKraken), Boolean(isGoPumpMe)].filter(Boolean).length;
+    const flags = [isAgent, isKraken, isGoPumpMe].filter(Boolean).length;
     if (flags > 1) throw new Error(`Contradictory launch-type flags for tokenId ${tokenId}`);
     if (isGoPumpMe) return 'GO_PUMP_ME';
     if (isKraken) return 'KRAKEN_VERIFIED';
     if (isAgent) return 'AGENT';
     return 'STANDARD';
+  }
+
+  private async readLaunchTypeFlag(
+    functionName: 'isAgentPosition' | 'isKrakenVerifiedPosition' | 'isGoPumpMePosition',
+    tokenId: bigint,
+    blockNumber: bigint
+  ): Promise<boolean> {
+    try {
+      return Boolean(await this.client.readContract({
+        address: this.factory,
+        abi: sentryLaunchFactoryReadAbi,
+        functionName,
+        args: [tokenId],
+        blockNumber
+      }));
+    } catch (error) {
+      if (this.allowUnavailableGenericLaunchTypeFlags && isEvmRevert(error)) return false;
+      throw error;
+    }
   }
 }
 
@@ -296,4 +299,21 @@ function compareLaunches(a: LaunchObserved, b: LaunchObserved): number {
   if (a.blockNumber < b.blockNumber) return -1;
   if (a.blockNumber > b.blockNumber) return 1;
   return a.logIndex - b.logIndex;
+}
+
+function isEvmRevert(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 8 && current && typeof current === 'object'; depth += 1) {
+    const record = current as { name?: unknown; message?: unknown; cause?: unknown };
+    const name = typeof record.name === 'string' ? record.name : '';
+    const message = typeof record.message === 'string' ? record.message.toLowerCase() : '';
+    if (
+      name === 'ExecutionRevertedError' ||
+      name === 'ContractFunctionRevertedError' ||
+      message.includes('execution reverted') ||
+      message.includes('reverted')
+    ) return true;
+    current = record.cause;
+  }
+  return false;
 }

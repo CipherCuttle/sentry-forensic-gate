@@ -8,12 +8,12 @@ import {
   type PublicClient
 } from 'viem';
 import type { Hex, LaunchObserved } from '../domain.js';
+import { CURRENT_READ_AUTHORITY_CONTEXT, type ReadAuthorityContext } from '../authority/readAuthorityContext.js';
 import { deriveBaselineQuoteId, scaleUsdMicrosToTokenUnits, type BaselineQuoteReceipt, type LaunchMarket, type UsdCalibration } from '../shadow/baselineTypes.js';
 import {
   DEFAULT_INK_RPC_URL,
   DEFAULT_SENTRY_LAUNCH_FACTORY,
   EIP1967_IMPLEMENTATION_SLOT,
-  EXPECTED_SENTRY_LAUNCH_IMPLEMENTATION,
   INK_CHAIN_ID
 } from '../sentry/contracts.js';
 import { classifyLaunchMarket } from './market.js';
@@ -23,14 +23,10 @@ import {
   positionManagerReadAbi,
   sentryBaselineReadAbi,
   TSUNAMI_FEE_TIERS,
-  TSUNAMI_POSITION_MANAGER,
-  TSUNAMI_QUOTER_V2,
-  TSUNAMI_V3_FACTORY,
   tsunamiFactoryReadAbi,
   tsunamiPoolReadAbi,
   tsunamiQuoterV2Abi,
   USDT0,
-  WETH9,
   ZERO_ADDRESS
 } from './contracts.js';
 
@@ -46,11 +42,13 @@ export interface ViemBaselineSourceOptions {
   rpcUrl?: string;
   client?: PublicClient;
   now?: () => number;
+  authority?: Readonly<ReadAuthorityContext>;
 }
 
 export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
   private readonly client: PublicClient;
   private readonly now: () => number;
+  private readonly authority: Readonly<ReadAuthorityContext>;
 
   constructor(options: ViemBaselineSourceOptions = {}) {
     this.client = options.client ?? createPublicClient({
@@ -58,6 +56,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
       transport: http(options.rpcUrl ?? DEFAULT_INK_RPC_URL)
     });
     this.now = options.now ?? Date.now;
+    this.authority = options.authority ?? CURRENT_READ_AUTHORITY_CONTEXT;
   }
 
   async getHeadBlockNumber(): Promise<bigint> {
@@ -83,9 +82,9 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
       throw new Error(`SENTRY_PROXY_IMPLEMENTATION_MISSING:block=${blockNumber}`);
     }
     const sentryImplementation = `0x${sentryStorage.slice(-40)}` as Hex;
-    if (norm(sentryImplementation) !== norm(EXPECTED_SENTRY_LAUNCH_IMPLEMENTATION)) {
+    if (norm(sentryImplementation) !== norm(this.authority.sentryImplementation)) {
       throw new Error(
-        `SENTRY_PROXY_IMPLEMENTATION_DRIFT:expected=${EXPECTED_SENTRY_LAUNCH_IMPLEMENTATION}:actual=${sentryImplementation}:block=${blockNumber}`
+        `SENTRY_PROXY_IMPLEMENTATION_DRIFT:expected=${this.authority.sentryImplementation}:actual=${sentryImplementation}:block=${blockNumber}`
       );
     }
 
@@ -96,24 +95,24 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
         functionName: 'npm',
         blockNumber
       }),
-      this.client.readContract({ address: TSUNAMI_POSITION_MANAGER as Address, abi: positionManagerReadAbi, functionName: 'factory', blockNumber }),
-      this.client.readContract({ address: TSUNAMI_QUOTER_V2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'factory', blockNumber }),
-      this.client.readContract({ address: TSUNAMI_POSITION_MANAGER as Address, abi: positionManagerReadAbi, functionName: 'WETH9', blockNumber }),
-      this.client.readContract({ address: TSUNAMI_QUOTER_V2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'WETH9', blockNumber })
+      this.client.readContract({ address: this.authority.npm as Address, abi: positionManagerReadAbi, functionName: 'factory', blockNumber }),
+      this.client.readContract({ address: this.authority.quoterV2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'factory', blockNumber }),
+      this.client.readContract({ address: this.authority.npm as Address, abi: positionManagerReadAbi, functionName: 'WETH9', blockNumber }),
+      this.client.readContract({ address: this.authority.quoterV2 as Address, abi: tsunamiQuoterV2Abi, functionName: 'WETH9', blockNumber })
     ]);
 
-    requireAddress('SENTRY_NPM_DRIFT', sentryNpm as Address, TSUNAMI_POSITION_MANAGER);
-    requireAddress('NPM_FACTORY_DRIFT', npmFactory as Address, TSUNAMI_V3_FACTORY);
-    requireAddress('QUOTER_FACTORY_DRIFT', quoterFactory as Address, TSUNAMI_V3_FACTORY);
-    requireAddress('NPM_WETH_DRIFT', npmWeth as Address, WETH9);
-    requireAddress('QUOTER_WETH_DRIFT', quoterWeth as Address, WETH9);
+    requireAddress('SENTRY_NPM_DRIFT', sentryNpm as Address, this.authority.npm);
+    requireAddress('NPM_FACTORY_DRIFT', npmFactory as Address, this.authority.factory);
+    requireAddress('QUOTER_FACTORY_DRIFT', quoterFactory as Address, this.authority.factory);
+    requireAddress('NPM_WETH_DRIFT', npmWeth as Address, this.authority.weth);
+    requireAddress('QUOTER_WETH_DRIFT', quoterWeth as Address, this.authority.weth);
 
     const codeAddresses = [
       DEFAULT_SENTRY_LAUNCH_FACTORY,
       sentryImplementation,
-      TSUNAMI_V3_FACTORY,
-      TSUNAMI_POSITION_MANAGER,
-      TSUNAMI_QUOTER_V2
+      this.authority.factory,
+      this.authority.npm,
+      this.authority.quoterV2
     ];
     const codes = await Promise.all(codeAddresses.map((address) =>
       this.client.getBytecode({ address: address as Address, blockNumber })
@@ -125,7 +124,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
 
   async resolveMarket(launch: LaunchObserved, decisionBlock: bigint): Promise<LaunchMarket> {
     const positionRaw = await this.client.readContract({
-      address: TSUNAMI_POSITION_MANAGER as Address,
+      address: this.authority.npm as Address,
       abi: positionManagerReadAbi,
       functionName: 'positions',
       args: [launch.tokenId],
@@ -147,7 +146,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
     }) as readonly Address[];
 
     const pool = await this.client.readContract({
-      address: TSUNAMI_V3_FACTORY as Address,
+      address: this.authority.factory as Address,
       abi: tsunamiFactoryReadAbi,
       functionName: 'getPool',
       args: [position.token0 as Address, position.token1 as Address, position.fee],
@@ -203,7 +202,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
       };
     }
 
-    if (base !== norm(WETH9)) throw new Error(`UNSUPPORTED_BASE_FOR_USD_CALIBRATION:${params.market.baseToken}`);
+    if (base !== norm(this.authority.weth)) throw new Error(`UNSUPPORTED_BASE_FOR_USD_CALIBRATION:${params.market.baseToken}`);
 
     const usdtDecimals = Number(await this.client.readContract({
       address: USDT0 as Address,
@@ -212,7 +211,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
       blockNumber: params.decisionBlock
     }));
     const wethDecimals = Number(await this.client.readContract({
-      address: WETH9 as Address,
+      address: this.authority.weth as Address,
       abi: erc20DecimalsAbi,
       functionName: 'decimals',
       blockNumber: params.decisionBlock
@@ -222,15 +221,15 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
     let best: { fee: number; pool: Hex; quote: RawQuoteResult } | null = null;
     for (const fee of TSUNAMI_FEE_TIERS) {
       const pool = await this.client.readContract({
-        address: TSUNAMI_V3_FACTORY as Address,
+        address: this.authority.factory as Address,
         abi: tsunamiFactoryReadAbi,
         functionName: 'getPool',
-        args: [WETH9 as Address, USDT0 as Address, fee],
+        args: [this.authority.weth as Address, USDT0 as Address, fee],
         blockNumber: params.decisionBlock
       }) as Address;
       if (norm(pool) === norm(ZERO_ADDRESS)) continue;
       const quote = await this.callExactOutput({
-        tokenIn: WETH9,
+        tokenIn: this.authority.weth,
         tokenOut: USDT0,
         amountOut: targetUsdt,
         fee,
@@ -257,7 +256,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
       mode: 'EXACT_OUTPUT',
       notionalUsdMicros: params.notionalUsdMicros,
       pool: best.pool,
-      tokenIn: WETH9,
+      tokenIn: this.authority.weth,
       tokenOut: USDT0,
       fee: best.fee,
       amountIn: best.quote.amountIn,
@@ -271,7 +270,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
     return {
       kind: 'WETH_USDT0_EXACT_OUTPUT_V0',
       notionalUsdMicros: params.notionalUsdMicros,
-      baseToken: WETH9,
+      baseToken: this.authority.weth,
       baseAmount: best.quote.amountIn,
       baseDecimals: wethDecimals,
       quote
@@ -370,7 +369,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
       }]
     });
     try {
-      const result = await this.client.call({ to: TSUNAMI_QUOTER_V2 as Address, data, blockNumber: params.blockNumber });
+      const result = await this.client.call({ to: this.authority.quoterV2 as Address, data, blockNumber: params.blockNumber });
       if (!result.data) throw new Error('QUOTER_EMPTY_RETURN_DATA');
       const decoded = decodeFunctionResult({ abi: tsunamiQuoterV2Abi, functionName: 'quoteExactInputSingle', data: result.data }) as readonly [bigint, bigint, number, bigint];
       if (decoded[0] <= 0n) {
@@ -407,7 +406,7 @@ export class ViemExecutableBaselineSource implements ExecutableBaselineSource {
       }]
     });
     try {
-      const result = await this.client.call({ to: TSUNAMI_QUOTER_V2 as Address, data, blockNumber: params.blockNumber });
+      const result = await this.client.call({ to: this.authority.quoterV2 as Address, data, blockNumber: params.blockNumber });
       if (!result.data) throw new Error('QUOTER_EMPTY_RETURN_DATA');
       const decoded = decodeFunctionResult({ abi: tsunamiQuoterV2Abi, functionName: 'quoteExactOutputSingle', data: result.data }) as readonly [bigint, bigint, number, bigint];
       if (decoded[0] <= 0n || params.amountOut <= 0n) {

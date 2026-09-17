@@ -1,0 +1,60 @@
+name: canary-e0-live-authorization-readiness-r0
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/canary/liveAuthorization.ts'
+      - 'src/canarySniperCli.ts'
+      - 'scripts/canary-e0-live-authorization-readiness-r0-check.mjs'
+      - '.github/workflows/canary-e0-live-authorization-readiness-r0.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-live-authorization-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+      - name: Preserve narrow canary wallet authority
+        run: node scripts/canary-boundary-check.mjs
+      - name: Preserve research-only boundary outside executor
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+      - name: Assert qualification itself is dry and secret-free
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${CANARY_PRIVATE_KEY:-}"
+          test "${CANARY_LIVE:-false}" = "false"
+          test -z "${CANARY_E0_LIVE_AUTHORIZATION:-}"
+          echo 'CANARY_E0_LIVE_AUTHORIZATION_READINESS_NO_SECRET_NO_LIVE=PASS'
+      - name: Qualify authorization latch offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/canary-e0-live-authorization-readiness-r0-check.mjs | tee canary-e0-live-authorization-readiness-r0.json
+          grep -q '"verdict": "CANARY_E0_LIVE_AUTHORIZATION_READINESS_R0_PASS"' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"exactPrimaryNotionalUsdMicros": "1000000"' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"fullChildStackRequiredForLive": true' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"partialLiveStackFailsClosed": true' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"missingAuthorizationFailsClosed": true' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"wrongAuthorizationFailsClosed": true' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"exactDollarCapRequired": true' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"guardBeforeDatabase": true' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"guardBeforePrivateKey": true' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"guardBeforeExecutorNetwork": true' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"walletFundingAuthorized": false' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"networkBroadcastInvoked": false' canary-e0-live-authorization-readiness-r0.json
+          grep -q '"liveTransactionInvoked": false' canary-e0-live-authorization-readiness-r0.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canary-e0-live-authorization-readiness-r0-evidence
+          path: canary-e0-live-authorization-readiness-r0.json
+          if-no-files-found: error

@@ -1,0 +1,34 @@
+name: canary-sniper-r0
+on:
+  pull_request:
+    paths:
+      - 'src/canary/**'
+      - 'scripts/canary-boundary-check.mjs'
+      - 'scripts/canary-sniper-r0-check.mjs'
+      - 'rules/research-only-no-wallet-authority-ts.yml'
+      - '.github/workflows/canary-sniper-r0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-canary-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - name: Preserve research-only boundary outside canary
+        run: |
+          pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep test --skip-snapshot-tests
+          pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+      - name: Enforce narrow canary wallet authority
+        run: node scripts/canary-boundary-check.mjs
+      - run: pnpm build
+      - name: Test bounded canary intent
+        run: node scripts/canary-sniper-r0-check.mjs

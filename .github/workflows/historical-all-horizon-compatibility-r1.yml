@@ -1,0 +1,64 @@
+name: historical-all-horizon-compatibility-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.md'
+      - 'docs/agent-packets/HISTORICAL_ALL_HORIZON_COMPATIBILITY_R1.json'
+      - 'fixtures/historical-compatibility-r1.json'
+      - 'src/**'
+      - 'src/historicalAllHorizonCompatibilityCli.ts'
+      - 'src/runtime/forwardOutcomes.ts'
+      - 'src/runtime/executableBaseline.ts'
+      - 'src/outcome/historicalRedstoneOutcomeSource.ts'
+      - 'src/outcome/horizons.ts'
+      - 'src/outcome/viemSource.ts'
+      - 'src/outcome/ports.ts'
+      - 'src/outcome/forwardTypes.ts'
+      - 'src/shadow/baselineTypes.ts'
+      - 'src/tsunami/historicalRedstoneBaselineSource.ts'
+      - 'src/tsunami/viemBaselineSource.ts'
+      - 'src/tsunami/contracts.ts'
+      - 'src/authority/readAuthorityContext.ts'
+      - 'src/sentry/viemSource.ts'
+      - 'src/sentry/contracts.ts'
+      - 'src/evidence/canonical.ts'
+      - 'scripts/dev-spine-check.mjs'
+      - 'scripts/dev-spine-check-test.mjs'
+      - 'scripts/dev-spine-context.mjs'
+      - 'scripts/dev-spine-pack.mjs'
+      - 'scripts/dev-spine-receipt.mjs'
+      - '.github/workflows/historical-all-horizon-compatibility-r1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  historical-all-horizon-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+      - name: Validate fail-closed phase metadata
+        run: |
+          node scripts/dev-spine-check-test.mjs
+          node scripts/dev-spine-check.mjs
+      - name: Build
+        run: pnpm build
+      - name: Run historical all-horizon representative gate
+        env:
+          SHADOW_ONLY: 'true'
+          OUTPUT_PATH: historical-all-horizon-compatibility-r1-live-receipt.json
+        run: node dist/historicalAllHorizonCompatibilityCli.js
+      - name: Upload all-horizon evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-all-horizon-compatibility-r1-evidence
+          path: historical-all-horizon-compatibility-r1-live-receipt.json
+          if-no-files-found: warn

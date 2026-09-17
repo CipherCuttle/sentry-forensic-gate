@@ -1,34 +1,33 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { validatePacket } from './dev-spine-check.mjs';
+import { validateFastVetAuthorization } from './dev-spine-check.mjs';
 
-const PACKET_PATH = 'docs/agent-packets/HISTORICAL_COMPATIBILITY_R1.json';
-const packet = JSON.parse(fs.readFileSync(PACKET_PATH, 'utf8'));
+const packet=JSON.parse(fs.readFileSync('docs/agent-packets/FAST_VET_R0_AUTHORIZATION_R1.json','utf8'));
+validateFastVetAuthorization(packet);
+assert.equal(packet.state,'FAST_VET_R0_SMOKE_AUTHORIZED');
+assert.equal(packet.next_action,'OPEN_FAST_VET_R0_HISTORICAL_SMOKE_R1_IMPLEMENTATION');
+assert.equal(packet.authorization.fast_vet_smoke,true);
+for(const key of ['historical_full_replay','fast_vet','fast_vet_osint','canary','signing','transaction_construction','transaction_broadcast','live_execution','merge']) assert.equal(packet.authorization[key],false);
+assert.equal(packet.review_gate.status,'CLOSED_PASS');
+assert.equal(packet.review_gate.unresolved_critical_high,0);
+assert.equal(packet.decision_result.status,'AUTHORIZE_SMOKE');
 
-validatePacket(packet);
-
-for (const key of [
-  'historical_compatibility_implementation',
-  'full_147_replay',
-  'fast_vet',
-  'canary',
-  'merge',
-]) {
-  const mutated = structuredClone(packet);
-  mutated.authorization[key] = true;
-  assert.throws(
-    () => validatePacket(mutated),
-    new RegExp(`cannot authorize ${key}`),
-    `${key}=true must fail closed in the current phase state`,
-  );
-}
-
-const unknownState = structuredClone(packet);
-unknownState.state = 'FUTURE_UNREVIEWED_STATE';
-assert.throws(
-  () => validatePacket(unknownState),
-  /unsupported phase state/,
-  'unreviewed future states must fail closed',
-);
-
+const broad=structuredClone(packet); broad.authorization.fast_vet=true;
+assert.throws(()=>validateFastVetAuthorization(broad),/authorization\.fast_vet=false/);
+const smokeOff=structuredClone(packet); smokeOff.authorization.fast_vet_smoke=false;
+assert.throws(()=>validateFastVetAuthorization(smokeOff),/authorization\.fast_vet_smoke=true/);
+const live=structuredClone(packet); live.authorization.live_execution=true;
+assert.throws(()=>validateFastVetAuthorization(live),/authorization\.live_execution=false/);
+const extra=structuredClone(packet); extra.authorization.magic=false;
+assert.throws(()=>validateFastVetAuthorization(extra),/authorization keyset drift/);
+const review=structuredClone(packet); review.review_gate.targeted_clean_comment_id=1;
+assert.throws(()=>validateFastVetAuthorization(review),/targeted review evidence drift/);
+const findings=structuredClone(packet); findings.review_gate.critical_high_findings[0].repair_status='OPEN';
+assert.throws(()=>validateFastVetAuthorization(findings),/P1 closure drift/);
+const next=structuredClone(packet); next.next_action='RUN_CANARY';
+assert.throws(()=>validateFastVetAuthorization(next),/unexpected next action/);
+const tuned=structuredClone(packet); tuned.frozen_smoke_rule.primary_notional_usd_micros=2_000_000;
+assert.throws(()=>validateFastVetAuthorization(tuned),/frozen smoke semantics drift/);
+const sqlite=structuredClone(packet); sqlite.adapter_contract.old_sqlite_runner_authorized=true;
+assert.throws(()=>validateFastVetAuthorization(sqlite),/SQLite runner must remain unauthorized/);
 console.log('DEV_SPINE_CHECK_TEST=PASS');

@@ -1,0 +1,17 @@
+{
+  "schema": "historical-full-replay-authority-map-r1/index-v1",
+  "encoding": "gzip+base64-chunks",
+  "sourceScopeIdentitySha256": "b5184624928e9dc36fd75558bf599074e9eb67e03658fe9b3f3e00668b5b8211",
+  "launchCount": 147,
+  "cohortCount": 9,
+  "authorityMapSha256": "c5346e572255385acd1744552633d5ad533d86d3821a8d857a432471e6022275",
+  "payloadSha256": "839c8ebd16589387b2e08888484962f0cf8d1389837f9045a7a9a4ef1eb97623",
+  "compressedPayloadSha256": "b140ffbfd3460de5a03c749d011ec8101323cc21f71af8c3c14826d5882b0893",
+  "payloadChunks": [
+    "fixtures/historical-full-replay-authority-map-r1.part-001.b64",
+    "fixtures/historical-full-replay-authority-map-r1.part-002.b64",
+    "fixtures/historical-full-replay-authority-map-r1.part-003.b64",
+    "fixtures/historical-full-replay-authority-map-r1.part-004.b64",
+    "fixtures/historical-full-replay-authority-map-r1.part-005.b64"
+  ]
+}

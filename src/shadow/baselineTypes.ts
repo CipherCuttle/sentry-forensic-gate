@@ -2,6 +2,11 @@ import type { Hex, LaunchObserved } from '../domain.js';
 import { sha256Hex } from '../evidence/canonical.js';
 
 export const EXECUTABLE_BASELINE_R1 = 'EXECUTABLE_BASELINE_R1';
+export const HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1 = 'HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1';
+export type BaselinePolicyVersion =
+  | typeof EXECUTABLE_BASELINE_R1
+  | typeof HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1;
+
 export const DEFAULT_BASELINE_NOTIONALS_USD_MICROS = [250_000n, 500_000n, 1_000_000n, 2_000_000n, 5_000_000n] as const;
 
 export type BaselineStatus = 'COMPLETE' | 'UNVERIFIED';
@@ -43,13 +48,25 @@ export interface BaselineQuoteReceipt {
   gasEstimate?: bigint;
 }
 
+export interface HistoricalOracleEvidence {
+  oracle: Hex;
+  answer: bigint;
+  decimals: number;
+  description: string;
+  version: bigint;
+  updatedAt: bigint;
+  decisionBlockTimestamp: bigint;
+  ageSeconds: bigint;
+}
+
 export interface UsdCalibration {
-  kind: 'USDT0_NOMINAL_PEG_V0' | 'WETH_USDT0_EXACT_OUTPUT_V0';
+  kind: 'USDT0_NOMINAL_PEG_V0' | 'WETH_USDT0_EXACT_OUTPUT_V0' | 'WETH_REDSTONE_ETH_USD_ASOF_V1';
   notionalUsdMicros: bigint;
   baseToken: Hex;
   baseAmount: bigint;
   baseDecimals: number;
   quote?: BaselineQuoteReceipt;
+  oracleEvidence?: HistoricalOracleEvidence;
 }
 
 export interface BaselineLeg {
@@ -69,7 +86,7 @@ export interface ExecutableBaselineBatch {
   baselineId: string;
   authorityDigest: string;
   launchId: string;
-  policyVersion: typeof EXECUTABLE_BASELINE_R1;
+  policyVersion: BaselinePolicyVersion;
   decisionBlock: bigint;
   decisionBlockHash: Hex;
   observedAtMs: number;
@@ -101,9 +118,11 @@ export async function deriveBaselineId(input: {
   launchId: string;
   decisionBlock: bigint;
   decisionBlockHash: Hex;
+  policyVersion?: BaselinePolicyVersion;
 }): Promise<string> {
+  const policyVersion = input.policyVersion ?? EXECUTABLE_BASELINE_R1;
   return sha256Hex({
-    kind: EXECUTABLE_BASELINE_R1,
+    kind: policyVersion,
     launchId: input.launchId,
     decisionBlock: input.decisionBlock,
     decisionBlockHash: input.decisionBlockHash.toLowerCase()
@@ -115,9 +134,13 @@ export async function deriveBaselineQuoteId(input: {
   decisionBlockHash: Hex;
   kind: BaselineQuoteKind;
   notionalUsdMicros: bigint;
+  policyVersion?: BaselinePolicyVersion;
 }): Promise<string> {
+  const policyVersion = input.policyVersion ?? EXECUTABLE_BASELINE_R1;
   return sha256Hex({
-    kind: 'BASELINE_QUOTE_R1',
+    kind: policyVersion === EXECUTABLE_BASELINE_R1
+      ? 'BASELINE_QUOTE_R1'
+      : `BASELINE_QUOTE:${policyVersion}`,
     launchId: input.launchId,
     decisionBlockHash: input.decisionBlockHash.toLowerCase(),
     quoteKind: input.kind,

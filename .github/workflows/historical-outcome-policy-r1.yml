@@ -1,0 +1,71 @@
+name: historical-outcome-policy-r1
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/HISTORICAL_OUTCOME_POLICY_R1.md'
+      - 'docs/agent-packets/HISTORICAL_OUTCOME_POLICY_R1.json'
+      - 'fixtures/historical-compatibility-r1.json'
+      - 'src/historicalOutcomePolicyCli.ts'
+      - 'src/runtime/forwardOutcomes.ts'
+      - 'src/runtime/executableBaseline.ts'
+      - 'src/outcome/historicalRedstoneOutcomeSource.ts'
+      - 'src/outcome/viemSource.ts'
+      - 'src/outcome/ports.ts'
+      - 'src/outcome/forwardTypes.ts'
+      - 'src/shadow/baselineTypes.ts'
+      - 'src/tsunami/historicalRedstoneBaselineSource.ts'
+      - 'src/tsunami/viemBaselineSource.ts'
+      - 'src/tsunami/contracts.ts'
+      - 'src/authority/readAuthorityContext.ts'
+      - 'src/sentry/viemSource.ts'
+      - 'src/sentry/contracts.ts'
+      - 'src/evidence/canonical.ts'
+      - 'src/index.ts'
+      - 'scripts/historical-outcome-oracle-probe.mjs'
+      - 'scripts/dev-spine-check.mjs'
+      - 'scripts/dev-spine-check-test.mjs'
+      - 'scripts/dev-spine-context.mjs'
+      - 'scripts/dev-spine-pack.mjs'
+      - 'scripts/dev-spine-receipt.mjs'
+      - '.github/workflows/historical-outcome-policy-r1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  historical-outcome-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --ignore-scripts --no-frozen-lockfile --lockfile=false
+      - name: Validate fail-closed phase metadata
+        run: |
+          node scripts/dev-spine-check-test.mjs
+          node scripts/dev-spine-check.mjs
+      - name: Build
+        run: pnpm build
+      - name: Reconfirm RedStone at exact 24h observed blocks
+        env:
+          SHADOW_ONLY: 'true'
+          OUTPUT_PATH: historical-outcome-policy-r1-oracle-discovery.json
+        run: node scripts/historical-outcome-oracle-probe.mjs
+      - name: Run historical outcome representative gate
+        env:
+          SHADOW_ONLY: 'true'
+          OUTPUT_PATH: historical-outcome-policy-r1-live-receipt.json
+        run: node dist/historicalOutcomePolicyCli.js
+      - name: Upload outcome evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-outcome-policy-r1-evidence
+          path: |
+            historical-outcome-policy-r1-oracle-discovery.json
+            historical-outcome-policy-r1-live-receipt.json
+          if-no-files-found: warn

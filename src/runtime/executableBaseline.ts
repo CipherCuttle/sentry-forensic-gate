@@ -8,10 +8,13 @@ import {
   independentRecoveryBps,
   isLaunchEligibleForDecision,
   type BaselineLeg,
+  type BaselinePolicyVersion,
   type ExecutableBaselineBatch
 } from '../shadow/baselineTypes.js';
 import type { BaselineStore } from '../shadow/baselineStore.js';
 import type { ExecutableBaselineSource } from '../tsunami/ports.js';
+
+export type ExecutableBlockAuthorizer = (blockNumber: bigint) => unknown;
 
 export interface ExecutableBaselineOptions {
   decisionDelayBlocks: bigint;
@@ -83,18 +86,20 @@ export async function buildBaselineBatch(
   source: ExecutableBaselineSource,
   launch: LaunchObserved,
   decisionDelayBlocks: bigint,
-  notionalsUsdMicros: readonly bigint[]
+  notionalsUsdMicros: readonly bigint[],
+  authorizeExecutableBlock: ExecutableBlockAuthorizer = resolveAuthorizedExecutableInfra,
+  policyVersion: BaselinePolicyVersion = EXECUTABLE_BASELINE_R1
 ): Promise<ExecutableBaselineBatch> {
-  resolveAuthorizedExecutableInfra(launch.blockNumber);
+  authorizeExecutableBlock(launch.blockNumber);
   const decisionBlock = launch.blockNumber + decisionDelayBlocks;
-  resolveAuthorizedExecutableInfra(decisionBlock);
+  authorizeExecutableBlock(decisionBlock);
   const decisionBlockHash = await source.getBlockHash(decisionBlock);
 
   // Authority drift is global, not a per-launch data gap. Fail closed and do not
   // persist an UNVERIFIED row that would let the worker continue under new semantics.
   await source.assertAuthority(decisionBlock);
 
-  const baselineId = await deriveBaselineId({ launchId: launch.launchId, decisionBlock, decisionBlockHash });
+  const baselineId = await deriveBaselineId({ launchId: launch.launchId, decisionBlock, decisionBlockHash, policyVersion });
   const observedAtMs = Date.now();
 
   try {
@@ -145,7 +150,7 @@ export async function buildBaselineBatch(
     const withoutDigest = {
       baselineId,
       launchId: launch.launchId,
-      policyVersion: EXECUTABLE_BASELINE_R1 as typeof EXECUTABLE_BASELINE_R1,
+      policyVersion,
       decisionBlock,
       decisionBlockHash,
       observedAtMs,
@@ -168,7 +173,7 @@ export async function buildBaselineBatch(
     const withoutDigest = {
       baselineId,
       launchId: launch.launchId,
-      policyVersion: EXECUTABLE_BASELINE_R1 as typeof EXECUTABLE_BASELINE_R1,
+      policyVersion,
       decisionBlock,
       decisionBlockHash,
       observedAtMs,

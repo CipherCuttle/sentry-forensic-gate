@@ -1,0 +1,166 @@
+name: canary-prospective-observation-r1
+
+on:
+  pull_request:
+    paths:
+      - 'src/canarySniperCli.ts'
+      - 'scripts/canary-prospective-runtime-repair-r0-check.mjs'
+      - '.github/workflows/canary-prospective-observation-r1.yml'
+  workflow_dispatch:
+    inputs:
+      long_observation:
+        description: 'Run the bounded long dry observation instead of the qualification soak'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canary-prospective-observation-r1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dry-observation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile --lockfile=false
+      - run: pnpm build
+
+      - name: Qualify repair source invariants
+        run: node scripts/canary-prospective-runtime-repair-r0-check.mjs
+
+      - name: Derive confirmed prospective window
+        shell: bash
+        run: |
+          set -euo pipefail
+          RPC='https://rpc-gel.inkonchain.com'
+          HEAD_HEX="$(curl -fsSL \
+            -H 'content-type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
+            "$RPC" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const x=JSON.parse(d);if(typeof x.result!=='string')process.exit(1);process.stdout.write(x.result)})")"
+          HEAD=$((16#${HEAD_HEX#0x}))
+          START=$(( HEAD > 32 ? HEAD - 32 : HEAD ))
+          echo "OBSERVED_HEAD=$HEAD" >> "$GITHUB_ENV"
+          echo "SENTRY_START_BLOCK=$START" >> "$GITHUB_ENV"
+          echo "INK_RPC_URL=$RPC" >> "$GITHUB_ENV"
+          echo "CANARY_SNIPER_R0_ENABLED=true" >> "$GITHUB_ENV"
+          echo "CANARY_LIVE=false" >> "$GITHUB_ENV"
+          echo "DB_PATH=$RUNNER_TEMP/canary-prospective-observation-r1.sqlite" >> "$GITHUB_ENV"
+          echo "CANARY_CANDIDATE_MAX_AGE_BLOCKS=10" >> "$GITHUB_ENV"
+          echo "CANARY_CANDIDATE_SCAN_LIMIT=25" >> "$GITHUB_ENV"
+          echo "SENTRY_CONFIRMATIONS=2" >> "$GITHUB_ENV"
+          echo "BASELINE_CONFIRMATIONS=2" >> "$GITHUB_ENV"
+          echo "OUTCOME_CONFIRMATIONS=2" >> "$GITHUB_ENV"
+          echo "CANARY_POLL_INTERVAL_MS=500" >> "$GITHUB_ENV"
+          if [[ "${{ github.event_name }}" == 'workflow_dispatch' && "${{ inputs.long_observation }}" == 'true' ]]; then
+            echo "OBSERVE_SECONDS=19800" >> "$GITHUB_ENV"
+            echo "OBSERVATION_MODE=LONG" >> "$GITHUB_ENV"
+          else
+            echo "OBSERVE_SECONDS=150" >> "$GITHUB_ENV"
+            echo "OBSERVATION_MODE=QUALIFICATION_SOAK" >> "$GITHUB_ENV"
+          fi
+          printf 'OBSERVATION_WINDOW head=%s start=%s confirmations=2 mode=%s\n' "$HEAD" "$START" "${OBSERVATION_MODE:-PENDING_ENV}"
+
+      - name: Assert no wallet secret or live mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${CANARY_PRIVATE_KEY:-}"
+          test "${CANARY_LIVE}" = 'false'
+          echo 'CANARY_PROSPECTIVE_R1_NO_KEY_BOUNDARY=PASS'
+
+      - name: Run bounded prospective dry observation
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          timeout --signal=TERM --kill-after=15s "${OBSERVE_SECONDS}s" \
+            node dist/canarySniperCli.js 2>&1 | tee canary-prospective-observation-r1.jsonl
+          runtime_status=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$runtime_status" > canary-prospective-observation-r1-runtime-status.txt
+          if [[ "$runtime_status" != '0' && "$runtime_status" != '124' && "$runtime_status" != '143' ]]; then
+            echo "PROSPECTIVE_RUNTIME_EXIT=$runtime_status" >&2
+            exit "$runtime_status"
+          fi
+
+      - name: Verify and seal prospective repair evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { createHash } from 'node:crypto';
+
+          const raw = fs.readFileSync('canary-prospective-observation-r1.jsonl', 'utf8');
+          if (raw.includes('SENTRY_PROXY_IMPLEMENTATION_MISSING')) throw new Error('R1_PROXY_IMPLEMENTATION_FALSE_MISSING');
+          if (raw.includes('MaxListenersExceededWarning')) throw new Error('R1_ABORT_LISTENER_LEAK');
+          if (raw.includes('OBSERVATION_MONEY_MOVING_SIGNAL')) throw new Error('R1_MONEY_MOVING_SIGNAL');
+
+          const reports = raw.split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter((line) => line.startsWith('{'))
+            .map((line) => {
+              try { return JSON.parse(line); } catch { return null; }
+            })
+            .filter((report) => report?.runtimeVersion === 'CANARY_SNIPER_R0');
+          if (reports.length < 10) throw new Error(`R1_TOO_FEW_RUNTIME_REPORTS:${reports.length}`);
+
+          const allowed = new Set(['NONE', 'DRY_PASS', 'BLOCKED_UNRESOLVED']);
+          for (const report of reports) {
+            if (report.live !== false) throw new Error('R1_NOT_DRY');
+            if (report.entryApprovalEnabled !== false) throw new Error('R1_ENTRY_APPROVAL_ENABLED');
+            if (report.roundTripEnabled !== false) throw new Error('R1_ROUNDTRIP_ENABLED');
+            if (!allowed.has(report.canary?.action)) throw new Error(`R1_UNEXPECTED_CANARY_ACTION:${report.canary?.action}`);
+            if (report.canary?.transactionHash || ['SUBMITTED', 'INCLUDED'].includes(report.canary?.action)) {
+              throw new Error('R1_MONEY_MOVING_SIGNAL');
+            }
+          }
+
+          const runtimeStatus = fs.readFileSync('canary-prospective-observation-r1-runtime-status.txt', 'utf8').trim();
+          const core = {
+            schema: 'canary-prospective-runtime-repair-r0-receipt/v1',
+            sourceHead: process.env.GITHUB_SHA,
+            branch: process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME,
+            mode: process.env.OBSERVATION_MODE,
+            observedHeadAtStart: process.env.OBSERVED_HEAD,
+            startBlock: process.env.SENTRY_START_BLOCK,
+            sentryConfirmations: Number(process.env.SENTRY_CONFIRMATIONS),
+            baselineConfirmations: Number(process.env.BASELINE_CONFIRMATIONS),
+            outcomeConfirmations: Number(process.env.OUTCOME_CONFIRMATIONS),
+            runtimeStatus,
+            reportCount: reports.length,
+            firstTruthHead: reports[0]?.truth?.headBlock ?? null,
+            lastTruthHead: reports.at(-1)?.truth?.headBlock ?? null,
+            proxyImplementationMissingObserved: false,
+            maxListenersWarningObserved: false,
+            live: false,
+            realWalletSecretUsed: false,
+            networkBroadcastInvoked: false
+          };
+          const evidenceDigest = createHash('sha256').update(JSON.stringify(core)).digest('hex');
+          const receipt = {
+            verdict: 'CANARY_PROSPECTIVE_RUNTIME_REPAIR_R0_PASS',
+            ...core,
+            evidenceDigest
+          };
+          fs.writeFileSync('canary-prospective-runtime-repair-r0-receipt.json', JSON.stringify(receipt, null, 2) + '\n');
+          console.log(JSON.stringify(receipt, null, 2));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canary-prospective-runtime-repair-r0-evidence
+          path: |
+            canary-prospective-runtime-repair-r0-receipt.json
+            canary-prospective-observation-r1-runtime-status.txt
+            canary-prospective-observation-r1.jsonl
+          if-no-files-found: error
