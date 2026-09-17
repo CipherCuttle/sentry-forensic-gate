@@ -69,6 +69,11 @@ type PonsV2LaunchRecord = {
 };
 
 interface LaunchAuthorityFields {
+  authorityId: string;
+  factoryRuntimeCodeHash: Hex;
+  factory: Hex;
+  token: Hex;
+  deployer: Hex;
   curve: Hex;
   pairToken: Hex;
   graduationThreshold: bigint;
@@ -110,7 +115,7 @@ export class ViemPonsV2MarketStateResolver {
       );
     }
 
-    const launchAuthority = readLaunchAuthority(launch);
+    const launchAuthority = readLaunchAuthority(launch, this.authority);
     await this.authorityGuard.assertAuthority(decisionBlock);
     const decisionBlockHash = await this.authorityGuard.getBlockHash(decisionBlock);
 
@@ -124,51 +129,65 @@ export class ViemPonsV2MarketStateResolver {
     const record = recordRaw as unknown as PonsV2LaunchRecord;
     this.assertRecordStable(launch, launchAuthority, record);
 
+    const [graduated, curveCode] = await Promise.all([
+      this.client.readContract({
+        address: record.curve,
+        abi: ponsV2CurveStateReadAbi,
+        functionName: 'graduated',
+        blockNumber: decisionBlock
+      }),
+      this.client.getBytecode({
+        address: record.curve,
+        blockNumber: decisionBlock
+      })
+    ]);
+    if (!curveCode || curveCode === '0x') {
+      throw new Error(`PONS_V2_MARKET_CURVE_CODE_MISSING:${record.curve}:block=${decisionBlock}`);
+    }
+
     let state: PonsV2MarketState;
     if (record.phase === 0) {
-      const [graduated, readyToGraduate, curveCode] = await Promise.all([
-        this.client.readContract({
-          address: record.curve,
-          abi: ponsV2CurveStateReadAbi,
-          functionName: 'graduated',
-          blockNumber: decisionBlock
-        }),
-        this.client.readContract({
-          address: record.curve,
-          abi: ponsV2CurveStateReadAbi,
-          functionName: 'readyToGraduate',
-          blockNumber: decisionBlock
-        }),
-        this.client.getBytecode({
-          address: record.curve,
-          blockNumber: decisionBlock
-        })
-      ]);
-
-      if (!curveCode || curveCode === '0x') {
-        throw new Error(`PONS_V2_MARKET_CURVE_CODE_MISSING:${record.curve}:block=${decisionBlock}`);
-      }
       if (graduated) {
         throw new Error(`PONS_V2_MARKET_PHASE_CONTRADICTION:NOT_GRADUATED_BUT_CURVE_GRADUATED:${launch.launchId}`);
       }
+      assertUnsweptFields(record, launch.launchId);
+      const readyToGraduate = await this.client.readContract({
+        address: record.curve,
+        abi: ponsV2CurveStateReadAbi,
+        functionName: 'readyToGraduate',
+        blockNumber: decisionBlock
+      });
       state = readyToGraduate ? 'CURVE_HALTED_READY' : 'CURVE_ACTIVE';
-    } else if (record.phase === 1) {
-      state = 'SWEPT_PENDING_V4';
-    } else if (record.phase === 2) {
-      state = 'V4_POOL_PENDING_ADAPTER';
-    } else if (record.phase === 3) {
-      state = 'RESCUED_TERMINAL';
     } else {
-      throw new Error(`PONS_V2_MARKET_UNKNOWN_GRADUATION_PHASE:${record.phase}`);
+      if (!graduated) {
+        throw new Error(`PONS_V2_MARKET_PHASE_CONTRADICTION:POST_SWEEP_BUT_CURVE_NOT_GRADUATED:${launch.launchId}`);
+      }
+      if (record.phase === 1) {
+        if (record.sweptQuote <= 0n || record.sweptTokens <= 0n || record.sweptAt <= 0n) {
+          throw new Error(`PONS_V2_MARKET_PHASE_CONTRADICTION:SWEPT_FIELDS_INVALID:${launch.launchId}`);
+        }
+        state = 'SWEPT_PENDING_V4';
+      } else if (record.phase === 2) {
+        assertUnsweptFields(record, launch.launchId);
+        state = 'V4_POOL_PENDING_ADAPTER';
+      } else if (record.phase === 3) {
+        assertUnsweptFields(record, launch.launchId);
+        state = 'RESCUED_TERMINAL';
+      } else {
+        throw new Error(`PONS_V2_MARKET_UNKNOWN_GRADUATION_PHASE:${record.phase}`);
+      }
     }
 
+    // The final chain read must be the canonical block hash. Authority is
+    // rechecked first so every record/code read is bounded by the hash pair;
+    // no chain-dependent read is allowed after the second hash.
+    await this.authorityGuard.assertAuthority(decisionBlock);
     const decisionBlockHashAfter = await this.authorityGuard.getBlockHash(decisionBlock);
     if (norm(decisionBlockHashAfter) !== norm(decisionBlockHash)) {
       throw new Error(
         `PONS_V2_MARKET_REORG_DURING_READ:block=${decisionBlock}:expected=${decisionBlockHash}:actual=${decisionBlockHashAfter}`
       );
     }
-    await this.authorityGuard.assertAuthority(decisionBlock);
 
     const sourceAuthority: SourceAuthorityEnvelope = {
       schema: 'ROBINHOOD_PONS_V2_MARKET_STATE_R1',
@@ -256,7 +275,10 @@ export class ViemPonsV2MarketStateResolver {
   }
 }
 
-function readLaunchAuthority(launch: NormalizedLaunchCandidate): LaunchAuthorityFields {
+function readLaunchAuthority(
+  launch: NormalizedLaunchCandidate,
+  authority: Readonly<PonsV2Authority>
+): LaunchAuthorityFields {
   if (launch.sourceAuthority.schema !== 'ROBINHOOD_PONS_V2_TOKEN_LAUNCHED_V1') {
     throw new Error(`PONS_V2_MARKET_SOURCE_AUTHORITY_SCHEMA_MISMATCH:${launch.sourceAuthority.schema}`);
   }
@@ -264,17 +286,67 @@ function readLaunchAuthority(launch: NormalizedLaunchCandidate): LaunchAuthority
   if (!isJsonRecord(payload)) {
     throw new Error(`PONS_V2_MARKET_SOURCE_AUTHORITY_MALFORMED:${launch.launchId}`);
   }
+  const authorityId = requireStringField(payload, 'authorityId', launch.launchId);
+  const factoryRuntimeCodeHash = requireHashField(payload, 'factoryRuntimeCodeHash', launch.launchId);
+  const factory = requireHexField(payload, 'factory', launch.launchId);
+  const token = requireHexField(payload, 'token', launch.launchId);
+  const deployer = requireHexField(payload, 'deployer', launch.launchId);
   const curve = requireHexField(payload, 'curve', launch.launchId);
   const pairToken = requireHexField(payload, 'pairToken', launch.launchId);
+  const sourceLaunchId = requireStringField(payload, 'launchId', launch.launchId);
+  const sourceEventId = requireStringField(payload, 'eventId', launch.launchId);
   const graduationThresholdRaw = payload.graduationThreshold;
   if (typeof graduationThresholdRaw !== 'string' || !/^[0-9]+$/.test(graduationThresholdRaw)) {
     throw new Error(`PONS_V2_MARKET_SOURCE_AUTHORITY_GRADUATION_THRESHOLD_INVALID:${launch.launchId}`);
   }
+
+  if (authorityId !== authority.authorityId) {
+    throw new Error(`PONS_V2_MARKET_SOURCE_AUTHORITY_ID_MISMATCH:${launch.launchId}`);
+  }
+  if (norm(factoryRuntimeCodeHash) !== norm(authority.factoryRuntimeCodeHash)) {
+    throw new Error(`PONS_V2_MARKET_SOURCE_AUTHORITY_CODE_HASH_MISMATCH:${launch.launchId}`);
+  }
+  requireSameAddress('SOURCE_FACTORY', factory, authority.factory);
+  requireSameAddress('SOURCE_TOKEN', token, launch.token);
+  requireSameAddress('SOURCE_DEPLOYER', deployer, launch.creator);
+  if (sourceLaunchId !== launch.launchId || sourceEventId !== launch.eventId) {
+    throw new Error(`PONS_V2_MARKET_SOURCE_AUTHORITY_IDENTITY_MISMATCH:${launch.launchId}`);
+  }
+
   return {
+    authorityId,
+    factoryRuntimeCodeHash,
+    factory,
+    token,
+    deployer,
     curve,
     pairToken,
     graduationThreshold: BigInt(graduationThresholdRaw)
   };
+}
+
+function requireStringField(
+  payload: Readonly<Record<string, CanonicalJsonValue>>,
+  key: string,
+  launchId: string
+): string {
+  const value = payload[key];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`PONS_V2_MARKET_SOURCE_AUTHORITY_${key.toUpperCase()}_INVALID:${launchId}`);
+  }
+  return value;
+}
+
+function requireHashField(
+  payload: Readonly<Record<string, CanonicalJsonValue>>,
+  key: string,
+  launchId: string
+): Hex {
+  const value = payload[key];
+  if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error(`PONS_V2_MARKET_SOURCE_AUTHORITY_${key.toUpperCase()}_INVALID:${launchId}`);
+  }
+  return normHex(value);
 }
 
 function requireHexField(
@@ -293,6 +365,12 @@ function isJsonRecord(
   value: CanonicalJsonValue
 ): value is Readonly<Record<string, CanonicalJsonValue>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function assertUnsweptFields(record: PonsV2LaunchRecord, launchId: string): void {
+  if (record.sweptQuote !== 0n || record.sweptTokens !== 0n || record.sweptAt !== 0n) {
+    throw new Error(`PONS_V2_MARKET_PHASE_CONTRADICTION:UNSWEPT_FIELDS_NONZERO:${launchId}`);
+  }
 }
 
 function requireSameAddress(label: string, actual: Address, expected: string): void {

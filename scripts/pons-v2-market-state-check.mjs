@@ -41,6 +41,13 @@ const launch = {
   sourceAuthority: {
     schema: 'ROBINHOOD_PONS_V2_TOKEN_LAUNCHED_V1',
     payload: {
+      authorityId: authority.authorityId,
+      factoryRuntimeCodeHash,
+      launchId: 'launch-1',
+      eventId: 'event-1',
+      factory,
+      token,
+      deployer,
       curve,
       pairToken,
       graduationThreshold: '50000000000000000000'
@@ -125,20 +132,24 @@ const ready = await resolve({ readyToGraduate: true });
 assert.equal(ready.state, 'CURVE_HALTED_READY');
 assert.equal(ready.market, null);
 
-const swept = await resolve({ phase: 1 });
+const swept = await resolve({
+  phase: 1,
+  graduated: true,
+  record: { ...baseRecord, sweptQuote: 10n, sweptTokens: 20n, sweptAt: 123n }
+});
 assert.equal(swept.state, 'SWEPT_PENDING_V4');
 assert.equal(swept.market, null);
 
-const pool = await resolve({ phase: 2 });
+const pool = await resolve({ phase: 2, graduated: true });
 assert.equal(pool.state, 'V4_POOL_PENDING_ADAPTER');
 assert.equal(pool.market, null);
 
-const rescued = await resolve({ phase: 3 });
+const rescued = await resolve({ phase: 3, graduated: true });
 assert.equal(rescued.state, 'RESCUED_TERMINAL');
 assert.equal(rescued.market, null);
 
 await assert.rejects(
-  () => resolve({ phase: 4 }),
+  () => resolve({ phase: 4, graduated: true }),
   /PONS_V2_MARKET_UNKNOWN_GRADUATION_PHASE:4/
 );
 
@@ -150,6 +161,29 @@ await assert.rejects(
 await assert.rejects(
   () => resolve({ graduated: true }),
   /PONS_V2_MARKET_PHASE_CONTRADICTION/
+);
+
+await assert.rejects(
+  () => resolve({
+    phase: 1,
+    graduated: false,
+    record: { ...baseRecord, sweptQuote: 10n, sweptTokens: 20n, sweptAt: 123n }
+  }),
+  /POST_SWEEP_BUT_CURVE_NOT_GRADUATED/
+);
+
+await assert.rejects(
+  () => resolve({ phase: 1, graduated: true }),
+  /SWEPT_FIELDS_INVALID/
+);
+
+await assert.rejects(
+  () => resolve({
+    phase: 2,
+    graduated: true,
+    record: { ...baseRecord, sweptQuote: 1n }
+  }),
+  /UNSWEPT_FIELDS_NONZERO/
 );
 
 await assert.rejects(
@@ -165,6 +199,30 @@ await assert.rejects(
 await assert.rejects(
   () => resolve({ record: { ...baseRecord, deployer: '0x7777777777777777777777777777777777777777' } }),
   /PONS_V2_MARKET_LAUNCH_RECORD_MISMATCH:DEPLOYER/
+);
+
+const wrongAuthorityIdLaunch = {
+  ...launch,
+  sourceAuthority: {
+    ...launch.sourceAuthority,
+    payload: { ...launch.sourceAuthority.payload, authorityId: 'WRONG_AUTHORITY' }
+  }
+};
+await assert.rejects(
+  () => new ViemPonsV2MarketStateResolver({ authority, client: makeClient() }).resolve(wrongAuthorityIdLaunch, 120n),
+  /PONS_V2_MARKET_SOURCE_AUTHORITY_ID_MISMATCH/
+);
+
+const wrongSourceHashLaunch = {
+  ...launch,
+  sourceAuthority: {
+    ...launch.sourceAuthority,
+    payload: { ...launch.sourceAuthority.payload, factoryRuntimeCodeHash: `0x${'ee'.repeat(32)}` }
+  }
+};
+await assert.rejects(
+  () => new ViemPonsV2MarketStateResolver({ authority, client: makeClient() }).resolve(wrongSourceHashLaunch, 120n),
+  /PONS_V2_MARKET_SOURCE_AUTHORITY_CODE_HASH_MISMATCH/
 );
 
 const reorg = new ViemPonsV2MarketStateResolver({
@@ -193,5 +251,7 @@ console.log(JSON.stringify({
   sweptFailsClosed: true,
   v4RequiresSeparateAdapter: true,
   rescuedTerminal: true,
-  decisionBlockReorgGuard: true
+  decisionBlockReorgGuard: true,
+  sourceAuthorityContinuityBound: true,
+  phaseCurveConsistencyBound: true
 }, null, 2));
