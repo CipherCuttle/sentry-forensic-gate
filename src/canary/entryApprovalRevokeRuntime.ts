@@ -55,11 +55,6 @@ export interface CanaryE0EntryApprovalRevokeRuntimeReport {
   reason?: string | undefined;
 }
 
-export type CanaryE0EntryApprovalRevokeReconcileReport =
-  Omit<CanaryE0EntryApprovalRevokeRuntimeReport, 'action'> & {
-    action: Exclude<CanaryE0EntryApprovalRevokeRuntimeAction, 'ALREADY_CLEAN'>;
-  };
-
 export async function advanceCanaryE0EntryApprovalRevoke(params: {
   parentApproval: CanaryEntryApprovalIntent;
   store: CanaryEntryApprovalRevokeStore;
@@ -132,11 +127,11 @@ export async function advanceCanaryE0EntryApprovalRevoke(params: {
 export async function reconcileCanaryE0EntryApprovalRevoke(params: {
   store: CanaryEntryApprovalRevokeStore;
   executor: CanaryEntryApprovalRevokeExecutor;
-}): Promise<CanaryE0EntryApprovalRevokeReconcileReport | null> {
+}): Promise<CanaryE0EntryApprovalRevokeRuntimeReport | null> {
   const unresolved = params.store.listUnresolved();
   if (!unresolved.length) return null;
   if (unresolved.length > 1) {
-    return reconcileReport(unresolved[0]!.parentEntryApprovalActionId, 'BLOCKED_SETUP', {
+    return report(unresolved[0]!.parentEntryApprovalActionId, 'BLOCKED_SETUP', {
       revokeActionId: unresolved[0]!.actionId,
       reason: 'CANARY_ENTRY_APPROVAL_REVOKE_MULTIPLE_UNRESOLVED_INVARIANT_BROKEN'
     });
@@ -144,7 +139,7 @@ export async function reconcileCanaryE0EntryApprovalRevoke(params: {
   const action = unresolved[0]!;
   const reconciled = await reconcileRevoke(action, params.store, params.executor);
   if (!reconciled) return null;
-  return reconcileReport(action.parentEntryApprovalActionId, reconciled.action, {
+  return report(action.parentEntryApprovalActionId, reconciled.action, {
     revokeActionId: action.actionId,
     transactionHash: reconciled.transactionHash,
     reason: reconciled.reason
@@ -282,23 +277,6 @@ async function reconcileRevoke(
   const allowance = await executor.getTokenAllowance(action.intent.token, action.intent.spender);
   store.markIncluded(action.actionId, allowance);
   return { action: 'ENTRY_APPROVAL_REVOKE_INCLUDED', transactionHash: action.transactionHash };
-}
-
-function reconcileReport(
-  parentEntryApprovalActionId: string,
-  action: Exclude<CanaryE0EntryApprovalRevokeRuntimeAction, 'ALREADY_CLEAN'>,
-  extra: {
-    revokeActionId?: string | undefined;
-    transactionHash?: Hex | undefined;
-    reason?: string | undefined;
-  } = {}
-): CanaryE0EntryApprovalRevokeReconcileReport {
-  return {
-    version: CANARY_E0_ENTRY_APPROVAL_REVOKE_RUNTIME_R0,
-    action,
-    parentEntryApprovalActionId,
-    ...extra
-  };
 }
 
 function report(
