@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getAddress, keccak256 } from 'viem';
+import { buildCanaryEntryApprovalIntent } from '../dist/canary/entryApproval.js';
 import { advanceCanaryE0EntryApproval } from '../dist/canary/entryApprovalRuntime.js';
 import { CanaryEntryApprovalStore } from '../dist/canary/entryApprovalStore.js';
 import {
@@ -16,17 +17,23 @@ const TEST_WALLET = '0x1111111111111111111111111111111111111111';
 const LAUNCHED = '0x2222222222222222222222222222222222222222';
 const OTHER_LAUNCHED = '0x3333333333333333333333333333333333333333';
 const HASH = `0x${'44'.repeat(32)}`;
+const OTHER_HASH = `0x${'55'.repeat(32)}`;
 const ENTRY_AMOUNT = 1_000_000n;
 const QUOTED_OUT = 2_000_000n;
 const SERIALIZED = '0x1234';
 const TX_HASH = keccak256(SERIALIZED);
 
-async function makeBuy({ amountIn = ENTRY_AMOUNT, tokenOut = LAUNCHED } = {}) {
+async function makeBuy({
+  amountIn = ENTRY_AMOUNT,
+  tokenOut = LAUNCHED,
+  quoteBlockNumber = 100n,
+  quoteBlockHash = HASH
+} = {}) {
   return buildCanarySwapIntent({
     launchId: 'e0-entry-wiring-launch',
     baselineId: 'e0-entry-wiring-baseline',
-    quoteBlockNumber: 100n,
-    quoteBlockHash: HASH,
+    quoteBlockNumber,
+    quoteBlockHash,
     tokenIn: WETH9,
     tokenOut,
     fee: 10_000,
@@ -131,6 +138,22 @@ try {
   assert.equal(signCalls, 1, 'included approval must not sign again');
   assert.equal(fakeBroadcastBoundaryCalls, 1, 'included approval must not rebroadcast');
 
+  const quoteBlockDrift = await advanceCanaryE0EntryApproval({
+    plannedBuy: await makeBuy({ quoteBlockNumber: 101n }),
+    store,
+    executor
+  });
+  assert.equal(quoteBlockDrift.action, 'BLOCKED_SETUP');
+  assert.match(quoteBlockDrift.reason ?? '', /CANARY_ENTRY_APPROVAL_BUY_QUOTE_BLOCK_MISMATCH/);
+
+  const quoteHashDrift = await advanceCanaryE0EntryApproval({
+    plannedBuy: await makeBuy({ quoteBlockHash: OTHER_HASH }),
+    store,
+    executor
+  });
+  assert.equal(quoteHashDrift.action, 'BLOCKED_SETUP');
+  assert.match(quoteHashDrift.reason ?? '', /CANARY_ENTRY_APPROVAL_BUY_QUOTE_HASH_MISMATCH/);
+
   const amountDrift = await advanceCanaryE0EntryApproval({
     plannedBuy: await makeBuy({ amountIn: ENTRY_AMOUNT - 1n }),
     store,
@@ -158,6 +181,47 @@ try {
 } finally {
   store.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
+}
+
+const raceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentry-e0-entry-capability-race-r0-'));
+const raceStore = new CanaryEntryApprovalStore(path.join(raceDir, 'canary.sqlite'));
+try {
+  const raceBuy = await makeBuy();
+  const raceIntent = await buildCanaryEntryApprovalIntent(raceBuy);
+  const now = 1_700_000_100_000;
+  const reservation = await raceStore.insertReserved({
+    actionId: raceIntent.actionId,
+    parentBuyActionId: raceIntent.parentBuyActionId,
+    launchId: raceIntent.launchId,
+    baselineId: raceIntent.baselineId,
+    state: 'RESERVED',
+    intent: raceIntent,
+    observedAllowanceBefore: 0n,
+    observedAllowanceAfter: null,
+    nonce: null,
+    transactionHash: null,
+    serializedTransaction: null,
+    lastError: null,
+    createdAtMs: now,
+    updatedAtMs: now
+  }, raceBuy);
+  assert.equal(reservation.status, 'INSERTED');
+
+  const outcomes = await Promise.allSettled([
+    raceStore.consumeSigningAuthority(raceIntent.actionId, reservation.signingCapability),
+    raceStore.consumeSigningAuthority(raceIntent.actionId, reservation.signingCapability)
+  ]);
+  assert.equal(outcomes.filter((outcome) => outcome.status === 'fulfilled').length, 1, 'exactly one concurrent capability consumer may win');
+  const rejected = outcomes.find((outcome) => outcome.status === 'rejected');
+  assert.ok(rejected, 'one concurrent capability consumer must be rejected');
+  assert.match(String(rejected.reason), /CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID/);
+  assert.throws(
+    () => raceStore.assertSigningAuthority(raceIntent.actionId, reservation.signingCapability),
+    /CANARY_ENTRY_APPROVAL_SIGNING_CAPABILITY_INVALID/
+  );
+} finally {
+  raceStore.close();
+  fs.rmSync(raceDir, { recursive: true, force: true });
 }
 
 const cycleSource = fs.readFileSync(new URL('../src/canary/cycle.ts', import.meta.url), 'utf8');
@@ -198,6 +262,8 @@ console.log(JSON.stringify({
   approvalAndBuySeparatedAcrossPolls: true,
   exactApprovedAmountBoundToBuy: true,
   buyTokenAndFeeIdentityBound: true,
+  sourceQuoteAuthorityFrozen: true,
+  concurrentCapabilityConsumeOneShot: true,
   widenedAllowanceBlocked: true,
   freshDollarCapCannotBeExceeded: true,
   exactBaselineRehydrationRequired: true,
