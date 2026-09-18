@@ -18,7 +18,7 @@ export const ROBINHOOD_ETH_USDG_V4_POOL_KEY = Object.freeze({
   hooks: PONS_V2_NATIVE_PAIR_TOKEN
 });
 
-export const EIP1967_IMPLEMENTATION_SLOT: Hex =
+export const ROBINHOOD_USDG_EIP1967_IMPLEMENTATION_SLOT: Hex =
   '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
 
 export interface RobinhoodUsdCalibrationAuthority {

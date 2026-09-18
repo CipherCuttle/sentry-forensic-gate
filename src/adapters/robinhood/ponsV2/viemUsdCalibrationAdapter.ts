@@ -25,7 +25,7 @@ import {
   uniswapV4StateViewReadAbi
 } from './contracts.js';
 import {
-  EIP1967_IMPLEMENTATION_SLOT,
+  ROBINHOOD_USDG_EIP1967_IMPLEMENTATION_SLOT,
   ROBINHOOD_ETH_USDG_V4_POOL_KEY,
   assertRobinhoodUsdCalibrationBlock,
   validateRobinhoodUsdCalibrationAuthority,
@@ -245,7 +245,7 @@ export class ViemRobinhoodUsdCalibrationAdapter implements UsdCalibrationAdapter
       this.client.getBytecode({ address: this.authority.usdgImplementation as Address, blockNumber }),
       this.client.getStorageAt({
         address: this.authority.usdg as Address,
-        slot: EIP1967_IMPLEMENTATION_SLOT,
+        slot: ROBINHOOD_USDG_EIP1967_IMPLEMENTATION_SLOT,
         blockNumber
       }),
       this.client.readContract({

@@ -7,7 +7,7 @@ import {
 } from '../dist/adapters/robinhood/ponsV2/contracts.js';
 import {
   CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY,
-  EIP1967_IMPLEMENTATION_SLOT,
+  ROBINHOOD_USDG_EIP1967_IMPLEMENTATION_SLOT,
   ROBINHOOD_ETH_USDG_V4_POOL_ID,
   ROBINHOOD_ETH_USDG_V4_POOL_KEY,
   deriveRobinhoodEthUsdgV4PoolId
@@ -111,7 +111,7 @@ function makeClient({
     },
     async getStorageAt({ address, slot }) {
       assert.equal(address.toLowerCase(), authority.usdg.toLowerCase());
-      assert.equal(slot.toLowerCase(), EIP1967_IMPLEMENTATION_SLOT.toLowerCase());
+      assert.equal(slot.toLowerCase(), ROBINHOOD_USDG_EIP1967_IMPLEMENTATION_SLOT.toLowerCase());
       return paddedAddress(implementation);
     },
     async readContract({ address, functionName }) {
