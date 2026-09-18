@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createPublicClient, defineChain, http } from 'viem';
+import { createPublicClient, custom, defineChain } from 'viem';
 import {
   CREATOR_OUTCOME_HORIZON_MS,
   CURRENT_PONS_V2_AUTHORITY,
@@ -47,20 +47,13 @@ const robinhood = defineChain({
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: { default: { http: [rpcUrl] } }
 });
-const rawClient = createPublicClient({
+const client = createPublicClient({
   chain: robinhood,
-  transport: http(rpcUrl, {
-    retryCount: 4,
-    retryDelay: 2000,
-    fetchOptions: {
-      headers: {
-        'content-type': 'application/json',
-        'user-agent': 'sentry-forensic-gate-m2h-archive-probe/3'
-      }
-    }
-  })
+  transport: custom(
+    nodeFlareProvider(rpcUrl, minIntervalMs),
+    { name: 'NodeFlare Public Archive', key: 'nodeflare-public-archive' }
+  )
 });
-const client = pacedClient(rawClient, minIntervalMs);
 
 const launchAdapter = new ViemPonsV2LaunchAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
@@ -261,40 +254,83 @@ function launchCurve(launch) {
   return curve;
 }
 
-function pacedClient(rawClient, intervalMs) {
+function nodeFlareProvider(url, intervalMs) {
   let tail = Promise.resolve();
   let lastStartedAt = 0;
-  const paced = (operation) => {
-    const run = tail.then(async () => {
-      const waitMs = Math.max(0, lastStartedAt + intervalMs - Date.now());
-      if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
-      lastStartedAt = Date.now();
-      return operation();
+  let id = 0;
+
+  const requestOnce = async ({ method, params }) => {
+    const waitMs = Math.max(0, lastStartedAt + intervalMs - Date.now());
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    lastStartedAt = Date.now();
+
+    const payload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: ++id,
+      method,
+      params: params ?? []
     });
-    tail = run.catch(() => undefined);
-    return run;
-  };
-  return new Proxy(rawClient, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
+
+    let lastError;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'user-agent': 'sentry-forensic-gate-m2h-archive-probe/3'
+        },
+        body: payload
+      });
+      const text = await response.text();
+
       if (
-        typeof value !== 'function' ||
-        ![
-          'getChainId',
-          'getBlockNumber',
-          'getBlock',
-          'getBytecode',
-          'getLogs',
-          'getStorageAt',
-          'readContract',
-          'call'
-        ].includes(String(property))
+        (response.status === 429 || response.status >= 500) &&
+        attempt < 4
       ) {
-        return typeof value === 'function' ? value.bind(target) : value;
+        lastError = new Error(
+          `NODEFLARE_HTTP_${response.status}:${text.slice(0, 256)}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        continue;
       }
-      return (...args) => paced(() => value.apply(target, args));
+      if (!response.ok) {
+        throw new Error(
+          `NODEFLARE_HTTP_${response.status}:${text.slice(0, 512)}`
+        );
+      }
+
+      let envelope;
+      try {
+        envelope = JSON.parse(text);
+      } catch {
+        throw new Error('NODEFLARE_RPC_JSON_INVALID');
+      }
+      if (!envelope || envelope.jsonrpc !== '2.0') {
+        throw new Error('NODEFLARE_RPC_ENVELOPE_INVALID');
+      }
+      if (envelope.error) {
+        const error = new Error(
+          `NODEFLARE_RPC_${envelope.error.code}:${String(envelope.error.message)}`
+        );
+        error.code = envelope.error.code;
+        error.data = envelope.error.data;
+        throw error;
+      }
+      if (!Object.prototype.hasOwnProperty.call(envelope, 'result')) {
+        throw new Error('NODEFLARE_RPC_RESULT_MISSING');
+      }
+      return envelope.result;
     }
-  });
+    throw lastError ?? new Error('NODEFLARE_RPC_RETRY_EXHAUSTED');
+  };
+
+  return {
+    request(args) {
+      const run = tail.then(() => requestOnce(args));
+      tail = run.catch(() => undefined);
+      return run;
+    }
+  };
 }
 
 function jsonSafe(value) {
