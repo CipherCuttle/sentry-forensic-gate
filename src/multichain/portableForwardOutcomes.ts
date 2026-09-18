@@ -199,12 +199,12 @@ export async function buildPortableForwardOutcome(
           }
         : null,
       marketId: baseline.market.marketId,
-      marketSourceAuthority: baseline.market.sourceAuthority,
+      marketSourceAuthority: authorityObject(baseline.market.sourceAuthority),
       entryNotionalUsdMicros: PRIMARY_OUTCOME_NOTIONAL_USD_MICROS.toString(),
       entryTokenAmount: entryTokenAmount.toString(),
-      liquidity: liquidity.sourceAuthority,
-      exit: exitAuthority,
-      valuation: valuationAuthority,
+      liquidity: authorityObject(liquidity.sourceAuthority),
+      exit: exitAuthority ? authorityObject(exitAuthority) : null,
+      valuation: valuationAuthority ? authorityObject(valuationAuthority) : null,
       classificationThresholds: {
         catastrophicRecoveryBps: CATASTROPHIC_RECOVERY_BPS.toString(),
         parRecoveryBps: PAR_RECOVERY_BPS.toString()
@@ -386,6 +386,10 @@ async function assertEvidenceStable(
       throw new Error('PORTABLE_OUTCOME_HORIZON_NONMINIMAL');
     }
   }
+}
+
+function authorityObject(authority: SourceAuthorityEnvelope) {
+  return { schema: authority.schema, payload: authority.payload };
 }
 
 function assertPointHash(
