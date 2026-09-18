@@ -151,6 +151,13 @@ export class ViemPonsV2CreatorHistoryAdapter {
         norm(parsed.txHash) === norm(target.txHash) &&
         norm(parsed.token) === norm(target.token);
 
+      if (isTarget && (
+        parsed.launchId !== target.launchId ||
+        parsed.eventId !== target.eventId
+      )) {
+        throw new Error('PONS_V2_CREATOR_HISTORY_TARGET_IDENTITY_DERIVATION_MISMATCH');
+      }
+
       if (isTarget) {
         targetMatches += 1;
         continue;

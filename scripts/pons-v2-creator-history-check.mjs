@@ -3,6 +3,8 @@ import { keccak256 } from 'viem';
 import {
   EXECUTABLE_BASELINE_R1,
   ViemPonsV2CreatorHistoryAdapter,
+  derivePonsV2EventId,
+  derivePonsV2LaunchId,
   buildNormalizedProvenanceFact,
   projectPortableCreatorOutcomeFeature
 } from '../dist/index.js';
@@ -19,18 +21,34 @@ const authority = {
   factoryRuntimeCodeHash: keccak256(code)
 };
 
+const targetTxHash = hex64('300');
+const targetToken = '0x4444444444444444444444444444444444444444';
+const [targetLaunchId, targetEventId] = await Promise.all([
+  derivePonsV2LaunchId({
+    chainId: 4663,
+    factory,
+    txHash: targetTxHash,
+    token: targetToken
+  }),
+  derivePonsV2EventId({
+    chainId: 4663,
+    factory,
+    txHash: targetTxHash,
+    logIndex: 5
+  })
+]);
 const target = {
   chainId: 4663,
   ecosystem: 'ROBINHOOD',
   launchProtocol: 'PONS',
-  launchId: 'target-launch',
-  eventId: 'target-event',
+  launchId: targetLaunchId,
+  eventId: targetEventId,
   factory,
-  txHash: hex64('300'),
+  txHash: targetTxHash,
   blockNumber: 120n,
   blockHash: hex64('120'),
   logIndex: 5,
-  token: '0x4444444444444444444444444444444444444444',
+  token: targetToken,
   creator,
   name: 'Target',
   symbol: 'TGT',

@@ -1,10 +1,7 @@
 import type { Hex } from '../domain.js';
 import type { OutcomeReceipt } from '../evidence/receipts.js';
 import { sha256Hex } from '../evidence/canonical.js';
-import {
-  PROVENANCE_DERIVATION_VERSION,
-  type ProvenanceFact
-} from '../graph/provenance.js';
+import type { ProvenanceFact } from '../graph/provenance.js';
 import {
   projectCreatorOutcomeFeatures,
   type CreatorOutcomeFeatureReceipt
@@ -92,4 +89,3 @@ function compareFactPosition(a: ProvenanceFact, b: ProvenanceFact): number {
   return a.factId.localeCompare(b.factId);
 }
 
-export { PROVENANCE_DERIVATION_VERSION };
