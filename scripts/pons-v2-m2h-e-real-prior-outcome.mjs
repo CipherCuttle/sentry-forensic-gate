@@ -49,7 +49,16 @@ const robinhood = defineChain({
 });
 const rawClient = createPublicClient({
   chain: robinhood,
-  transport: http(rpcUrl, { retryCount: 4, retryDelay: 2000 })
+  transport: http(rpcUrl, {
+    retryCount: 4,
+    retryDelay: 2000,
+    fetchOptions: {
+      headers: {
+        'content-type': 'application/json',
+        'user-agent': 'sentry-forensic-gate-m2h-archive-probe/3'
+      }
+    }
+  })
 });
 const client = pacedClient(rawClient, minIntervalMs);
 
