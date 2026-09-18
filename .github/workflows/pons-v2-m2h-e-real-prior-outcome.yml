@@ -292,7 +292,7 @@ jobs:
           done
           curl --silent --fail http://127.0.0.1:18545/health             > "${PONS_M2H_E_ACQUISITION_DIR}/acquire-health.json"
 
-          PONS_M2H_E_RPC_URL="${PONS_M2H_E_ACQUIRE_RPC_URL}"             pnpm ponsv2realoutcome             > "${PONS_M2H_E_ACQUISITION_DIR}/acquisition-driver-output.json"
+          PONS_M2H_E_RPC_URL="${PONS_M2H_E_ACQUIRE_RPC_URL}"             node scripts/pons-v2-m2h-e-real-prior-outcome.mjs             > "${PONS_M2H_E_ACQUISITION_DIR}/acquisition-driver-output.json"
 
           kill "${proxy_pid}"
           wait "${proxy_pid}" 2>/dev/null || true
@@ -317,9 +317,9 @@ jobs:
           done
           curl --silent --fail http://127.0.0.1:18546/health             > "${PONS_M2H_E_ACQUISITION_DIR}/replay-health.json"
 
-          PONS_M2H_E_RPC_URL="${PONS_M2H_E_REPLAY_RPC_URL}"             pnpm ponsv2realoutcome             | tee artifacts/m2h-e-real-prior-outcome.json
+          PONS_M2H_E_RPC_URL="${PONS_M2H_E_REPLAY_RPC_URL}"             node scripts/pons-v2-m2h-e-real-prior-outcome.mjs             | tee artifacts/m2h-e-real-prior-outcome.json
 
-          PONS_M2H_E_RPC_URL="${PONS_M2H_E_REPLAY_RPC_URL}"             pnpm ponsv2realoutcome             > artifacts/m2h-e-real-prior-outcome-replay-2.json
+          PONS_M2H_E_RPC_URL="${PONS_M2H_E_REPLAY_RPC_URL}"             node scripts/pons-v2-m2h-e-real-prior-outcome.mjs             > artifacts/m2h-e-real-prior-outcome-replay-2.json
 
           cmp             artifacts/m2h-e-real-prior-outcome.json             artifacts/m2h-e-real-prior-outcome-replay-2.json
 
