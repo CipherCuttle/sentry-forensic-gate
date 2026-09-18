@@ -3,6 +3,7 @@ import type { Hex } from '../../../domain.js';
 export const PONS_V2_CURVE_QUOTE_SEMANTICS_R1 = 'PONS_V2_CURVE_QUOTE_SEMANTICS_R1' as const;
 export const PONS_V2_QUOTE_BASIS_POINTS = 10_000n;
 export const PONS_V2_MIN_BUY_NET_BPS = 100n;
+export const PONS_V2_MAX_TOTAL_TRADE_FEE_BPS = 2_000n;
 export const PONS_V2_MAX_UINT256 = (1n << 256n) - 1n;
 
 /**
@@ -178,7 +179,7 @@ function assertTradeFeeDomain(feeBps: bigint, creatorTaxBps: bigint): void {
   if (feeBps > PONS_V2_QUOTE_BASIS_POINTS || creatorTaxBps > PONS_V2_QUOTE_BASIS_POINTS) {
     throw new Error('PONS_V2_QUOTE_FEE_DOMAIN_INVALID');
   }
-  if (feeBps + creatorTaxBps > PONS_V2_QUOTE_BASIS_POINTS - PONS_V2_MIN_BUY_NET_BPS) {
+  if (feeBps + creatorTaxBps > PONS_V2_MAX_TOTAL_TRADE_FEE_BPS) {
     throw new Error('PONS_V2_QUOTE_FEE_DOMAIN_INVALID');
   }
 }
