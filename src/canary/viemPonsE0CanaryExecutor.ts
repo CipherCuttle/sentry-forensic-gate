@@ -79,6 +79,8 @@ export class ViemPonsE0CanaryExecutor {
   private readonly walletClient: WalletClient;
   private readonly caps: PonsE0ExecutorCaps;
   private readonly signedIntents = new Map<string, Readonly<PonsE0Intent>>();
+  private authorizedBuyValueWei: bigint | null = null;
+  private buyAuthorizationConsumed = false;
 
   constructor(options: ViemPonsE0CanaryExecutorOptions) {
     if (!/^0x[0-9a-fA-F]{64}$/.test(options.privateKey)) {
@@ -98,6 +100,16 @@ export class ViemPonsE0CanaryExecutor {
       transport
     });
     this.caps = options.caps;
+  }
+
+  authorizeExactBuyValue(value: bigint): void {
+    if (this.authorizedBuyValueWei !== null || this.buyAuthorizationConsumed) {
+      throw new Error('PONS_E0_BUY_VALUE_ALREADY_AUTHORIZED');
+    }
+    if (value <= 0n || value > this.caps.maxNativeValueWei) {
+      throw new Error(`PONS_E0_EXACT_BUY_VALUE_CAP_EXCEEDED:${value}:${this.caps.maxNativeValueWei}`);
+    }
+    this.authorizedBuyValueWei = value;
   }
 
   async getBlockNumber(): Promise<bigint> {
@@ -145,6 +157,7 @@ export class ViemPonsE0CanaryExecutor {
     await this.assertIntentAuthority(intent, checkedAtBlock);
 
     if (intent.kind === 'BUY') {
+      this.assertExactBuyValueAuthorized(intent.value);
       if (intent.value > this.caps.maxNativeValueWei) {
         throw new Error(`PONS_E0_NATIVE_VALUE_CAP_EXCEEDED:${intent.value}`);
       }
@@ -231,6 +244,7 @@ export class ViemPonsE0CanaryExecutor {
     }
     await this.assertIntentAuthority(intent, head);
 
+    if (intent.kind === 'BUY') this.assertExactBuyValueAuthorized(intent.value);
     const target = intent.kind === 'APPROVE_SELL_EXACT' ? intent.token : intent.curve;
     const nonce = await this.publicClient.getTransactionCount({
       address: this.walletAddress,
@@ -258,6 +272,11 @@ export class ViemPonsE0CanaryExecutor {
       maxPriorityFeePerGas: preflight.maxPriorityFeePerGas
     };
     await assertSignedPonsE0Transaction(intent, signed, this.walletAddress, this.caps);
+    if (intent.kind === 'BUY') {
+      this.assertExactBuyValueAuthorized(intent.value);
+      this.buyAuthorizationConsumed = true;
+      this.authorizedBuyValueWei = null;
+    }
     this.signedIntents.set(transactionHash.toLowerCase(), Object.freeze({ ...intent }));
     return signed;
   }
@@ -285,6 +304,18 @@ export class ViemPonsE0CanaryExecutor {
       const message = error instanceof Error ? error.message : String(error);
       if (/not found|could not be found|TransactionReceiptNotFound/i.test(message)) return null;
       throw error;
+    }
+  }
+
+  private assertExactBuyValueAuthorized(value: bigint): void {
+    if (
+      this.buyAuthorizationConsumed ||
+      this.authorizedBuyValueWei === null ||
+      value !== this.authorizedBuyValueWei
+    ) {
+      throw new Error(
+        `PONS_E0_EXACT_BUY_VALUE_NOT_AUTHORIZED:${value}:${this.authorizedBuyValueWei ?? 'NONE'}`
+      );
     }
   }
 
