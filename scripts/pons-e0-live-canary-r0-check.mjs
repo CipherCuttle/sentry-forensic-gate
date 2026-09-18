@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {
   PONS_E0_LIVE_CANARY_R0,
@@ -116,6 +117,13 @@ assert.equal(sell.kind, 'SELL_ALL');
 assert.equal(sell.tokensIn, buy.quotedTokensOut);
 assert.equal(sell.minQuoteOut, 380_000_000_000_000n);
 assert.equal(sell.value, 0n);
+
+const cliSource = fs.readFileSync('src/canary/ponsE0Cli.ts', 'utf8');
+const executorSource = fs.readFileSync('src/canary/viemPonsE0CanaryExecutor.ts', 'utf8');
+assert.ok(cliSource.includes("fs.openSync(file, 'wx', 0o600)"), 'live state must be atomically reserved');
+assert.ok(cliSource.includes('PONS_E0_ENTRY_SPEND_NOT_EXACT_CALIBRATED_DOLLAR'));
+assert.ok(executorSource.includes('PONS_E0_EXACT_BUY_VALUE_NOT_AUTHORIZED'));
+assert.ok(executorSource.includes('this.buyAuthorizationConsumed = true'));
 
 console.log(JSON.stringify({
   verdict: 'PONS_E0_LIVE_CANARY_R0_OFFLINE_PASS',
