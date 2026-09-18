@@ -2,14 +2,17 @@ import { createPublicClient, defineChain, http } from 'viem';
 import assert from 'node:assert/strict';
 import {
   CURRENT_PONS_V2_AUTHORITY,
+  DEFAULT_ROBINHOOD_RPC_URL,
   CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
   CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY,
   PONS_V2_NATIVE_PAIR_TOKEN,
   ViemPonsV2CurveQuoteAdapter,
+  ViemPonsV2CreatorHistoryAdapter,
   ViemPonsV2LaunchAdapter,
   ViemRobinhoodUsdCalibrationAdapter,
   buildPortableBaselineBatch,
-  evaluatePortableFastVet
+  evaluatePortableFastVet,
+  projectPortableCreatorOutcomeFeature
 } from '../dist/index.js';
 
 const launchBlock = BigInt(process.env.PONS_SMOKE_BLOCK ?? '65808784');
@@ -37,6 +40,12 @@ const rawClient = createPublicClient({
   transport: http(archiveRpcUrl, { retryCount: 2, retryDelay: 1500 })
 });
 const client = pacedClient(rawClient, minRpcIntervalMs);
+const logRpcUrl = process.env.ROBINHOOD_LOG_RPC_URL ?? DEFAULT_ROBINHOOD_RPC_URL;
+const rawLogsClient = createPublicClient({
+  chain: robinhood,
+  transport: http(logRpcUrl, { retryCount: 2, retryDelay: 1500 })
+});
+const logsClient = pacedClient(rawLogsClient, minRpcIntervalMs);
 
 const launchAdapter = new ViemPonsV2LaunchAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
@@ -73,20 +82,43 @@ const baseline = await buildPortableBaselineBatch(
   launch
 );
 
+const creatorHistoryAdapter = new ViemPonsV2CreatorHistoryAdapter({
+  authority: CURRENT_PONS_V2_AUTHORITY,
+  client,
+  logsClient
+});
+const creatorHistory = await creatorHistoryAdapter.scan({
+  target: launch,
+  decisionBlock: baseline.decisionBlock,
+  decisionBlockHash: baseline.decisionBlockHash
+});
+const creatorFeature = await projectPortableCreatorOutcomeFeature(
+  baseline,
+  creatorHistory.targetFact,
+  creatorHistory.priorFacts,
+  []
+);
 const vet = evaluatePortableFastVet({
   baseline,
-  creatorFeature: null
+  creatorFeature
 });
 
-assert.equal(
-  vet.decision,
-  'UNKNOWN',
-  'missing real creator-history evidence must not produce PASS/REJECT by invention'
+assert.notEqual(
+  vet.evidence.creatorCoverage,
+  'MISSING',
+  'canonical Pons creator history must bind into FAST_VET'
 );
-assert.ok(
-  vet.reasons.includes('CREATOR_FEATURE_MISSING') || vet.reasons.includes('BASELINE_UNVERIFIED'),
-  `unexpected FAST_VET reason set: ${vet.reasons.join(',')}`
-);
+if (creatorFeature.coverage === 'NO_HISTORY' && baseline.status === 'COMPLETE') {
+  assert.equal(vet.decision, 'PASS');
+  assert.equal(vet.action, 'BUY_ELIGIBLE');
+} else if (creatorFeature.priorLaunchCount > 0) {
+  assert.equal(
+    vet.decision,
+    'UNKNOWN',
+    'prior launches without frozen 24h outcome coverage must stay UNKNOWN'
+  );
+  assert.ok(vet.reasons.includes('CREATOR_HISTORY_INCOMPLETE'));
+}
 
 const receipt = {
   verdict: baseline.status === 'COMPLETE'
@@ -143,10 +175,25 @@ const receipt = {
       independentReverseRecoveryBps: leg.independentReverseRecoveryBps
     }))
   },
+  creatorHistory: {
+    coverage: creatorFeature.coverage,
+    priorLaunchCount: creatorFeature.priorLaunchCount,
+    classifiedOutcomeCount: creatorFeature.classifiedOutcomeCount,
+    unresolvedOutcomeCount: creatorFeature.unresolvedOutcomeCount,
+    sourceFactIds: creatorFeature.sourceFactIds,
+    scan: {
+      scannedFromBlock: creatorHistory.scannedFromBlock,
+      scannedThroughBlock: creatorHistory.scannedThroughBlock,
+      scannedRangeCount: creatorHistory.scannedRanges.length,
+      sourceAuthority: creatorHistory.sourceAuthority
+    }
+  },
   fastVet: vet,
   transport: {
     archiveRequired: true,
-    endpointClass: 'PUBLIC_ARCHIVE_SMOKE',
+    endpointClass: 'SPLIT_PUBLIC_READ_ONLY',
+    stateEndpointClass: 'RECENT_HISTORICAL_STATE',
+    logEndpointClass: 'OFFICIAL_CANONICAL_LOG_BACKFILL',
     minRpcIntervalMs
   },
   boundaries: {
@@ -155,7 +202,8 @@ const receipt = {
     transactionConstruction: false,
     broadcast: false,
     liveMoney: false,
-    creatorHistoryInvented: false
+    creatorHistoryInvented: false,
+    creatorHistoryCanonicalLogScan: true
   }
 };
 

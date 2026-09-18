@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/m2f-pons-live-shadow-smoke-v1
+      - agent/m2g-pons-creator-history-v1
   workflow_dispatch:
 
 permissions:
@@ -12,12 +13,19 @@ permissions:
 jobs:
   live-shadow:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       PONS_SMOKE_BLOCK: '65808784'
       PONS_SMOKE_TOKEN: '0x633d3b4CCe2E3cD2e6D7588186cEEd26a634147D'
-      ROBINHOOD_ARCHIVE_RPC_URL: 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public'
       PONS_SMOKE_RPC_MIN_INTERVAL_MS: '750'
+      PONS_INDEXED_EVIDENCE_DIR: 'artifacts/m2g-indexed'
+      BLOCKSCOUT_BASE: 'https://robinhoodchain.blockscout.com'
+      PONS_FACTORY: '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e'
+      PONS_EVENT_TOPIC: '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607'
+      PONS_CREATOR_TOPIC: '0x00000000000000000000000009ee8fd79fb4a780a01038a88cedbca6d68b3fe4'
+      PONS_HISTORY_FROM_BLOCK: '26841846'
+      PONS_HISTORY_TO_BLOCK: '65808784'
+      PONS_HISTORY_CHUNK: '1000000'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,8 +34,75 @@ jobs:
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm build
-      - name: Run real Robinhood/Pons shadow evaluation
-        run: pnpm ponsv2liveshadow
+      - name: Acquire indexed Pons creator-history evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${PONS_INDEXED_EVIDENCE_DIR}/ranges" "${PONS_INDEXED_EVIDENCE_DIR}/blocks"
+          : > "${PONS_INDEXED_EVIDENCE_DIR}/ranges.tsv"
+          from="${PONS_HISTORY_FROM_BLOCK}"
+          range_count=0
+          while [ "${from}" -le "${PONS_HISTORY_TO_BLOCK}" ]; do
+            to=$((from + PONS_HISTORY_CHUNK - 1))
+            if [ "${to}" -gt "${PONS_HISTORY_TO_BLOCK}" ]; then to="${PONS_HISTORY_TO_BLOCK}"; fi
+            printf '%s\t%s\n' "${from}" "${to}" >> "${PONS_INDEXED_EVIDENCE_DIR}/ranges.tsv"
+            range_count=$((range_count + 1))
+            from=$((to + 1))
+          done
+
+          acquire_range() {
+            from="$1"; to="$2"
+            curl --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 --retry-max-time 180 \
+              --user-agent "Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)" \
+              --header "Accept: application/json" \
+              --header "Referer: ${BLOCKSCOUT_BASE}/" \
+              --get "${BLOCKSCOUT_BASE}/api" \
+              --data-urlencode "module=logs" \
+              --data-urlencode "action=getLogs" \
+              --data-urlencode "fromBlock=${from}" \
+              --data-urlencode "toBlock=${to}" \
+              --data-urlencode "address=${PONS_FACTORY}" \
+              --data-urlencode "topic0=${PONS_EVENT_TOPIC}" \
+              --data-urlencode "topic3=${PONS_CREATOR_TOPIC}" \
+              --data-urlencode "topic0_3_opr=and" \
+              --data-urlencode "page=1" \
+              --data-urlencode "offset=1000" \
+              > "${PONS_INDEXED_EVIDENCE_DIR}/ranges/${from}-${to}.json"
+            sleep 15
+          }
+          export -f acquire_range
+          export BLOCKSCOUT_BASE PONS_FACTORY PONS_EVENT_TOPIC PONS_CREATOR_TOPIC PONS_INDEXED_EVIDENCE_DIR
+          xargs -a "${PONS_INDEXED_EVIDENCE_DIR}/ranges.tsv" -n 2 -P 1 bash -c 'acquire_range "$1" "$2"' _
+
+          jq -r '.result[]? | .blockNumber // empty' "${PONS_INDEXED_EVIDENCE_DIR}"/ranges/*.json \
+            | sort -u > "${PONS_INDEXED_EVIDENCE_DIR}/block-hex.txt"
+          while IFS= read -r hex; do
+            [ -z "${hex}" ] && continue
+            dec=$((16#${hex#0x}))
+            curl --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 --retry-max-time 180 \
+              --user-agent "Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)" \
+              --header "Accept: application/json" \
+              --header "Referer: ${BLOCKSCOUT_BASE}/" \
+              "${BLOCKSCOUT_BASE}/api/v2/blocks/${dec}" \
+              > "${PONS_INDEXED_EVIDENCE_DIR}/blocks/${dec}.json"
+            sleep 15
+          done < "${PONS_INDEXED_EVIDENCE_DIR}/block-hex.txt"
+
+          cat > "${PONS_INDEXED_EVIDENCE_DIR}/acquisition.json" <<JSON
+          {
+            "schema": "ROBINHOOD_BLOCKSCOUT_INDEXED_ACQUISITION_R0",
+            "factory": "${PONS_FACTORY}",
+            "eventTopic": "${PONS_EVENT_TOPIC}",
+            "creatorTopic": "${PONS_CREATOR_TOPIC}",
+            "scannedFromBlock": "${PONS_HISTORY_FROM_BLOCK}",
+            "scannedThroughBlock": "${PONS_HISTORY_TO_BLOCK}",
+            "chunkSize": "${PONS_HISTORY_CHUNK}",
+            "rangeCount": ${range_count}
+          }
+          JSON
+
+      - name: Evaluate indexed Pons creator history from local evidence
+        run: pnpm ponsv2creatorindexed
       - name: Preserve shadow receipt
         if: always()
         run: |
