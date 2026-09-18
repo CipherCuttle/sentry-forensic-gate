@@ -29,6 +29,7 @@ export * from './multichain/domain.js';
 export * from './multichain/ports.js';
 export * from './multichain/inkSentryProjection.js';
 export * from './multichain/fastVetBridge.js';
+export * from './multichain/portableBaseline.js';
 export * from './adapters/robinhood/ponsV2/contracts.js';
 export * from './adapters/robinhood/ponsV2/authority.js';
 export * from './adapters/robinhood/ponsV2/identity.js';
