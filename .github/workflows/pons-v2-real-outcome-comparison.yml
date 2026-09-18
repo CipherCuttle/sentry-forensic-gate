@@ -16,7 +16,7 @@ jobs:
     env:
       ROBINHOOD_ARCHIVE_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
       ROBINHOOD_LOG_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
-      PONS_REAL_RPC_MIN_INTERVAL_MS: '1500'
+      PONS_REAL_RPC_MIN_INTERVAL_MS: '2500'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
