@@ -22,6 +22,20 @@ export const ponsV2TokenLaunchedEvent = {
 export const ponsV2FactoryReadAbi = [
   {
     type: 'function',
+    name: 'memeHook',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
+    name: 'poolManager',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
     name: 'launchDeployer',
     stateMutability: 'view',
     inputs: [],
@@ -179,6 +193,44 @@ export const ponsV2CurveQuoteReadAbi = [
 ] as const;
 
 
+export const ponsV2MemeHookReadAbi = [
+  {
+    type: 'function',
+    name: 'factory',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
+    name: 'poolManager',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
+    name: 'launches',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'bytes32' }],
+    outputs: [
+      { name: 'registered', type: 'bool' },
+      { name: 'memecoinIsCurrency0', type: 'bool' },
+      { name: 'memecoin', type: 'address' },
+      { name: 'quoteToken', type: 'address' },
+      { name: 'creator', type: 'address' },
+      { name: 'buybackCreatorRecipient', type: 'address' },
+      { name: 'protocolFeeRecipient', type: 'address' },
+      { name: 'creatorTaxBps', type: 'uint16' },
+      { name: 'protocolFeeShareBps', type: 'uint16' },
+      { name: 'buybackBurnBps', type: 'uint16' },
+      { name: 'hookFeeBps', type: 'uint16' },
+      { name: 'maxInternalPriceImpactBps', type: 'uint16' },
+      { name: 'buybackEnabled', type: 'bool' }
+    ]
+  }
+] as const;
+
 export const erc20UsdIdentityReadAbi = [
   ...erc20MetadataReadAbi,
   {
@@ -219,6 +271,35 @@ export const uniswapV4QuoterReadAbi = [
     stateMutability: 'view',
     inputs: [],
     outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
+    name: 'quoteExactInputSingle',
+    stateMutability: 'nonpayable',
+    inputs: [{
+      name: 'params',
+      type: 'tuple',
+      components: [
+        {
+          name: 'poolKey',
+          type: 'tuple',
+          components: [
+            { name: 'currency0', type: 'address' },
+            { name: 'currency1', type: 'address' },
+            { name: 'fee', type: 'uint24' },
+            { name: 'tickSpacing', type: 'int24' },
+            { name: 'hooks', type: 'address' }
+          ]
+        },
+        { name: 'zeroForOne', type: 'bool' },
+        { name: 'exactAmount', type: 'uint128' },
+        { name: 'hookData', type: 'bytes' }
+      ]
+    }],
+    outputs: [
+      { name: 'amountOut', type: 'uint256' },
+      { name: 'gasEstimate', type: 'uint256' }
+    ]
   },
   {
     type: 'function',

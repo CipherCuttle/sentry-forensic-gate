@@ -88,7 +88,7 @@ interface MarketAuthorityFields {
   state: string;
 }
 
-interface CurveQuoteState {
+export interface PonsV2CurveQuoteState {
   curve: Hex;
   quoteReserve: bigint;
   tokenReserve: bigint;
@@ -218,7 +218,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
     if (params.amountIn <= 0n) throw new Error('PONS_V2_QUOTE_AMOUNT_IN_INVALID');
     const marketAuthority = await this.assertQuoteContext(params);
     const state = await this.readCurveQuoteState(params, marketAuthority);
-    const reverse = computeReverse(params.amountIn, state);
+    const reverse = computePonsV2CurveReverse(params.amountIn, state);
 
     const sourceAuthority = this.buildSourceAuthority({
       kind: 'INDEPENDENT_REVERSE_EXIT',
@@ -326,7 +326,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
       decisionBlockHash: Hex;
     },
     marketAuthority: MarketAuthorityFields
-  ): Promise<CurveQuoteState> {
+  ): Promise<PonsV2CurveQuoteState> {
     const hashBefore = await this.authorityGuard.getBlockHash(params.decisionBlock);
     if (norm(hashBefore) !== norm(params.decisionBlockHash)) {
       throw new Error(`PONS_V2_QUOTE_DECISION_HASH_MISMATCH:block=${params.decisionBlock}`);
@@ -547,7 +547,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
       amountIn: bigint;
     };
     marketAuthority: MarketAuthorityFields;
-    state: CurveQuoteState;
+    state: PonsV2CurveQuoteState;
     amountInRequested: bigint;
     amountInExecutable: bigint;
     amountOut: bigint;
@@ -602,7 +602,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
   }
 }
 
-function computeEntry(amountIn: bigint, state: CurveQuoteState): {
+function computeEntry(amountIn: bigint, state: PonsV2CurveQuoteState): {
   spent: bigint;
   tokensOut: bigint;
   fee: bigint;
@@ -672,7 +672,7 @@ function computeEntry(amountIn: bigint, state: CurveQuoteState): {
   };
 }
 
-function computeReverse(tokensIn: bigint, state: CurveQuoteState): {
+export function computePonsV2CurveReverse(tokensIn: bigint, state: PonsV2CurveQuoteState): {
   grossQuoteOut: bigint;
   quoteOut: bigint;
   fee: bigint;

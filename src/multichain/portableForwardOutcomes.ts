@@ -146,22 +146,31 @@ export async function buildPortableForwardOutcome(
         status = 'UNVERIFIED';
       }
     } else {
-      const valuation = await adapter.valueBaseAmountUsdMicros({
-        market: baseline.market,
-        baseAmount: baseAmountOut,
-        blockNumber: observed.blockNumber
-      });
-      valuationAuthority = valuation.sourceAuthority;
-      if (valuation.usdMicros < 0n) {
-        throw new Error('PORTABLE_OUTCOME_NEGATIVE_USD_VALUATION');
+      try {
+        const valuation = await adapter.valueBaseAmountUsdMicros({
+          market: baseline.market,
+          baseAmount: baseAmountOut,
+          blockNumber: observed.blockNumber
+        });
+        valuationAuthority = valuation.sourceAuthority;
+        if (valuation.usdMicros < 0n) {
+          throw new Error('PORTABLE_OUTCOME_NEGATIVE_USD_VALUATION');
+        }
+        executableValueUsdMicros = valuation.usdMicros;
+        executableReturnBps =
+          (valuation.usdMicros * 10_000n) /
+          PRIMARY_OUTCOME_NOTIONAL_USD_MICROS;
+        classification = classifyPortableExecutableOutcome(
+          executableReturnBps
+        );
+      } catch (error) {
+        const valuationGap = stableErrorReason(error);
+        if (!valuationGap.startsWith('PORTABLE_USD_VALUATION_UNAVAILABLE:')) {
+          throw error;
+        }
+        status = 'UNVERIFIED';
+        reason = valuationGap;
       }
-      executableValueUsdMicros = valuation.usdMicros;
-      executableReturnBps =
-        (valuation.usdMicros * 10_000n) /
-        PRIMARY_OUTCOME_NOTIONAL_USD_MICROS;
-      classification = classifyPortableExecutableOutcome(
-        executableReturnBps
-      );
     }
   }
 
@@ -406,4 +415,9 @@ function assertPointHash(
       `PORTABLE_OUTCOME_${label}_REORG:block=${blockNumber}`
     );
   }
+}
+
+function stableErrorReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.slice(0, 512);
 }
