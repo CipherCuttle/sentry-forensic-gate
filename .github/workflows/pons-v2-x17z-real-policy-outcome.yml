@@ -1,0 +1,87 @@
+name: pons-v2-x17z-real-policy-outcome
+
+on:
+  push:
+    branches:
+      - agent/m2i-x17z-real-policy-outcome-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  x17z-policy-outcome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PONS_X17Z_LAUNCH_BLOCK: '64935682'
+      PONS_X17Z_CURVE: '0x918cc3734621d966995d2663dcf587ce0d4768fc'
+      PONS_X17Z_CREATOR: '0x09ee8fd79fb4a780a01038a88cedbca6d68b3fe4'
+      PONS_X17Z_HORIZON_MS: '86400000'
+      PONS_X17Z_INDEXED_LOG: 'artifacts/m2i-x17z/launch-log.json'
+      PONS_RPC_MIN_INTERVAL_MS: '2200'
+      ROBINHOOD_ARCHIVE_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+      BLOCKSCOUT_BASE: 'https://robinhoodchain.blockscout.com'
+      PONS_FACTORY: '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e'
+      PONS_EVENT_TOPIC: '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607'
+      PONS_CREATOR_TOPIC: '0x00000000000000000000000009ee8fd79fb4a780a01038a88cedbca6d68b3fe4'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+
+      - name: Acquire exact indexed Pons launch event
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/m2i-x17z
+          curl --fail --silent --show-error --location \
+            --retry 6 --retry-all-errors --retry-delay 5 --retry-max-time 120 \
+            --user-agent 'Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)' \
+            --header 'Accept: application/json' \
+            --header "Referer: ${BLOCKSCOUT_BASE}/" \
+            --get "${BLOCKSCOUT_BASE}/api" \
+            --data-urlencode 'module=logs' \
+            --data-urlencode 'action=getLogs' \
+            --data-urlencode "fromBlock=${PONS_X17Z_LAUNCH_BLOCK}" \
+            --data-urlencode "toBlock=${PONS_X17Z_LAUNCH_BLOCK}" \
+            --data-urlencode "address=${PONS_FACTORY}" \
+            --data-urlencode "topic0=${PONS_EVENT_TOPIC}" \
+            --data-urlencode "topic3=${PONS_CREATOR_TOPIC}" \
+            --data-urlencode 'topic0_3_opr=and' \
+            --data-urlencode 'page=1' \
+            --data-urlencode 'offset=100' \
+            > "${PONS_X17Z_INDEXED_LOG}"
+
+      - name: Reconstruct real X17Z baseline, policies, and 24h outcome
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm ponsv2x17zoutcome | tee artifacts/m2i-x17z/receipt.json
+
+      - name: Preserve authority metadata
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "branch=${GITHUB_REF_NAME}"
+            echo "sha=${GITHUB_SHA}"
+            echo "launch_block=${PONS_X17Z_LAUNCH_BLOCK}"
+            echo "curve=${PONS_X17Z_CURVE}"
+            echo "creator=${PONS_X17Z_CREATOR}"
+            echo "horizon_ms=${PONS_X17Z_HORIZON_MS}"
+            echo 'mode=SHADOW_ONLY'
+            echo 'live_money_authority=false'
+            echo 'edge=UNPROVEN'
+          } > artifacts/m2i-x17z/metadata.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-v2-x17z-real-policy-outcome
+          path: artifacts/m2i-x17z/
+          if-no-files-found: error
