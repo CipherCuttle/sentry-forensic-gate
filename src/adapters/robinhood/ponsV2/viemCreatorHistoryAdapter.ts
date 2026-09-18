@@ -76,12 +76,15 @@ export interface ViemPonsV2CreatorHistoryAdapterOptions {
   authority: Readonly<PonsV2Authority>;
   rpcUrl?: string;
   client?: PublicClient;
+  logsClient?: PublicClient;
+  logsRpcUrl?: string;
   maxRangeBlocks?: bigint;
 }
 
 export class ViemPonsV2CreatorHistoryAdapter {
   private readonly authority: Readonly<PonsV2Authority>;
   private readonly client: PublicClient;
+  private readonly logsClient: PublicClient;
   private readonly launchAuthority: ViemPonsV2LaunchAdapter;
   private readonly maxRangeBlocks: bigint;
 
@@ -91,6 +94,10 @@ export class ViemPonsV2CreatorHistoryAdapter {
     this.client = options.client ?? createPublicClient({
       chain: robinhood,
       transport: http(options.rpcUrl ?? DEFAULT_ROBINHOOD_RPC_URL)
+    });
+    this.logsClient = options.logsClient ?? options.client ?? createPublicClient({
+      chain: robinhood,
+      transport: http(options.logsRpcUrl ?? DEFAULT_ROBINHOOD_RPC_URL)
     });
     this.launchAuthority = new ViemPonsV2LaunchAdapter({
       authority: options.authority,
@@ -215,6 +222,7 @@ export class ViemPonsV2CreatorHistoryAdapter {
           decisionBlockHash: norm(decisionBlockHash),
           priorLaunchCount: priorFacts.length,
           sourceEvent: 'TokenLaunched',
+          logTransportSeparation: 'HISTORICAL_LOGS_SEPARATE_FROM_STATE_READS',
           completeness: 'FULL_REVIEWED_FACTORY_EPOCH_LOG_RANGE_TO_TARGET'
         }
       }
@@ -228,7 +236,7 @@ export class ViemPonsV2CreatorHistoryAdapter {
     scannedRanges: Array<{ fromBlock: bigint; toBlock: bigint }>
   ): Promise<CreatorLaunchLog[]> {
     try {
-      const logs = await this.client.getLogs({
+      const logs = await this.logsClient.getLogs({
         address: this.authority.factory as Address,
         event: ponsV2TokenLaunchedEvent,
         args: { deployer: creator as Address },

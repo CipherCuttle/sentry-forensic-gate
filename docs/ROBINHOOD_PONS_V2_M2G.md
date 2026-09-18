@@ -62,3 +62,21 @@ This is transport behavior only; the evidence universe remains the complete revi
 No wallet, signer, approvals, transactions, broadcast, live capital, strategy tuning, creator score, or fabricated outcomes.
 
 `EDGE_UNPROVEN` remains explicit.
+
+
+## Split read-only transport
+
+Live probing established two different keyless provider capabilities:
+
+- the BlockReq public route can serve the recent historical state used by the frozen launch/decision baseline, but refuses old epoch logs/state;
+- Robinhood's official public RPC is used as the canonical `eth_getLogs` backfill transport.
+
+M2G therefore separates **state reads** from **historical log reads**. This changes no authority or evidence semantics:
+
+- both clients are read-only;
+- logs are still filtered by the reviewed factory + exact `TokenLaunched` event + indexed deployer;
+- scan boundaries still cover the full reviewed factory epoch through the target;
+- target and decision authority/hash fences still use the concrete chain adapters;
+- any gap in any log range fails the scan.
+
+Provider identity is transport metadata, not strategy authority.

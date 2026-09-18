@@ -2,6 +2,7 @@ import { createPublicClient, defineChain, http } from 'viem';
 import assert from 'node:assert/strict';
 import {
   CURRENT_PONS_V2_AUTHORITY,
+  DEFAULT_ROBINHOOD_RPC_URL,
   CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
   CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY,
   PONS_V2_NATIVE_PAIR_TOKEN,
@@ -39,6 +40,12 @@ const rawClient = createPublicClient({
   transport: http(archiveRpcUrl, { retryCount: 2, retryDelay: 1500 })
 });
 const client = pacedClient(rawClient, minRpcIntervalMs);
+const logRpcUrl = process.env.ROBINHOOD_LOG_RPC_URL ?? DEFAULT_ROBINHOOD_RPC_URL;
+const rawLogsClient = createPublicClient({
+  chain: robinhood,
+  transport: http(logRpcUrl, { retryCount: 2, retryDelay: 1500 })
+});
+const logsClient = pacedClient(rawLogsClient, minRpcIntervalMs);
 
 const launchAdapter = new ViemPonsV2LaunchAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
@@ -77,7 +84,8 @@ const baseline = await buildPortableBaselineBatch(
 
 const creatorHistoryAdapter = new ViemPonsV2CreatorHistoryAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
-  client
+  client,
+  logsClient
 });
 const creatorHistory = await creatorHistoryAdapter.scan({
   target: launch,
@@ -183,7 +191,9 @@ const receipt = {
   fastVet: vet,
   transport: {
     archiveRequired: true,
-    endpointClass: 'PUBLIC_ARCHIVE_SMOKE',
+    endpointClass: 'SPLIT_PUBLIC_READ_ONLY',
+    stateEndpointClass: 'RECENT_HISTORICAL_STATE',
+    logEndpointClass: 'OFFICIAL_CANONICAL_LOG_BACKFILL',
     minRpcIntervalMs
   },
   boundaries: {
