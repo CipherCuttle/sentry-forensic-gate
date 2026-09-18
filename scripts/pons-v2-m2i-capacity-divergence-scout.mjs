@@ -63,13 +63,24 @@ const boundedFromBlock = fromBlock < CURRENT_PONS_V2_AUTHORITY.fromBlock
 await launchAdapter.assertAuthority(boundedFromBlock);
 await launchAdapter.assertAuthority(headBlock);
 
-const logs = await client.getLogs({
-  address: CURRENT_PONS_V2_AUTHORITY.factory,
-  event: ponsV2TokenLaunchedEvent,
-  fromBlock: boundedFromBlock,
-  toBlock: headBlock,
-  strict: true
-});
+const logChunkBlocks = 5_000n;
+const logs = [];
+for (
+  let chunkFrom = boundedFromBlock;
+  chunkFrom <= headBlock;
+  chunkFrom += logChunkBlocks
+) {
+  const candidateTo = chunkFrom + logChunkBlocks - 1n;
+  const chunkTo = candidateTo < headBlock ? candidateTo : headBlock;
+  const chunk = await client.getLogs({
+    address: CURRENT_PONS_V2_AUTHORITY.factory,
+    event: ponsV2TokenLaunchedEvent,
+    fromBlock: chunkFrom,
+    toBlock: chunkTo,
+    strict: true
+  });
+  logs.push(...chunk);
+}
 
 const orderedLogs = [...logs]
   .filter((log) =>
@@ -203,7 +214,8 @@ const receipt = {
     fromBlock: boundedFromBlock,
     throughBlock: headBlock,
     discoveredNativeLaunchCount: orderedLogs.length,
-    evaluatedCandidateCount: checks.length
+    evaluatedCandidateCount: checks.length,
+    logChunkBlocks: logChunkBlocks.toString()
   },
   candidateChecks: checks,
   frozenCandidate: selected,
