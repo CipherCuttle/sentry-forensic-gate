@@ -84,16 +84,24 @@ jobs:
                   self.upstream = args.upstream
                   self.min_interval = args.min_interval_ms / 1000.0
                   self.cache = load_cache(self.cache_path)
-                  self.lock = threading.Lock()
+                  self.cache_lock = threading.Lock()
+                  self.rate_lock = threading.Lock()
+                  self.upstream_slots = threading.Semaphore(args.max_inflight)
+                  self.inflight = {}
                   self.last_started = 0.0
           
               def upstream_call(self, body_text):
-                  now = time.monotonic()
-                  wait = max(0.0, self.last_started + self.min_interval - now)
-                  if wait > 0:
-                      time.sleep(wait)
-                  self.last_started = time.monotonic()
+                  with self.upstream_slots:
+                      with self.rate_lock:
+                          now = time.monotonic()
+                          wait = max(0.0, self.last_started + self.min_interval - now)
+                          if wait > 0:
+                              time.sleep(wait)
+                          self.last_started = time.monotonic()
           
+                      return self._upstream_call_unfenced(body_text)
+          
+              def _upstream_call_unfenced(self, body_text):
                   with tempfile.NamedTemporaryFile(delete=False) as tmp:
                       body_path = tmp.name
                   try:
@@ -143,9 +151,32 @@ jobs:
                       raise RuntimeError("M2H_E_RPC_REQUEST_INVALID")
           
                   key = request_key(method, params)
-                  with self.lock:
-                      entry = self.cache["entries"].get(key)
-                      if entry is None and self.mode == "acquire":
+                  leader = False
+                  while True:
+                      with self.cache_lock:
+                          entry = self.cache["entries"].get(key)
+                          if entry is not None:
+                              break
+                          if self.mode != "acquire":
+                              return {
+                                  "jsonrpc": "2.0",
+                                  "id": rpc_id,
+                                  "error": {
+                                      "code": -32098,
+                                      "message": "M2H_E_REPLAY_CACHE_MISS",
+                                      "data": {"requestKey": key, "method": method},
+                                  },
+                              }
+                          event = self.inflight.get(key)
+                          if event is None:
+                              event = threading.Event()
+                              self.inflight[key] = event
+                              leader = True
+                              break
+                      event.wait()
+          
+                  if leader:
+                      try:
                           upstream_body = json.dumps(
                               {"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
                               separators=(",", ":"),
@@ -156,7 +187,7 @@ jobs:
                               parsed = json.loads(response_text)
                           except Exception:
                               parsed = None
-                          entry = {
+                          acquired = {
                               "request": {"method": method, "params": params},
                               "transport": {
                                   "curlReturnCode": returncode,
@@ -166,19 +197,17 @@ jobs:
                               "rawResponseText": response_text,
                               "parsedResponse": parsed,
                           }
-                          self.cache["entries"][key] = entry
-                          save_cache(self.cache_path, self.cache)
-          
-                      if entry is None:
-                          return {
-                              "jsonrpc": "2.0",
-                              "id": rpc_id,
-                              "error": {
-                                  "code": -32098,
-                                  "message": "M2H_E_REPLAY_CACHE_MISS",
-                                  "data": {"requestKey": key, "method": method},
-                              },
-                          }
+                          with self.cache_lock:
+                              entry = self.cache["entries"].get(key)
+                              if entry is None:
+                                  self.cache["entries"][key] = acquired
+                                  save_cache(self.cache_path, self.cache)
+                                  entry = acquired
+                      finally:
+                          with self.cache_lock:
+                              done = self.inflight.pop(key, None)
+                              if done is not None:
+                                  done.set()
           
                       transport = entry.get("transport", {})
                       parsed = entry.get("parsedResponse")
@@ -224,10 +253,13 @@ jobs:
               parser.add_argument("--port", type=int, required=True)
               parser.add_argument("--upstream", default="")
               parser.add_argument("--min-interval-ms", type=int, default=650)
+              parser.add_argument("--max-inflight", type=int, default=4)
               args = parser.parse_args()
           
               if args.mode == "acquire" and not args.upstream:
                   raise SystemExit("M2H_E_UPSTREAM_REQUIRED")
+              if args.max_inflight < 1 or args.max_inflight > 8:
+                  raise SystemExit("M2H_E_MAX_INFLIGHT_INVALID")
               state = State(args)
           
               class Handler(BaseHTTPRequestHandler):
@@ -295,6 +327,7 @@ jobs:
             --port 18547 \
             --upstream "${PONS_M2I_UPSTREAM_RPC_URL}" \
             --min-interval-ms 650 \
+            --max-inflight 4 \
             > "${PONS_M2I_ACQUISITION_DIR}/acquire-proxy.log" 2>&1 &
           proxy_pid=$!
           trap 'kill "${proxy_pid}" 2>/dev/null || true' EXIT
