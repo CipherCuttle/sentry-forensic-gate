@@ -119,6 +119,7 @@ const plan = await buildFreshEntryPlan({
   usdAdapter,
   slippageBps
 });
+executor?.authorizeExactBuyValue(plan.buy.quoteIn);
 
 if (!live) {
   console.log(JSON.stringify(jsonSafe({
@@ -362,6 +363,9 @@ async function buildFreshEntryPlan(params: {
     amountIn: calibration.baseAmount
   });
   if (!entry.executable || entry.amountOut <= 0n) throw new Error('PONS_E0_FRESH_ENTRY_NOT_EXECUTABLE');
+  if (entry.amountIn !== calibration.baseAmount) {
+    throw new Error(`PONS_E0_ENTRY_SPEND_NOT_EXACT_CALIBRATED_DOLLAR:${entry.amountIn}:${calibration.baseAmount}`);
+  }
   const shadowSnipeTax = authorityBigInt(entry, 'snipeTaxBps');
   if (shadowSnipeTax !== 0n) {
     throw new Error(`PONS_E0_SHADOW_RECIPIENT_TAX_NOT_ZERO:${shadowSnipeTax}`);
