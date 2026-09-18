@@ -21,7 +21,7 @@
     "historicalbaselinepolicycheck": "node scripts/historical-baseline-policy-config-check.mjs",
     "multichaincheck": "node scripts/multichain-m1-check.mjs",
     "ponsv2check": "node scripts/pons-v2-launch-adapter-check.mjs",
-    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck && pnpm historicalbaselinepolicycheck && pnpm multichaincheck && pnpm ponsv2check && pnpm ponsv2marketcheck && pnpm ponsv2quotingcheck",
+    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck && pnpm historicalbaselinepolicycheck && pnpm multichaincheck && pnpm ponsv2check && pnpm ponsv2marketcheck && pnpm ponsv2quotingcheck && pnpm ponsv2usdcheck",
     "start:truth": "node dist/cli.js",
     "start:baseline": "node dist/baselineCli.js",
     "start:creator-outcome": "node dist/creatorOutcomeCli.js",
@@ -34,7 +34,8 @@
     "start:historical-compatibility": "node dist/historicalCompatibilityCli.js",
     "start:historical-baseline-policy": "node dist/historicalBaselinePolicyCli.js",
     "ponsv2marketcheck": "node scripts/pons-v2-market-state-check.mjs",
-    "ponsv2quotingcheck": "node scripts/pons-v2-curve-quote-check.mjs"
+    "ponsv2quotingcheck": "node scripts/pons-v2-curve-quote-check.mjs",
+    "ponsv2usdcheck": "node scripts/pons-v2-usd-calibration-check.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",

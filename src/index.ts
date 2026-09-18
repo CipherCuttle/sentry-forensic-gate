@@ -36,6 +36,8 @@ export * from './adapters/robinhood/ponsV2/viemLaunchAdapter.js';
 export * from './adapters/robinhood/ponsV2/viemMarketStateResolver.js';
 export * from './adapters/robinhood/ponsV2/curveTemplateAuthority.js';
 export * from './adapters/robinhood/ponsV2/viemCurveQuoteAdapter.js';
+export * from './adapters/robinhood/ponsV2/v4UsdCalibrationAuthority.js';
+export * from './adapters/robinhood/ponsV2/viemUsdCalibrationAdapter.js';
 export * from './db/schema.js';
 export * from './db/store.js';
 export * from './db/memoryStore.js';

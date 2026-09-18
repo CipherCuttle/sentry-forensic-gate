@@ -177,3 +177,76 @@ export const ponsV2CurveQuoteReadAbi = [
     outputs: [{ name: '', type: 'uint256' }]
   }
 ] as const;
+
+
+export const erc20UsdIdentityReadAbi = [
+  ...erc20MetadataReadAbi,
+  {
+    type: 'function',
+    name: 'decimals',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }]
+  }
+] as const;
+
+export const uniswapV4StateViewReadAbi = [
+  {
+    type: 'function',
+    name: 'getSlot0',
+    stateMutability: 'view',
+    inputs: [{ name: 'poolId', type: 'bytes32' }],
+    outputs: [
+      { name: 'sqrtPriceX96', type: 'uint160' },
+      { name: 'tick', type: 'int24' },
+      { name: 'protocolFee', type: 'uint24' },
+      { name: 'lpFee', type: 'uint24' }
+    ]
+  },
+  {
+    type: 'function',
+    name: 'getLiquidity',
+    stateMutability: 'view',
+    inputs: [{ name: 'poolId', type: 'bytes32' }],
+    outputs: [{ name: 'liquidity', type: 'uint128' }]
+  }
+] as const;
+
+export const uniswapV4QuoterReadAbi = [
+  {
+    type: 'function',
+    name: 'poolManager',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
+    name: 'quoteExactOutputSingle',
+    stateMutability: 'nonpayable',
+    inputs: [{
+      name: 'params',
+      type: 'tuple',
+      components: [
+        {
+          name: 'poolKey',
+          type: 'tuple',
+          components: [
+            { name: 'currency0', type: 'address' },
+            { name: 'currency1', type: 'address' },
+            { name: 'fee', type: 'uint24' },
+            { name: 'tickSpacing', type: 'int24' },
+            { name: 'hooks', type: 'address' }
+          ]
+        },
+        { name: 'zeroForOne', type: 'bool' },
+        { name: 'exactAmount', type: 'uint128' },
+        { name: 'hookData', type: 'bytes' }
+      ]
+    }],
+    outputs: [
+      { name: 'amountIn', type: 'uint256' },
+      { name: 'gasEstimate', type: 'uint256' }
+    ]
+  }
+] as const;
