@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/m2h-pons-forward-outcome-v1
+      - agent/m2h-d-nodeflare-archive-probe-v1
   workflow_dispatch:
 
 permissions:
@@ -56,9 +57,33 @@ jobs:
               params="$3"
               body_file="${dir}/${file}.body"
               status_file="${dir}/${file}.status"
-              http_status="$(
-                curl --silent --show-error --location                   --connect-timeout 10 --max-time 35                   --header 'content-type: application/json'                   --header 'user-agent: sentry-forensic-gate-m2h-archive-probe/2'                   --output "${body_file}"                   --write-out '%{http_code}'                   --data "{"jsonrpc":"2.0","id":1,"method":"${method}","params":${params}}"                   "${url}" || true
+              payload="$(
+                node --input-type=module - "${method}" "${params}" <<'NODE'
+          const [method, paramsRaw] = process.argv.slice(2);
+          const params = JSON.parse(paramsRaw);
+          process.stdout.write(JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method,
+            params
+          }));
+          NODE
               )"
+              http_status="$(
+                curl --silent --show-error --location \
+                  --connect-timeout 10 --max-time 35 \
+                  --retry 4 --retry-delay 3 --retry-all-errors \
+                  --header 'content-type: application/json' \
+                  --header 'user-agent: sentry-forensic-gate-m2h-archive-probe/3' \
+                  --output "${body_file}" \
+                  --write-out '%{http_code}' \
+                  --data-binary "${payload}" \
+                  "${url}" || true
+              )"
+              # NodeFlare public advertises a 2 req/s IP limit. A shared,
+              # deterministic pace keeps the capability test about archive
+              # state rather than burst-rate behavior.
+              sleep 2
               printf '%s' "${http_status:-0}" > "${status_file}"
               node --input-type=module - "${status_file}" "${body_file}" "${dir}/${file}.json" <<'NODE'
           import { readFile, writeFile } from 'node:fs/promises';
@@ -76,16 +101,17 @@ jobs:
             }
 
             rpc_one chainId eth_chainId '[]'
-            rpc_one block eth_getBlockByNumber "["${BLOCK_TAG}",false]"
-            rpc_one factoryCode eth_getCode "["${FACTORY}","${BLOCK_TAG}"]"
-            rpc_one curveCode eth_getCode "["${CURVE}","${BLOCK_TAG}"]"
-            rpc_one getReserves eth_call "[{"to":"${CURVE}","data":"${CALL_DATA}"},"${BLOCK_TAG}"]"
+            rpc_one block eth_getBlockByNumber "[\"${BLOCK_TAG}\",false]"
+            rpc_one factoryCode eth_getCode "[\"${FACTORY}\",\"${BLOCK_TAG}\"]"
+            rpc_one curveCode eth_getCode "[\"${CURVE}\",\"${BLOCK_TAG}\"]"
+            rpc_one getReserves eth_call "[{\"to\":\"${CURVE}\",\"data\":\"${CALL_DATA}\"},\"${BLOCK_TAG}\"]"
 
             printf '%s\t%s\t%s\n' "${name}" "${configured}" "${name}" >> "${PONS_ARCHIVE_PROBE_DIR}/providers.tsv"
           }
 
           : > "${PONS_ARCHIVE_PROBE_DIR}/providers.tsv"
           acquire_rpc ROBINHOOD_PUBLIC 'https://rpc.mainnet.chain.robinhood.com' false
+          acquire_rpc NODEFLARE_PUBLIC 'https://rpc.nodeflare.app/robinhood/public' false
           acquire_rpc BLOCKREQ_PUBLIC 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public' false
           acquire_rpc TRIPORT_PUBLIC 'https://triport.io/rpc/robinhood/public' false
           acquire_rpc PUBLICNODE 'https://robinhood-rpc.publicnode.com' false
