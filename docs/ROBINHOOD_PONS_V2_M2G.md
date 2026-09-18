@@ -22,12 +22,15 @@ with the creator/deployer as an indexed event filter.
 
 A zero-prior result becomes `NO_HISTORY` only if:
 
-- reviewed factory authority holds at the epoch boundary and decision block;
+- the scan starts exactly at the frozen reviewed factory epoch boundary;
+- reviewed factory runtime authority holds again at the target and decision blocks;
 - target launch block/hash still matches;
 - frozen decision block/hash still matches;
 - every scan range completes;
 - the target event is present exactly once;
 - the final decision-block authority/hash fence still holds.
+
+The epoch-start block/code hash are preregistered M2A authority, not re-fetched historical state on every evaluation. This keeps log completeness independent from archive-state retention while still re-proving the pinned runtime at the target and decision points.
 
 Any provider/range/reorg/identity failure escapes. Partial scans never become clean history.
 

@@ -111,7 +111,11 @@ export class ViemPonsV2CreatorHistoryAdapter {
     const { target, decisionBlock, decisionBlockHash } = params;
     this.assertTarget(target, decisionBlock);
 
-    await this.launchAuthority.assertAuthority(this.authority.fromBlock);
+    // The reviewed authority object freezes the epoch start. Runtime code is
+    // re-proved at the target and decision points; requiring historical state at
+    // the epoch-start block would incorrectly couple log completeness to an
+    // archive-state provider even though eth_getLogs is the evidence source.
+    await this.launchAuthority.assertAuthority(target.blockNumber);
     await this.launchAuthority.assertAuthority(decisionBlock);
     await this.assertBlockHash(target.blockNumber, target.blockHash, 'TARGET');
     await this.assertBlockHash(decisionBlock, decisionBlockHash, 'DECISION');
@@ -211,7 +215,7 @@ export class ViemPonsV2CreatorHistoryAdapter {
           decisionBlockHash: norm(decisionBlockHash),
           priorLaunchCount: priorFacts.length,
           sourceEvent: 'TokenLaunched',
-          completeness: 'FULL_REVIEWED_FACTORY_EPOCH_TO_TARGET'
+          completeness: 'FULL_REVIEWED_FACTORY_EPOCH_LOG_RANGE_TO_TARGET'
         }
       }
     };
