@@ -96,6 +96,7 @@ export function evaluateFastVetR1CapacityGate(
   }
 
   assertPortableFastVetEvidence(baseline);
+  if (input.creatorFeature) assertCreatorReceiptSanity(input.creatorFeature);
   assertCreatorBinding(baseline, input.creatorFeature);
 
   if (baseline.status !== 'COMPLETE') {
@@ -232,6 +233,57 @@ function executableBidirectionalPrefix(
     notionals.push(leg.notionalUsdMicros);
   }
   return notionals;
+}
+
+function assertCreatorReceiptSanity(
+  feature: CreatorOutcomeFeatureReceipt
+): void {
+  const counts = [
+    feature.priorLaunchCount,
+    feature.outcomeReceiptCount,
+    feature.classifiedOutcomeCount,
+    feature.unresolvedOutcomeCount,
+    feature.unsellableOutcomeCount,
+    feature.catastrophicLossCount,
+    feature.exitFailureCount,
+    feature.liquidityCollapseCount,
+    feature.normalLossCount,
+    feature.normalWinCount,
+    feature.fatTailWinCount
+  ];
+  if (counts.some((value) => !Number.isSafeInteger(value) || value < 0)) {
+    throw new Error('FAST_VET_R1_CREATOR_RECEIPT_INVALID:COUNT');
+  }
+
+  const classified =
+    feature.catastrophicLossCount +
+    feature.exitFailureCount +
+    feature.liquidityCollapseCount +
+    feature.normalLossCount +
+    feature.normalWinCount +
+    feature.fatTailWinCount;
+  if (
+    classified !== feature.classifiedOutcomeCount ||
+    feature.classifiedOutcomeCount > feature.outcomeReceiptCount ||
+    feature.classifiedOutcomeCount > feature.priorLaunchCount ||
+    feature.unresolvedOutcomeCount !==
+      feature.priorLaunchCount - feature.classifiedOutcomeCount ||
+    feature.unsellableOutcomeCount > feature.classifiedOutcomeCount
+  ) {
+    throw new Error('FAST_VET_R1_CREATOR_RECEIPT_INVALID:ACCOUNTING');
+  }
+
+  const expectedCoverage =
+    feature.priorLaunchCount === 0
+      ? 'NO_HISTORY'
+      : feature.classifiedOutcomeCount === 0
+        ? 'UNKNOWN'
+        : feature.classifiedOutcomeCount === feature.priorLaunchCount
+          ? 'COMPLETE'
+          : 'PARTIAL';
+  if (feature.coverage !== expectedCoverage) {
+    throw new Error('FAST_VET_R1_CREATOR_RECEIPT_INVALID:COVERAGE');
+  }
 }
 
 function assertCreatorBinding(

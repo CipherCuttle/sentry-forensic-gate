@@ -211,6 +211,29 @@ assert.throws(
   /FAST_VET_R1_BINDING_MISMATCH/
 );
 
+assert.throws(
+  () => evaluateFastVetR1CapacityGate({
+    baseline: baseline(),
+    creatorFeature: creator({ catastrophicLossCount: -1 })
+  }),
+  /FAST_VET_R1_CREATOR_RECEIPT_INVALID:COUNT/,
+  'malformed negative creator counts must not neutralize the adverse-history veto'
+);
+
+assert.throws(
+  () => evaluateFastVetR1CapacityGate({
+    baseline: baseline(),
+    creatorFeature: creator({
+      coverage: 'COMPLETE',
+      priorLaunchCount: 1,
+      classifiedOutcomeCount: 0,
+      unresolvedOutcomeCount: 1
+    })
+  }),
+  /FAST_VET_R1_CREATOR_RECEIPT_INVALID:COVERAGE/,
+  'creator coverage must agree with the receipt accounting'
+);
+
 console.log(JSON.stringify({
   verdict: 'FAST_VET_R1_CAPACITY_GATE_PASS',
   mode: FAST_VET_R1_CAPACITY_GATE_CONFIGURATION.mode,
