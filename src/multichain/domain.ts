@@ -179,6 +179,7 @@ export interface PortableForwardOutcome {
   baselineId: string;
   horizonMs: number;
   status: 'COMPLETE' | 'UNVERIFIED';
+  reason?: string;
   observedBlock: bigint;
   observedBlockHash: Hex;
   targetTimestampMs: number;
@@ -188,6 +189,7 @@ export interface PortableForwardOutcome {
   baseAsset: Hex;
   baseAmountOut: bigint;
   executableValueUsdMicros?: bigint;
+  executableReturnBps?: bigint;
   gasCostUsdMicros?: bigint;
   slippageBps?: bigint;
   classification?: PortableOutcomeClassification;
