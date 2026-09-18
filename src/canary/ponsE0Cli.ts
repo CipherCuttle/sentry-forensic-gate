@@ -234,6 +234,15 @@ const approvalReceipt = await waitForReceipt(executor, approvalHash, 120_000);
 if (approvalReceipt.status !== 'success') {
   throw new Error(`PONS_E0_APPROVAL_REVERTED:${approvalHash}`);
 }
+writeState(statePath, {
+  version: 'PONS_E0_LIVE_CANARY_R0',
+  status: 'APPROVAL_INCLUDED',
+  token,
+  curve: exitPlan.curve,
+  wallet,
+  transactionHash: approvalHash,
+  tokensOwned: tokensOwned.toString()
+});
 
 const refreshedExit = await buildFreshExitPlan({
   client,
@@ -357,6 +366,9 @@ async function buildFreshEntryPlan(params: {
   if (shadowSnipeTax !== 0n) {
     throw new Error(`PONS_E0_SHADOW_RECIPIENT_TAX_NOT_ZERO:${shadowSnipeTax}`);
   }
+  if (authorityBoolean(entry, 'partialFill')) {
+    throw new Error('PONS_E0_PARTIAL_FILL_FORBIDDEN');
+  }
   const sellableTokens = authorityBigInt(entry, 'sellableTokens');
   const reverse = await params.quoteAdapter.quoteIndependentReverse({
     launch: params.launch,
@@ -473,6 +485,18 @@ function authorityBigInt(quote: PortableQuoteObservation, key: string): bigint {
     throw new Error(`PONS_E0_QUOTE_AUTHORITY_FIELD_INVALID:${key}`);
   }
   return BigInt(value);
+}
+
+function authorityBoolean(quote: PortableQuoteObservation, key: string): boolean {
+  const payload = quote.sourceAuthority.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error(`PONS_E0_QUOTE_AUTHORITY_MALFORMED:${key}`);
+  }
+  const value = payload[key];
+  if (typeof value !== 'boolean') {
+    throw new Error(`PONS_E0_QUOTE_AUTHORITY_FIELD_INVALID:${key}`);
+  }
+  return value;
 }
 
 async function waitForReceipt(
