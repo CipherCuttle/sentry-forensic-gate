@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const allowedWalletAuthorityFile = path.normalize('src/canary/viemCanaryExecutor.ts');
+const allowedWalletAuthorityFiles = new Set([
+  path.normalize('src/canary/viemCanaryExecutor.ts'),
+  path.normalize('src/canary/viemPonsE0CanaryExecutor.ts')
+]);
 const allowedIdentifiers = new Set(['createWalletClient', 'privateKeyToAccount', 'sendRawTransaction', 'signTransaction']);
 const forbiddenIdentifiers = new Set([
   'createWalletClient', 'privateKeyToAccount', 'mnemonicToAccount', 'hdKeyToAccount',
@@ -15,7 +18,7 @@ const findings = [];
 for (const file of files) {
   const source = fs.readFileSync(file, 'utf8');
   const normalized = path.normalize(file);
-  if (normalized !== allowedWalletAuthorityFile && source.includes('executor.account')) {
+  if (!allowedWalletAuthorityFiles.has(normalized) && source.includes('executor.account')) {
     findings.push(`raw-local-account-exposure:${file}`);
   }
   for (const identifier of forbiddenIdentifiers) {
@@ -25,13 +28,13 @@ for (const file of files) {
       findings.push(`${identifier}:outside-canary:${file}`);
       continue;
     }
-    if (normalized !== allowedWalletAuthorityFile || !allowedIdentifiers.has(identifier)) {
+    if (!allowedWalletAuthorityFiles.has(normalized) || !allowedIdentifiers.has(identifier)) {
       findings.push(`${identifier}:not-allowed-here:${file}`);
     }
   }
 }
 
-const executor = fs.readFileSync(allowedWalletAuthorityFile, 'utf8');
+const executor = fs.readFileSync(path.normalize('src/canary/viemCanaryExecutor.ts'), 'utf8');
 for (const required of [
   'readonly walletAddress: Address',
   'private readonly account: LocalAccount',
@@ -57,6 +60,31 @@ for (const required of [
   'CANARY_APPROVAL_PREFLIGHT_ACTION_ID_MISMATCH'
 ]) {
   if (!executor.includes(required)) findings.push(`missing-fail-closed-guard:${required}`);
+}
+
+const ponsExecutor = fs.readFileSync(path.normalize('src/canary/viemPonsE0CanaryExecutor.ts'), 'utf8');
+for (const required of [
+  'readonly walletAddress: Address',
+  'private readonly account: LocalAccount',
+  'PONS_E0_PRIVATE_KEY_FORMAT_INVALID',
+  'PONS_E0_CHAIN_ID_MISMATCH',
+  'PONS_E0_CURVE_FACTORY_MISMATCH',
+  'PONS_E0_CURVE_TOKEN_MISMATCH',
+  'PONS_E0_NATIVE_PAIR_REQUIRED',
+  'PONS_E0_CURVE_NOT_ACTIVE',
+  'PONS_E0_SNIPE_TAX_MUST_BE_ZERO',
+  'PONS_E0_NATIVE_VALUE_CAP_EXCEEDED',
+  'PONS_E0_EXACT_BUY_VALUE_NOT_AUTHORIZED',
+  'PONS_E0_APPROVAL_REQUIRES_ZERO_ALLOWANCE',
+  'PONS_E0_SELL_ALLOWANCE_NOT_EXACT',
+  'PONS_E0_BROADCAST_SIGNED_AUTHORITY_UNKNOWN',
+  'PONS_E0_BROADCAST_HASH_MISMATCH',
+  'PONS_E0_SIGNED_SIGNER_MISMATCH',
+  'PONS_E0_SIGNED_CHAIN_ID_MISMATCH',
+  'PONS_E0_SIGNED_TARGET_MISMATCH',
+  'PONS_E0_SIGNED_CALLDATA_MISMATCH'
+]) {
+  if (!ponsExecutor.includes(required)) findings.push(`missing-pons-e0-fail-closed-guard:${required}`);
 }
 if (findings.length) throw new Error(`CANARY_BOUNDARY_VIOLATION\n${findings.join('\n')}`);
 console.log('canary-boundary-check: PASS');
