@@ -136,7 +136,7 @@ assert.equal(scan.priorFacts[1].logIndex, 2);
 assert.equal(scan.scannedFromBlock, 100n);
 assert.equal(scan.scannedThroughBlock, 120n);
 assert.deepEqual(requestedRanges, [[100n, 109n], [110n, 119n], [120n, 120n]]);
-assert.equal(scan.sourceAuthority.payload.completeness, 'FULL_REVIEWED_FACTORY_EPOCH_TO_TARGET');
+assert.equal(scan.sourceAuthority.payload.completeness, 'FULL_REVIEWED_FACTORY_EPOCH_LOG_RANGE_TO_TARGET');
 
 const baseline = portableBaseline(target, 'baseline-target', 122n, hex64('122'));
 const feature = await projectPortableCreatorOutcomeFeature(
