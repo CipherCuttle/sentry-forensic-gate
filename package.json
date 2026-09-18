@@ -42,7 +42,8 @@
     "ponsv2creatorcheck": "node scripts/pons-v2-creator-history-check.mjs",
     "ponsv2creatorindexed": "node scripts/pons-v2-creator-history-indexed-smoke.mjs",
     "portableoutcomecheck": "node scripts/portable-forward-outcomes-policy-receipts-check.mjs",
-    "ponsv2forwardcheck": "node scripts/pons-v2-forward-outcome-adapter-check.mjs"
+    "ponsv2forwardcheck": "node scripts/pons-v2-forward-outcome-adapter-check.mjs",
+    "ponsv2realoutcome": "node scripts/pons-v2-m2h-e-real-prior-outcome.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",

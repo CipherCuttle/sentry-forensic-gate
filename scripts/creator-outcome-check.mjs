@@ -128,6 +128,26 @@ assert.equal(target.catastrophicLossCount, 1, 'canonical R1 receipt must superse
 assert.equal(target.unsellableOutcomeCount, 1);
 assert.equal(target.fatTailWinCount, 0, 'a2 24h result occurs after the target decision block');
 assert.deepEqual(target.sourceOutcomeIds, ['a1-24h-r1']);
+
+const portableProjected = await projectCreatorOutcomeFeatures(
+  baselinePoints,
+  facts,
+  outcomes.filter((item) => item.outcomeId !== 'a1-24h-r1').concat([
+    outcome(
+      'a1-24h-portable',
+      'a1',
+      CREATOR_OUTCOME_HORIZON_MS,
+      20n,
+      'NORMAL_WIN',
+      true,
+      'PORTABLE_FORWARD_OUTCOMES_R1'
+    )
+  ])
+);
+const portableTarget = portableProjected.find((receipt) => receipt.launchId === 'a3');
+assert.equal(portableTarget.outcomeReceiptCount, 1);
+assert.equal(portableTarget.normalWinCount, 1);
+assert.deepEqual(portableTarget.sourceOutcomeIds, ['a1-24h-portable']);
 assert.ok(target.sourceFactIds.includes(facts.find((fact) => fact.launchId === 'a3').factId));
 
 await exerciseStore(new MemoryStore());

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
-  buildPortableForwardOutcome
+  buildPortableForwardOutcome,
+  projectPortableOutcomeReceipt
 } from '../dist/multichain/portableForwardOutcomes.js';
 import {
   buildShadowPolicyComparisonReceipt
@@ -211,6 +212,13 @@ assert.equal(win.exitExecutable, true);
 assert.equal(win.executableValueUsdMicros, 1_200_000n);
 assert.equal(win.executableReturnBps, 12_000n);
 assert.equal(win.classification, 'NORMAL_WIN');
+
+const projectedWin = await projectPortableOutcomeReceipt(win);
+assert.equal(projectedWin.policyVersion, 'PORTABLE_FORWARD_OUTCOMES_R1');
+assert.equal(projectedWin.sellable, true);
+assert.equal(projectedWin.classification, 'NORMAL_WIN');
+assert.equal(projectedWin.baselineId, win.baselineId);
+assert.equal(projectedWin.evidenceDigest.length, 64);
 
 const winAgain = await buildPortableForwardOutcome(
   adapter(),

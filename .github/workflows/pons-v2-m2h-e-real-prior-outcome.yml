@@ -1,0 +1,38 @@
+name: pons-v2-m2h-e-real-prior-outcome
+
+on:
+  push:
+    branches:
+      - agent/m2h-e-real-prior-outcome-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-prior-outcome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PONS_M2H_E_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+      PONS_M2H_E_RPC_MIN_INTERVAL_MS: '1000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+      - name: Reconstruct real matured creator prior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          pnpm ponsv2realoutcome | tee artifacts/m2h-e-real-prior-outcome.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-v2-m2h-e-real-prior-outcome
+          path: artifacts/
+          if-no-files-found: error
