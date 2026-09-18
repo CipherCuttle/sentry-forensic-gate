@@ -103,6 +103,19 @@ assert.throws(
   /PONS_V2_QUOTE_UINT256_OVERFLOW/
 );
 
+const deployedIntermediateOverflowInput = PONS_V2_MAX_UINT256 / 10_000n + 1n;
+assert.throws(
+  () => quotePonsV2CurveEntry({
+    quoteReserve: 1n,
+    tokenReserve: 2n,
+    sellableTokens: 1n,
+    feeBps: 0n,
+    creatorTaxBps: 0n,
+    creditedQuoteIn: deployedIntermediateOverflowInput,
+    snipeTaxBps: 0n
+  }),
+  /PONS_V2_QUOTE_UINT256_OVERFLOW/
+);
 assert.equal(PONS_V2_DEPLOYED_CURVE_REFERENCE.chainId, 4663);
 assert.equal(PONS_V2_DEPLOYED_CURVE_REFERENCE.factory, '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e');
 assert.equal(PONS_V2_DEPLOYED_CURVE_REFERENCE.launchDeployer, '0x3711ceA4feaDE896C913C68F01Eda97Cb06D1A42');
