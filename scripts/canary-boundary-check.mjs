@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const allowedWalletAuthorityFiles = new Set([\n  path.normalize('src/canary/viemCanaryExecutor.ts'),\n  path.normalize('src/canary/viemPonsE0CanaryExecutor.ts')\n]);
+const allowedWalletAuthorityFiles = new Set([
+  path.normalize('src/canary/viemCanaryExecutor.ts'),
+  path.normalize('src/canary/viemPonsE0CanaryExecutor.ts')
+]);
 const allowedIdentifiers = new Set(['createWalletClient', 'privateKeyToAccount', 'sendRawTransaction', 'signTransaction']);
 const forbiddenIdentifiers = new Set([
   'createWalletClient', 'privateKeyToAccount', 'mnemonicToAccount', 'hdKeyToAccount',
