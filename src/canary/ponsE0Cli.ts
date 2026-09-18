@@ -143,6 +143,13 @@ if (!live) {
 }
 
 if (!executor) throw new Error('PONS_E0_LIVE_EXECUTOR_MISSING');
+reserveLiveState(statePath, {
+  version: 'PONS_E0_LIVE_CANARY_R0',
+  status: 'ARMED',
+  token,
+  curve: plan.marketCurve,
+  wallet
+});
 const tokenBefore = await executor.getTokenBalance(token);
 if (tokenBefore !== 0n) {
   throw new Error(`PONS_E0_DEDICATED_WALLET_TOKEN_BALANCE_MUST_BE_ZERO:${tokenBefore}`);
@@ -524,6 +531,27 @@ function readState(file: string): Record<string, string> | null {
     throw new Error('PONS_E0_STATE_VERSION_INVALID');
   }
   return parsed;
+}
+
+function reserveLiveState(file: string, state: Record<string, string>): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(file, 'wx', 0o600);
+    fs.writeFileSync(fd, `${JSON.stringify(state, null, 2)}\n`);
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'EEXIST'
+    ) {
+      throw new Error('PONS_E0_STATE_RESERVATION_EXISTS');
+    }
+    throw error;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
 }
 
 function writeState(file: string, state: Record<string, string>): void {
