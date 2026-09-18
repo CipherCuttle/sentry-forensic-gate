@@ -29,6 +29,7 @@ import { ViemPonsV2CurveQuoteAdapter } from '../adapters/robinhood/ponsV2/viemCu
 import { ViemPonsV2LaunchAdapter } from '../adapters/robinhood/ponsV2/viemLaunchAdapter.js';
 import { ViemRobinhoodUsdCalibrationAdapter } from '../adapters/robinhood/ponsV2/viemUsdCalibrationAdapter.js';
 import type {
+  CanonicalJsonValue,
   NormalizedLaunchCandidate,
   NormalizedMarket,
   PortableQuoteObservation
@@ -460,10 +461,13 @@ async function findRecentLaunch(
     toBlock: head,
     strict: true
   });
-  if (logs.length !== 1 || logs[0]?.blockNumber === null || logs[0]?.logIndex === null) {
+  if (logs.length !== 1) {
     throw new Error(`PONS_E0_RECENT_LAUNCH_CARDINALITY:${logs.length}`);
   }
-  const log = logs[0];
+  const log = logs[0]!;
+  if (log.blockNumber === null || log.logIndex === null) {
+    throw new Error('PONS_E0_RECENT_LAUNCH_IDENTITY_MISSING');
+  }
   const launches = await adapter.catchUp(log.blockNumber, log.blockNumber);
   const launch = launches.find((candidate) =>
     getAddress(candidate.token) === expectedToken &&
@@ -478,7 +482,7 @@ function requireCurve(market: NormalizedMarket): Address {
     throw new Error('PONS_E0_MARKET_SCHEMA_MISMATCH');
   }
   const payload = market.sourceAuthority.payload;
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+  if (!isCanonicalRecord(payload)) {
     throw new Error('PONS_E0_MARKET_AUTHORITY_MALFORMED');
   }
   const curve = payload.curve;
@@ -488,7 +492,7 @@ function requireCurve(market: NormalizedMarket): Address {
 
 function authorityBigInt(quote: PortableQuoteObservation, key: string): bigint {
   const payload = quote.sourceAuthority.payload;
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+  if (!isCanonicalRecord(payload)) {
     throw new Error(`PONS_E0_QUOTE_AUTHORITY_MALFORMED:${key}`);
   }
   const value = payload[key];
@@ -500,7 +504,7 @@ function authorityBigInt(quote: PortableQuoteObservation, key: string): bigint {
 
 function authorityBoolean(quote: PortableQuoteObservation, key: string): boolean {
   const payload = quote.sourceAuthority.payload;
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+  if (!isCanonicalRecord(payload)) {
     throw new Error(`PONS_E0_QUOTE_AUTHORITY_MALFORMED:${key}`);
   }
   const value = payload[key];
@@ -508,6 +512,12 @@ function authorityBoolean(quote: PortableQuoteObservation, key: string): boolean
     throw new Error(`PONS_E0_QUOTE_AUTHORITY_FIELD_INVALID:${key}`);
   }
   return value;
+}
+
+function isCanonicalRecord(
+  value: CanonicalJsonValue
+): value is Readonly<Record<string, CanonicalJsonValue>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function waitForReceipt(
