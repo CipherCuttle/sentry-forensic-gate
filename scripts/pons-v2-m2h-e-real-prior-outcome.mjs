@@ -46,7 +46,7 @@ const client = createPublicClient({
   chain: robinhood,
   transport: http(rpcUrl, {
     retryCount: 0,
-    timeout: 40_000
+    timeout: 300_000
   })
 });
 
