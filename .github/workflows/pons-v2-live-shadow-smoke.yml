@@ -13,7 +13,7 @@ permissions:
 jobs:
   live-shadow:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       PONS_SMOKE_BLOCK: '65808784'
       PONS_SMOKE_TOKEN: '0x633d3b4CCe2E3cD2e6D7588186cEEd26a634147D'
@@ -52,7 +52,7 @@ jobs:
 
           acquire_range() {
             from="$1"; to="$2"
-            curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 \
+            curl --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 --retry-max-time 180 \
               --user-agent "Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)" \
               --header "Accept: application/json" \
               --header "Referer: ${BLOCKSCOUT_BASE}/" \
@@ -68,6 +68,7 @@ jobs:
               --data-urlencode "page=1" \
               --data-urlencode "offset=1000" \
               > "${PONS_INDEXED_EVIDENCE_DIR}/ranges/${from}-${to}.json"
+            sleep 15
           }
           export -f acquire_range
           export BLOCKSCOUT_BASE PONS_FACTORY PONS_EVENT_TOPIC PONS_CREATOR_TOPIC PONS_INDEXED_EVIDENCE_DIR
@@ -78,12 +79,13 @@ jobs:
           while IFS= read -r hex; do
             [ -z "${hex}" ] && continue
             dec=$((16#${hex#0x}))
-            curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 \
+            curl --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 --retry-max-time 180 \
               --user-agent "Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)" \
               --header "Accept: application/json" \
               --header "Referer: ${BLOCKSCOUT_BASE}/" \
               "${BLOCKSCOUT_BASE}/api/v2/blocks/${dec}" \
               > "${PONS_INDEXED_EVIDENCE_DIR}/blocks/${dec}.json"
+            sleep 15
           done < "${PONS_INDEXED_EVIDENCE_DIR}/block-hex.txt"
 
           cat > "${PONS_INDEXED_EVIDENCE_DIR}/acquisition.json" <<JSON
