@@ -226,6 +226,8 @@ assert.notEqual(PONS_V2_SHADOW_QUOTE_RECIPIENT, PONS_V2_NATIVE_PAIR_TOKEN);
   });
   assert.equal(entry.executable, true);
   assert.equal(entry.sourceAuthority.payload.snipeTaxAmount, '96', 'snipe tax must clamp to leave 1% net headroom');
+  assert.equal(entry.sourceAuthority.payload.snipeTaxBps, '9900');
+  assert.equal(entry.sourceAuthority.payload.effectiveSnipeTaxBps, '9600');
 }
 
 {
@@ -255,12 +257,26 @@ await assert.rejects(
 );
 
 await assert.rejects(
-  () => prepare({ configuredLaunchDeployer: '0x9999999999999999999999999999999999999999' }),
+  async () => {
+    const { adapter, market } = await prepare({
+      configuredLaunchDeployer: '0x9999999999999999999999999999999999999999'
+    });
+    return adapter.quoteEntry({
+      launch, market, decisionBlock: 120n, decisionBlockHash: decisionHash,
+      notionalUsdMicros: 1_000_000n, amountIn: 100n
+    });
+  },
   /PONS_V2_QUOTE_FACTORY_LAUNCH_DEPLOYER_MISMATCH/
 );
 
 await assert.rejects(
-  () => prepare({ deployerCode: '0x6004600055' }),
+  async () => {
+    const { adapter, market } = await prepare({ deployerCode: '0x6004600055' });
+    return adapter.quoteEntry({
+      launch, market, decisionBlock: 120n, decisionBlockHash: decisionHash,
+      notionalUsdMicros: 1_000_000n, amountIn: 100n
+    });
+  },
   /PONS_V2_CURVE_TEMPLATE_CODE_HASH_DRIFT/
 );
 
@@ -271,7 +287,7 @@ await assert.rejects(
 
 {
   const stable = await prepare();
-  const reorgClient = makeClient({ blockHashSequence: [decisionHash, decisionHash, decisionHash, `0x${'dd'.repeat(32)}`] });
+  const reorgClient = makeClient({ blockHashSequence: [decisionHash, `0x${'dd'.repeat(32)}`] });
   const adapter = new ViemPonsV2CurveQuoteAdapter({ authority, templateAuthority, client: reorgClient });
   await assert.rejects(
     () => adapter.quoteEntry({

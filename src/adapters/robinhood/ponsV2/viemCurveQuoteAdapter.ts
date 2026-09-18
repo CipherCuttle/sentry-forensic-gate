@@ -176,6 +176,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
       feeAmount: entry.fee,
       creatorTaxAmount: entry.creatorTax,
       snipeTaxAmount: entry.snipeTax,
+      effectiveSnipeTaxBps: entry.effectiveSnipeTaxBps,
       grossAmountOut: null,
       partialFill: entry.partialFill
     });
@@ -232,6 +233,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
       feeAmount: reverse.fee,
       creatorTaxAmount: reverse.creatorTax,
       snipeTaxAmount: 0n,
+      effectiveSnipeTaxBps: 0n,
       grossAmountOut: reverse.grossQuoteOut,
       partialFill: false
     });
@@ -554,6 +556,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
     feeAmount: bigint;
     creatorTaxAmount: bigint;
     snipeTaxAmount: bigint;
+    effectiveSnipeTaxBps: bigint;
     grossAmountOut: bigint | null;
     partialFill: boolean;
   }): SourceAuthorityEnvelope {
@@ -581,6 +584,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
         feeBps: input.state.feeBps.toString(),
         creatorTaxBps: input.state.creatorTaxBps.toString(),
         snipeTaxBps: input.state.snipeTaxBps.toString(),
+        effectiveSnipeTaxBps: input.effectiveSnipeTaxBps.toString(),
         amountInRequested: input.amountInRequested.toString(),
         amountInExecutable: input.amountInExecutable.toString(),
         amountOut: input.amountOut.toString(),
@@ -604,6 +608,7 @@ function computeEntry(amountIn: bigint, state: CurveQuoteState): {
   fee: bigint;
   creatorTax: bigint;
   snipeTax: bigint;
+  effectiveSnipeTaxBps: bigint;
   partialFill: boolean;
   executable: boolean;
   failureReason?: string;
@@ -621,6 +626,7 @@ function computeEntry(amountIn: bigint, state: CurveQuoteState): {
       fee,
       creatorTax,
       snipeTax,
+      effectiveSnipeTaxBps: snipeTaxBps,
       partialFill: false,
       executable: false,
       failureReason: 'PONS_V2_CURVE_ZERO_NET_ENTRY'
@@ -634,7 +640,7 @@ function computeEntry(amountIn: bigint, state: CurveQuoteState): {
     tokensOut = state.sellableTokens;
     const netRequired = getAmountIn(tokensOut, state.quoteReserve, state.tokenReserve);
     const grossDenominator = BASIS_POINTS - state.feeBps - state.creatorTaxBps - snipeTaxBps;
-    spent = min(ceilDiv(checkedMul(netRequired, BASIS_POINTS), grossDenominator), amountIn);
+    spent = min(ceilMulDiv(netRequired, BASIS_POINTS, grossDenominator), amountIn);
     fee = bpsAmount(spent, state.feeBps);
     creatorTax = bpsAmount(spent, state.creatorTaxBps);
     snipeTax = bpsAmount(spent, snipeTaxBps);
@@ -648,12 +654,22 @@ function computeEntry(amountIn: bigint, state: CurveQuoteState): {
       fee,
       creatorTax,
       snipeTax,
+      effectiveSnipeTaxBps: snipeTaxBps,
       partialFill,
       executable: false,
       failureReason: 'PONS_V2_CURVE_ZERO_ENTRY_OUTPUT'
     };
   }
-  return { spent, tokensOut, fee, creatorTax, snipeTax, partialFill, executable: true };
+  return {
+    spent,
+    tokensOut,
+    fee,
+    creatorTax,
+    snipeTax,
+    effectiveSnipeTaxBps: snipeTaxBps,
+    partialFill,
+    executable: true
+  };
 }
 
 function computeReverse(tokensIn: bigint, state: CurveQuoteState): {
@@ -741,9 +757,12 @@ function checkedAdd(a: bigint, b: bigint): bigint {
   return out;
 }
 
-function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+function ceilMulDiv(a: bigint, b: bigint, denominator: bigint): bigint {
   if (denominator <= 0n) throw new Error('PONS_V2_QUOTE_DIVISION_BY_ZERO');
-  return numerator === 0n ? 0n : ((numerator - 1n) / denominator) + 1n;
+  const product = a * b;
+  const result = product === 0n ? 0n : ((product - 1n) / denominator) + 1n;
+  if (result > UINT256_MAX) throw new Error('PONS_V2_QUOTE_MATH_OVERFLOW');
+  return result;
 }
 
 function min(a: bigint, b: bigint): bigint {
