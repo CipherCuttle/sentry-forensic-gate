@@ -72,6 +72,10 @@ assert.equal(reverse.creatorTax, 0n);
 assert.equal(reverse.quoteOut, 9_686_833_745_146_488n);
 
 assert.throws(
+  () => quotePonsV2CurveEntry({ ...initial, creditedQuoteIn: 1n, snipeTaxBps: 0n, sellableTokens: initial.tokenReserve }),
+  /PONS_V2_QUOTE_SELLABLE_NOT_BELOW_RESERVE/
+);
+assert.throws(
   () => quotePonsV2CurveEntry({ ...initial, creditedQuoteIn: 1n, snipeTaxBps: 0n, sellableTokens: 0n }),
   /PONS_V2_QUOTE_CURVE_READY_TO_GRADUATE/
 );
