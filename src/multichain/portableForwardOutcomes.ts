@@ -13,6 +13,7 @@ import type {
   SourceAuthorityEnvelope
 } from './domain.js';
 import type { ForwardOutcomeAdapter } from './ports.js';
+import { assertPortableFastVetEvidence } from './fastVetBridge.js';
 
 export const PORTABLE_FORWARD_OUTCOMES_R1 =
   'PORTABLE_FORWARD_OUTCOMES_R1' as const;
@@ -25,6 +26,7 @@ export async function buildPortableForwardOutcome(
   confirmedHeadPoint: NormalizedBlockPoint
 ): Promise<PortableForwardOutcome | null> {
   assertIdentity(adapter, launch, baseline);
+  assertPortableFastVetEvidence(baseline);
   if (!Number.isInteger(horizonMs) || horizonMs <= 0) {
     throw new Error(`PORTABLE_OUTCOME_HORIZON_INVALID:${horizonMs}`);
   }
