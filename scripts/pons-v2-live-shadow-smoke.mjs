@@ -14,16 +14,24 @@ import {
 const launchBlock = BigInt(process.env.PONS_SMOKE_BLOCK ?? '65808784');
 const expectedToken =
   (process.env.PONS_SMOKE_TOKEN ?? '0x633d3b4CCe2E3cD2e6D7588186cEEd26a634147D').toLowerCase();
+const archiveRpcUrl = process.env.ROBINHOOD_ARCHIVE_RPC_URL;
+assert.ok(
+  archiveRpcUrl,
+  'ROBINHOOD_ARCHIVE_RPC_URL is required; the public Robinhood RPC is pruned and cannot prove the frozen decision block'
+);
 
 const launchAdapter = new ViemPonsV2LaunchAdapter({
-  authority: CURRENT_PONS_V2_AUTHORITY
+  authority: CURRENT_PONS_V2_AUTHORITY,
+  rpcUrl: archiveRpcUrl
 });
 const quoteAdapter = new ViemPonsV2CurveQuoteAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
-  templateAuthority: CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY
+  templateAuthority: CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
+  rpcUrl: archiveRpcUrl
 });
 const usdAdapter = new ViemRobinhoodUsdCalibrationAdapter({
-  authority: CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY
+  authority: CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY,
+  rpcUrl: archiveRpcUrl
 });
 
 const launches = await launchAdapter.catchUp(launchBlock, launchBlock);
@@ -118,6 +126,10 @@ const receipt = {
     }))
   },
   fastVet: vet,
+  transport: {
+    archiveRequired: true,
+    endpointClass: 'PUBLIC_ARCHIVE_SMOKE'
+  },
   boundaries: {
     wallet: false,
     signer: false,

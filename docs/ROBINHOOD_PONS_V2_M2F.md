@@ -63,3 +63,16 @@ The workflow has:
 - no invented creator history.
 
 `EDGE_UNPROVEN` remains explicit.
+
+
+## Archive transport requirement
+
+The first real smoke reached Robinhood's official public RPC and failed on the first historical `eth_getCode` at launch block `65,808,784` with:
+
+`historical state ... is not available`
+
+That is a provider-capability failure, not a strategy result. Robinhood's developer documentation explicitly says historical reads/indexing require an archive endpoint.
+
+M2F therefore requires `ROBINHOOD_ARCHIVE_RPC_URL` and refuses to silently fall back to the pruned public RPC. The smoke workflow currently uses the keyless BlockReq Robinhood archive route.
+
+The archive provider is **transport, not authority**. Every concrete adapter still verifies chain ID, pinned runtime code hashes, source records, decision-block hashes, USDG implementation authority, and market identity. Changing the RPC provider does not change frozen strategy semantics.
