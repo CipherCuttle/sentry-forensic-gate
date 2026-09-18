@@ -1,0 +1,56 @@
+name: pons-v2-real-outcome-comparison
+
+on:
+  push:
+    branches:
+      - agent/m2h-e-real-pons-outcome-comparison-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-shadow-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ROBINHOOD_ARCHIVE_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+      ROBINHOOD_LOG_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
+      PONS_REAL_RPC_MIN_INTERVAL_MS: '2500'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+
+      - name: Reconstruct real prior 24h outcome and HMN policy comparison
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          pnpm ponsv2realoutcome \
+            | tee artifacts/m2h-e-real-pons-policy-comparison.json
+
+      - name: Preserve execution metadata
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "branch=${GITHUB_REF_NAME}"
+            echo "sha=${GITHUB_SHA}"
+            echo "mode=SHADOW_ONLY"
+            echo "edge=UNPROVEN"
+            echo "archiveCapabilityRun=35387747266"
+            echo "archiveEndpointClass=NODEFLARE_PUBLIC_KEYLESS"
+            echo "liveMoneyAuthority=false"
+          } > artifacts/m2h-e-metadata.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m2h-e-real-pons-policy-comparison
+          path: artifacts/
+          if-no-files-found: error
