@@ -127,6 +127,7 @@ function adapter({
   liquidity = 'SURVIVED',
   exitExecutable = true,
   valueUsdMicros = 1_200_000n,
+  valuationUnavailable = false,
   mutateObservedHash = false
 } = {}) {
   const reads = new Map();
@@ -174,6 +175,9 @@ function adapter({
       };
     },
     async valueBaseAmountUsdMicros({ baseAmount, blockNumber }) {
+      if (valuationUnavailable) {
+        throw new Error('PORTABLE_USD_VALUATION_UNAVAILABLE:TEST');
+      }
       assert.equal(baseAmount, 1_000_000_000n);
       assert.equal(blockNumber, 110n);
       return {
@@ -249,6 +253,18 @@ const migratedUnsupported = await buildPortableForwardOutcome(
 assert.equal(migratedUnsupported.status, 'UNVERIFIED');
 assert.equal(migratedUnsupported.classification, undefined);
 assert.equal(migratedUnsupported.executableValueUsdMicros, undefined);
+
+const valuationGap = await buildPortableForwardOutcome(
+  adapter({ valuationUnavailable: true }),
+  launch,
+  baseline(),
+  10_000,
+  confirmed
+);
+assert.equal(valuationGap.status, 'UNVERIFIED');
+assert.equal(valuationGap.classification, undefined);
+assert.equal(valuationGap.executableValueUsdMicros, undefined);
+assert.match(valuationGap.reason, /^PORTABLE_USD_VALUATION_UNAVAILABLE:/);
 
 await assert.rejects(
   () => buildPortableForwardOutcome(
