@@ -1,0 +1,133 @@
+name: pons-v2-archive-capability-probe
+
+on:
+  push:
+    branches:
+      - agent/m2h-pons-forward-outcome-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ROBINHOOD_ARCHIVE_RPC_URL: ${{ secrets.ROBINHOOD_ARCHIVE_RPC_URL }}
+      PONS_ARCHIVE_PROBE_DIR: artifacts/pons-v2-archive-probe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+
+      - name: Acquire historical Robinhood state evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${PONS_ARCHIVE_PROBE_DIR}"
+          BLOCK_TAG=0x3ded704
+          FACTORY=0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e
+          CURVE=0x918cc3734621d966995d2663dcf587ce0d4768fc
+          CALL_DATA="$(node --input-type=module - <<'NODE'
+          import { encodeFunctionData } from 'viem';
+          import { ponsV2CurveQuoteReadAbi } from './dist/index.js';
+          console.log(encodeFunctionData({
+            abi: ponsV2CurveQuoteReadAbi,
+            functionName: 'getReserves'
+          }));
+          NODE
+          )"
+
+          acquire_rpc() {
+            name="$1"
+            url="$2"
+            configured="$3"
+            dir="${PONS_ARCHIVE_PROBE_DIR}/${name}"
+            mkdir -p "${dir}"
+
+            rpc_one() {
+              file="$1"
+              method="$2"
+              params="$3"
+              body_file="${dir}/${file}.body"
+              status_file="${dir}/${file}.status"
+              http_status="$(
+                curl --silent --show-error --location                   --connect-timeout 10 --max-time 35                   --header 'content-type: application/json'                   --header 'user-agent: sentry-forensic-gate-m2h-archive-probe/2'                   --output "${body_file}"                   --write-out '%{http_code}'                   --data "{"jsonrpc":"2.0","id":1,"method":"${method}","params":${params}}"                   "${url}" || true
+              )"
+              printf '%s' "${http_status:-0}" > "${status_file}"
+              node --input-type=module - "${status_file}" "${body_file}" "${dir}/${file}.json" <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises';
+          const [statusPath, bodyPath, outputPath] = process.argv.slice(2);
+          const statusRaw = await readFile(statusPath, 'utf8');
+          const bodyText = await readFile(bodyPath, 'utf8').catch(() => '');
+          const httpStatus = Number(statusRaw || '0');
+          let body = null;
+          try { body = JSON.parse(bodyText); } catch {}
+          await writeFile(
+            outputPath,
+            JSON.stringify({ httpStatus, body, bodyText: body ? null : bodyText.slice(0, 1024) }, null, 2)
+          );
+          NODE
+            }
+
+            rpc_one chainId eth_chainId '[]'
+            rpc_one block eth_getBlockByNumber "["${BLOCK_TAG}",false]"
+            rpc_one factoryCode eth_getCode "["${FACTORY}","${BLOCK_TAG}"]"
+            rpc_one curveCode eth_getCode "["${CURVE}","${BLOCK_TAG}"]"
+            rpc_one getReserves eth_call "[{"to":"${CURVE}","data":"${CALL_DATA}"},"${BLOCK_TAG}"]"
+
+            printf '%s\t%s\t%s\n' "${name}" "${configured}" "${name}" >> "${PONS_ARCHIVE_PROBE_DIR}/providers.tsv"
+          }
+
+          : > "${PONS_ARCHIVE_PROBE_DIR}/providers.tsv"
+          acquire_rpc ROBINHOOD_PUBLIC 'https://rpc.mainnet.chain.robinhood.com' false
+          acquire_rpc BLOCKREQ_PUBLIC 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public' false
+          acquire_rpc TRIPORT_PUBLIC 'https://triport.io/rpc/robinhood/public' false
+          acquire_rpc PUBLICNODE 'https://robinhood-rpc.publicnode.com' false
+          acquire_rpc ALCHEMY_DOCS_DEMO 'https://robinhood-mainnet.g.alchemy.com/v2/docs-demo' false
+          if [ -n "${ROBINHOOD_ARCHIVE_RPC_URL:-}" ]; then
+            acquire_rpc CONFIGURED_ARCHIVE "${ROBINHOOD_ARCHIVE_RPC_URL}" true
+          fi
+
+          node --input-type=module - "${PONS_ARCHIVE_PROBE_DIR}" <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises';
+          import path from 'node:path';
+          const dir = process.argv[2];
+          const rows = (await readFile(path.join(dir, 'providers.tsv'), 'utf8'))
+            .trim()
+            .split(/\n+/)
+            .filter(Boolean)
+            .map((line) => {
+              const [name, configured, directory] = line.split('\t');
+              return { name, configured: configured === 'true', directory };
+            });
+          await writeFile(
+            path.join(dir, 'manifest.json'),
+            JSON.stringify({
+              schema: 'ROBINHOOD_ARCHIVE_CAPABILITY_ACQUISITION_R1',
+              chainId: 4663,
+              priorLaunchBlock: '64935682',
+              decisionBlock: '64935684',
+              curve: '0x918cc3734621d966995d2663dcf587ce0d4768fc',
+              providers: rows
+            }, null, 2)
+          );
+          NODE
+
+      - name: Evaluate historical provider capability locally
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/pons-v2-archive-capability-probe.mjs             | tee artifacts/pons-v2-archive-capability.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-v2-archive-capability
+          path: artifacts/
+          if-no-files-found: error
