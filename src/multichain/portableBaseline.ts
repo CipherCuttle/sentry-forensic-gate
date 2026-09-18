@@ -25,8 +25,13 @@ import type {
 
 export const PORTABLE_BASELINE_DECISION_DELAY_BLOCKS = 2n;
 export const PORTABLE_BASELINE_CONFIRMATIONS = 2n;
-export const PORTABLE_BASELINE_NOTIONALS_USD_MICROS =
-  DEFAULT_BASELINE_NOTIONALS_USD_MICROS;
+export const PORTABLE_BASELINE_NOTIONALS_USD_MICROS = Object.freeze([
+  250_000n,
+  500_000n,
+  1_000_000n,
+  2_000_000n,
+  5_000_000n
+] as const);
 
 export const PORTABLE_EXECUTABLE_BASELINE_R1 =
   'PORTABLE_EXECUTABLE_BASELINE_R1' as const;
@@ -50,6 +55,7 @@ export async function buildPortableBaselineBatch(
   launch: NormalizedLaunchCandidate,
   now: () => number = Date.now
 ): Promise<PortableBaselineBatch> {
+  assertFrozenStrategyParity();
   assertPortableBaselineIdentity(adapters, launch);
 
   const headBlock = await adapters.launch.getHeadBlockNumber();
@@ -356,6 +362,23 @@ function assertReverseBinding(params: {
   }
   if (reverse.executable && reverse.amountOut <= 0n) {
     throw new Error('PORTABLE_BASELINE_REVERSE_EXECUTABLE_WITHOUT_OUTPUT');
+  }
+}
+
+function assertFrozenStrategyParity(): void {
+  if (
+    DEFAULT_BASELINE_NOTIONALS_USD_MICROS.length !==
+    PORTABLE_BASELINE_NOTIONALS_USD_MICROS.length
+  ) {
+    throw new Error('PORTABLE_BASELINE_STRATEGY_DRIFT:NOTIONAL_COUNT');
+  }
+  for (let index = 0; index < PORTABLE_BASELINE_NOTIONALS_USD_MICROS.length; index += 1) {
+    if (
+      DEFAULT_BASELINE_NOTIONALS_USD_MICROS[index] !==
+      PORTABLE_BASELINE_NOTIONALS_USD_MICROS[index]
+    ) {
+      throw new Error(`PORTABLE_BASELINE_STRATEGY_DRIFT:NOTIONAL_${index}`);
+    }
   }
 }
 

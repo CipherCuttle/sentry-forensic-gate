@@ -182,6 +182,12 @@ assert.deepEqual(
   [...PORTABLE_BASELINE_NOTIONALS_USD_MICROS],
   [...DEFAULT_BASELINE_NOTIONALS_USD_MICROS]
 );
+assert.equal(Object.isFrozen(PORTABLE_BASELINE_NOTIONALS_USD_MICROS), true);
+assert.throws(
+  () => PORTABLE_BASELINE_NOTIONALS_USD_MICROS.push(10_000_000n),
+  TypeError,
+  'the translated ladder must be runtime-immutable, not merely TypeScript-readonly'
+);
 
 const baseline = await buildPortableBaselineBatch(makeAdapters(), launch, () => 5000);
 assert.equal(baseline.status, 'COMPLETE');
