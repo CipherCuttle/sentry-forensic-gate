@@ -171,7 +171,7 @@ function assertEntryState(input: PonsV2CurveEntryQuoteInput): void {
   if (input.quoteReserve === 0n || input.tokenReserve === 0n) {
     throw new Error('PONS_V2_QUOTE_INSUFFICIENT_LIQUIDITY');
   }
-  if (input.sellableTokens > input.tokenReserve) throw new Error('PONS_V2_QUOTE_SELLABLE_EXCEEDS_RESERVE');
+  if (input.sellableTokens >= input.tokenReserve) throw new Error('PONS_V2_QUOTE_SELLABLE_NOT_BELOW_RESERVE');
   assertTradeFeeDomain(input.feeBps, input.creatorTaxBps);
 }
 
