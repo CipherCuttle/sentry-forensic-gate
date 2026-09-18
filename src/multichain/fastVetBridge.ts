@@ -3,6 +3,7 @@ import type { CreatorOutcomeFeatureReceipt } from '../forensic/creatorOutcome.js
 import {
   EXECUTABLE_BASELINE_R1,
   HISTORICAL_EXECUTABLE_BASELINE_REDSTONE_ASOF_R1,
+  DEFAULT_BASELINE_NOTIONALS_USD_MICROS,
   type ExecutableBaselineBatch
 } from '../shadow/baselineTypes.js';
 import type { PortableFastVetBaselineEvidence } from './domain.js';
@@ -46,4 +47,17 @@ export function assertPortableFastVetEvidence(baseline: PortableFastVetBaselineE
   if (!baseline.authorityDigest) throw new Error('MULTICHAIN_FAST_VET_AUTHORITY_DIGEST_MISSING');
   if (!baseline.baselineId) throw new Error('MULTICHAIN_FAST_VET_BASELINE_ID_MISSING');
   if (!baseline.launchId) throw new Error('MULTICHAIN_FAST_VET_LAUNCH_ID_MISSING');
+  if (baseline.status === 'COMPLETE') {
+    if (baseline.legs.length !== DEFAULT_BASELINE_NOTIONALS_USD_MICROS.length) {
+      throw new Error('MULTICHAIN_FAST_VET_COMPLETE_LADDER_MISMATCH');
+    }
+    for (let index = 0; index < DEFAULT_BASELINE_NOTIONALS_USD_MICROS.length; index += 1) {
+      if (
+        baseline.legs[index]?.notionalUsdMicros !==
+        DEFAULT_BASELINE_NOTIONALS_USD_MICROS[index]
+      ) {
+        throw new Error('MULTICHAIN_FAST_VET_COMPLETE_LADDER_MISMATCH');
+      }
+    }
+  }
 }
