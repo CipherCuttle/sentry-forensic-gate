@@ -81,6 +81,9 @@ jobs:
             jq -e --arg n "$block_hex"               '.error == null and (.result.number | ascii_downcase) == ($n | ascii_downcase) and .result.hash != null and .result.timestamp != null'               "${PONS_M2J_A_EVIDENCE_DIR}/blocks/${block_dec}.json" >/dev/null
           done < "${PONS_M2J_A_EVIDENCE_DIR}/block-hex.txt"
 
+          rpc eth_getBlockByNumber "[\"$head_hex\",false]"             "${PONS_M2J_A_EVIDENCE_DIR}/head-final.json"
+          jq -e --arg n "$head_hex"             '.error == null and (.result.number | ascii_downcase) == ($n | ascii_downcase) and .result.hash != null'             "${PONS_M2J_A_EVIDENCE_DIR}/head-final.json" >/dev/null
+
           head_hash="$(jq -r '.result.hash | ascii_downcase' "${PONS_M2J_A_EVIDENCE_DIR}/head.json")"
           head_timestamp_hex="$(jq -r '.result.timestamp' "${PONS_M2J_A_EVIDENCE_DIR}/head.json")"
           head_timestamp=$((16#${head_timestamp_hex#0x}))
