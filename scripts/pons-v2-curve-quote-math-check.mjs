@@ -76,7 +76,7 @@ assert.throws(
   /PONS_V2_QUOTE_CURVE_READY_TO_GRADUATE/
 );
 assert.throws(
-  () => quotePonsV2CurveEntry({ ...initial, creditedQuoteIn: 1n, snipeTaxBps: 0n, feeBps: 9_901n }),
+  () => quotePonsV2CurveEntry({ ...initial, creditedQuoteIn: 1n, snipeTaxBps: 0n, feeBps: 2_001n }),
   /PONS_V2_QUOTE_FEE_DOMAIN_INVALID/
 );
 assert.throws(
