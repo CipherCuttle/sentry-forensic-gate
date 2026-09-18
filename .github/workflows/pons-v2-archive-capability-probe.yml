@@ -72,6 +72,7 @@ jobs:
               http_status="$(
                 curl --silent --show-error --location \
                   --connect-timeout 10 --max-time 35 \
+                  --retry 4 --retry-delay 3 --retry-all-errors \
                   --header 'content-type: application/json' \
                   --header 'user-agent: sentry-forensic-gate-m2h-archive-probe/3' \
                   --output "${body_file}" \
@@ -82,7 +83,7 @@ jobs:
               # NodeFlare public advertises a 2 req/s IP limit. A shared,
               # deterministic pace keeps the capability test about archive
               # state rather than burst-rate behavior.
-              sleep 0.6
+              sleep 2
               printf '%s' "${http_status:-0}" > "${status_file}"
               node --input-type=module - "${status_file}" "${body_file}" "${dir}/${file}.json" <<'NODE'
           import { readFile, writeFile } from 'node:fs/promises';
