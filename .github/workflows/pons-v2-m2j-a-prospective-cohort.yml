@@ -1,0 +1,135 @@
+name: pons-v2-m2j-a-prospective-cohort
+
+on:
+  push:
+    branches:
+      - agent/m2j-a-pons-prospective-cohort-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-cohort:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PONS_M2J_A_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
+      PONS_M2J_A_EVIDENCE_DIR: 'artifacts/m2j-a-acquisition'
+      PONS_M2J_A_SCAN_BACK_BLOCKS: '30000'
+      PONS_M2J_A_WINDOW_SECONDS: '43200'
+      PONS_M2J_A_MAX_MEMBERS: '20'
+      PONS_FACTORY: '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e'
+      PONS_EVENT_TOPIC: '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+      - run: node --check scripts/pons-v2-m2j-a-prospective-cohort.mjs
+
+      - name: Acquire prospective cohort membership evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${PONS_M2J_A_EVIDENCE_DIR}/ranges" "${PONS_M2J_A_EVIDENCE_DIR}/blocks"
+
+          rpc() {
+            method="$1"
+            params="$2"
+            output="$3"
+            payload="$(jq -cn --arg method "$method" --argjson params "$params"               '{jsonrpc:"2.0",id:1,method:$method,params:$params}')"
+            curl --fail --silent --show-error --location               --connect-timeout 10 --max-time 40               --retry 5 --retry-delay 2 --retry-all-errors               --header 'content-type: application/json'               --header 'user-agent: sentry-forensic-gate-m2j-a/1'               --data-binary "$payload"               "${PONS_M2J_A_RPC_URL}" > "$output"
+            jq -e 'type == "object" and (.jsonrpc == "2.0") and (has("result") or has("error"))'               "$output" >/dev/null
+            sleep 1
+          }
+
+          rpc eth_getBlockByNumber '["latest",false]' "${PONS_M2J_A_EVIDENCE_DIR}/head.json"
+          jq -e '.error == null and .result.number != null and .result.hash != null and .result.timestamp != null'             "${PONS_M2J_A_EVIDENCE_DIR}/head.json" >/dev/null
+
+          head_hex="$(jq -r '.result.number' "${PONS_M2J_A_EVIDENCE_DIR}/head.json")"
+          head_dec=$((16#${head_hex#0x}))
+          if [ "$head_dec" -gt "${PONS_M2J_A_SCAN_BACK_BLOCKS}" ]; then
+            from_dec=$((head_dec - PONS_M2J_A_SCAN_BACK_BLOCKS))
+          else
+            from_dec=0
+          fi
+
+          : > "${PONS_M2J_A_EVIDENCE_DIR}/ranges.tsv"
+          cursor="$from_dec"
+          while [ "$cursor" -le "$head_dec" ]; do
+            to=$((cursor + 4999))
+            if [ "$to" -gt "$head_dec" ]; then to="$head_dec"; fi
+            printf '%s\t%s\n' "$cursor" "$to" >> "${PONS_M2J_A_EVIDENCE_DIR}/ranges.tsv"
+            from_hex="$(printf '0x%x' "$cursor")"
+            to_hex="$(printf '0x%x' "$to")"
+            params="$(jq -cn               --arg address "${PONS_FACTORY}"               --arg fromBlock "$from_hex"               --arg toBlock "$to_hex"               --arg topic0 "${PONS_EVENT_TOPIC}"               '[{address:$address,fromBlock:$fromBlock,toBlock:$toBlock,topics:[$topic0]}]')"
+            rpc eth_getLogs "$params" "${PONS_M2J_A_EVIDENCE_DIR}/ranges/${cursor}-${to}.json"
+            jq -e '.error == null and (.result | type == "array")'               "${PONS_M2J_A_EVIDENCE_DIR}/ranges/${cursor}-${to}.json" >/dev/null
+            cursor=$((to + 1))
+          done
+
+          jq -r '.result[]?.blockNumber // empty' "${PONS_M2J_A_EVIDENCE_DIR}"/ranges/*.json             | sort -u > "${PONS_M2J_A_EVIDENCE_DIR}/block-hex.txt"
+
+          while IFS= read -r block_hex; do
+            [ -z "$block_hex" ] && continue
+            block_dec=$((16#${block_hex#0x}))
+            rpc eth_getBlockByNumber "[\"$block_hex\",false]"               "${PONS_M2J_A_EVIDENCE_DIR}/blocks/${block_dec}.json"
+            jq -e --arg n "$block_hex"               '.error == null and (.result.number | ascii_downcase) == ($n | ascii_downcase) and .result.hash != null and .result.timestamp != null'               "${PONS_M2J_A_EVIDENCE_DIR}/blocks/${block_dec}.json" >/dev/null
+          done < "${PONS_M2J_A_EVIDENCE_DIR}/block-hex.txt"
+
+          head_hash="$(jq -r '.result.hash | ascii_downcase' "${PONS_M2J_A_EVIDENCE_DIR}/head.json")"
+          head_timestamp_hex="$(jq -r '.result.timestamp' "${PONS_M2J_A_EVIDENCE_DIR}/head.json")"
+          head_timestamp=$((16#${head_timestamp_hex#0x}))
+
+          jq -n             --arg schema 'ROBINHOOD_PONS_M2J_A_ACQUISITION/1.0'             --arg factory "${PONS_FACTORY}"             --arg eventTopic "${PONS_EVENT_TOPIC}"             --arg headBlock "$head_dec"             --arg headBlockHash "$head_hash"             --arg headTimestamp "$head_timestamp"             --arg fromBlock "$from_dec"             --arg throughBlock "$head_dec"             --arg scanBackBlocks "${PONS_M2J_A_SCAN_BACK_BLOCKS}"             --arg windowSeconds "${PONS_M2J_A_WINDOW_SECONDS}"             --argjson maxMembers "${PONS_M2J_A_MAX_MEMBERS}"             '{
+              schema:$schema,
+              factory:$factory,
+              eventTopic:$eventTopic,
+              headBlock:$headBlock,
+              headBlockHash:$headBlockHash,
+              headTimestamp:$headTimestamp,
+              fromBlock:$fromBlock,
+              throughBlock:$throughBlock,
+              scanBackBlocks:$scanBackBlocks,
+              windowSeconds:$windowSeconds,
+              maxMembers:$maxMembers
+            }' > "${PONS_M2J_A_EVIDENCE_DIR}/acquisition.json"
+
+      - name: Freeze policy-blind prospective cohort
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/pons-v2-m2j-a-prospective-cohort.mjs             | tee artifacts/m2j-a-prospective-cohort.json
+
+          jq -e '
+            .mode == "SHADOW_ONLY" and
+            .edge == "UNPROVEN" and
+            .boundaries.policyEvaluated == false and
+            .boundaries.creatorHistoryRead == false and
+            .boundaries.forwardOutcomeRead == false and
+            .boundaries.wallet == false and
+            .boundaries.signer == false and
+            .boundaries.broadcast == false and
+            .boundaries.liveMoney == false and
+            .boundaries.robinhoodLiveAuthority == false and
+            .boundaries.arcLiveAuthority == false and
+            (
+              .verdict == "NO_ELIGIBLE_LAUNCHES_IN_WINDOW" or
+              (
+                .verdict == "PROSPECTIVE_COHORT_FROZEN" and
+                (.cohort.members | length) > 0 and
+                ([.cohort.members[].target24hTimestampMs > .cohort.headTimestampMs] | all)
+              )
+            )
+          ' artifacts/m2j-a-prospective-cohort.json >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-v2-m2j-a-prospective-cohort
+          path: artifacts/
+          if-no-files-found: error
