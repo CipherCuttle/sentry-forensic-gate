@@ -396,7 +396,7 @@ export async function assertSignedPonsE0Transaction(
   }
   const parsed = parseTransaction(signed.serializedTransaction);
   const recovered = await recoverTransactionAddress({
-    serializedTransaction: signed.serializedTransaction
+    serializedTransaction: signed.serializedTransaction as `0x02${string}`
   });
   if (getAddress(recovered) !== getAddress(expectedSigner)) {
     throw new Error('PONS_E0_SIGNED_SIGNER_MISMATCH');
