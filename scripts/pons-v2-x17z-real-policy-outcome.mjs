@@ -53,7 +53,18 @@ const robinhood = defineChain({
 });
 const rawClient = createPublicClient({
   chain: robinhood,
-  transport: http(rpcUrl, { retryCount: 5, retryDelay: 3000 })
+  transport: http(rpcUrl, {
+    retryCount: 5,
+    retryDelay: 3000,
+    fetchOptions: {
+      headers: {
+        'user-agent':
+          'Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)',
+        accept: 'application/json',
+        referer: 'https://rpc.nodeflare.app/'
+      }
+    }
+  })
 });
 const chainClient = pacedClient(rawClient, minRpcIntervalMs);
 
