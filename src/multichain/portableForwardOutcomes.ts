@@ -1,4 +1,5 @@
 import type { Hex } from '../domain.js';
+import type { OutcomeReceipt } from '../evidence/receipts.js';
 import { sha256Hex } from '../evidence/canonical.js';
 import {
   CATASTROPHIC_RECOVERY_BPS,
@@ -256,6 +257,45 @@ export async function buildPortableForwardOutcome(
     ...(classification !== undefined ? { classification } : {}),
     liquidity,
     sourceAuthority
+  };
+}
+
+export async function projectPortableOutcomeReceipt(
+  outcome: PortableForwardOutcome
+): Promise<OutcomeReceipt> {
+  const projected: OutcomeReceipt = {
+    outcomeId: outcome.outcomeId,
+    launchId: outcome.launchId,
+    horizonMs: outcome.horizonMs,
+    observedBlock: outcome.observedBlock,
+    ...(outcome.executableValueUsdMicros !== undefined
+      ? { executableValueUsdMicros: outcome.executableValueUsdMicros }
+      : {}),
+    sellable: outcome.exitExecutable,
+    ...(outcome.classification !== undefined
+      ? { classification: outcome.classification }
+      : {}),
+    policyVersion: PORTABLE_FORWARD_OUTCOMES_R1,
+    status: outcome.status,
+    ...(outcome.reason ? { reason: outcome.reason } : {}),
+    observedBlockHash: outcome.observedBlockHash,
+    targetTimestampMs: outcome.targetTimestampMs,
+    observedTimestampMs: outcome.observedTimestampMs,
+    baselineId: outcome.baselineId,
+    entryNotionalUsdMicros: outcome.entryNotionalUsdMicros,
+    baseToken: outcome.baseAsset,
+    baseAmountOut: outcome.baseAmountOut,
+    ...(outcome.executableReturnBps !== undefined
+      ? { executableReturnBps: outcome.executableReturnBps }
+      : {})
+  };
+  return {
+    ...projected,
+    evidenceDigest: await sha256Hex({
+      kind: 'PORTABLE_FORWARD_OUTCOME_RECEIPT_PROJECTION_R1',
+      portableAuthorityDigest: outcome.authorityDigest,
+      projected
+    })
   };
 }
 

@@ -147,7 +147,10 @@ function selectEligibleOutcomes(
 
   const selected: OutcomeReceipt[] = [];
   for (const [launchId, items] of candidates) {
-    const r1 = items.filter((outcome) => outcome.policyVersion === FORWARD_OUTCOMES_R1);
+    const r1 = items.filter((outcome) =>
+      outcome.policyVersion === FORWARD_OUTCOMES_R1 ||
+      outcome.policyVersion === 'PORTABLE_FORWARD_OUTCOMES_R1'
+    );
     const pool = r1.length > 0 ? r1 : items.filter((outcome) => outcome.policyVersion === undefined);
     if (pool.length === 0) continue;
     const first = pool[0]!;
