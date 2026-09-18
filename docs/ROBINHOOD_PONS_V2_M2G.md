@@ -80,3 +80,29 @@ M2G therefore separates **state reads** from **historical log reads**. This chan
 - any gap in any log range fails the scan.
 
 Provider identity is transport metadata, not strategy authority.
+
+
+## Immutable M2F handoff
+
+The live M2F baseline completed successfully before public historical state aged out. M2G now consumes the checked-in immutable FAST_VET evidence projection at:
+
+`evidence/robinhood/pons/m2f-hmn-fast-vet-baseline.json`
+
+The receipt is bound to GitHub Actions run `35294153203`, M2F head `e7ff891…`, baseline ID, authority digest, launch/decision block hashes, and all five FAST_VET leg diagnostics.
+
+M2G does not re-run old market state merely to recover creator history.
+
+## Keyless indexed history source
+
+Robinhood Blockscout's indexed Etherscan-compatible log API is used only for creator launch provenance. The scan:
+
+- uses the reviewed factory address;
+- filters exact `TokenLaunched` topic0 + indexed deployer topic3;
+- partitions the complete reviewed factory epoch into 1,000,000-block chunks;
+- requests up to 1000 matching events per chunk;
+- recursively bisects any chunk that reaches the result cap;
+- fails on any HTTP/API/parse gap;
+- resolves prior block hashes through Blockscout's indexed block endpoint;
+- requires the HMN target event exactly once and re-derives its Pons launch/event IDs.
+
+This is an indexed evidence source, not execution authority. The immutable M2F receipt remains the baseline authority.

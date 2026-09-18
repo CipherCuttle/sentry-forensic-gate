@@ -38,7 +38,8 @@
     "ponsv2usdcheck": "node scripts/pons-v2-usd-calibration-check.mjs",
     "ponsv2baselinecheck": "node scripts/pons-v2-portable-baseline-check.mjs",
     "ponsv2liveshadow": "node scripts/pons-v2-live-shadow-smoke.mjs",
-    "ponsv2creatorcheck": "node scripts/pons-v2-creator-history-check.mjs"
+    "ponsv2creatorcheck": "node scripts/pons-v2-creator-history-check.mjs",
+    "ponsv2creatorindexed": "node scripts/pons-v2-creator-history-indexed-smoke.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",

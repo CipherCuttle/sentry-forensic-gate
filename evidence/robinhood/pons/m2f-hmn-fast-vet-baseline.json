@@ -1,0 +1,96 @@
+{
+  "schema": "SENTRY_PORTABLE_FAST_VET_BASELINE_RECEIPT/1.0",
+  "source": {
+    "workflow": "pons-v2-live-shadow-smoke",
+    "runId": 35294153203,
+    "headSha": "e7ff89196994c1ac3a136e1f8402027ed8a2c3cb",
+    "capturedAt": "2026-09-18T01:19:28.970Z"
+  },
+  "chainId": 4663,
+  "ecosystem": "ROBINHOOD",
+  "launchProtocol": "PONS",
+  "launch": {
+    "launchId": "6be836e6d78d396f4e4188b1e374cfbea551fec351373c67cd47a0e401c58d2e",
+    "eventId": "4097587f8610b60489cadc80f636b2ae4d153775f56f58ae4ca82a2948c6082b",
+    "token": "0x633d3b4cce2e3cd2e6d7588186ceed26a634147d",
+    "creator": "0x09ee8fd79fb4a780a01038a88cedbca6d68b3fe4",
+    "name": "Homunculus Labs",
+    "symbol": "HMN",
+    "blockNumber": "65808784",
+    "blockHash": "0x89a2745b9b665a9efaea94307ecc7e8e0bc7ec1641f1ceff522320c20da93a09",
+    "txHash": "0x35d24b7caec574318bcee747de8bc6c2bce09f4c2de5134e8e8e3189a6650e1f",
+    "logIndex": 9,
+    "curve": "0xb4785613f0796f0dd2964cc1c65375d2602d129e",
+    "pairToken": "0x0000000000000000000000000000000000000000"
+  },
+  "baseline": {
+    "baselineId": "b4fed19bb526ef82884f8490deebc835ff9b9941c2a111dfd7353359143f91ec",
+    "authorityDigest": "66558f39a2d4ce64f8b6745d8bf8121486910c49e5de078b35cfd8d9e8215475",
+    "launchId": "6be836e6d78d396f4e4188b1e374cfbea551fec351373c67cd47a0e401c58d2e",
+    "policyVersion": "EXECUTABLE_BASELINE_R1",
+    "decisionBlock": "65808786",
+    "decisionBlockHash": "0xbe7d699821d9af8a6dbccdff6969f02f1c49792b49a4da48985944ea4fe37ace",
+    "status": "COMPLETE",
+    "reverseSemantics": "INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL",
+    "legs": [
+      {
+        "notionalUsdMicros": "250000",
+        "entry": {
+          "executable": true
+        },
+        "reverse": {
+          "executable": true
+        },
+        "independentReverseRecoveryBps": "8808"
+      },
+      {
+        "notionalUsdMicros": "500000",
+        "entry": {
+          "executable": true
+        },
+        "reverse": {
+          "executable": true
+        },
+        "independentReverseRecoveryBps": "8807"
+      },
+      {
+        "notionalUsdMicros": "1000000",
+        "entry": {
+          "executable": true
+        },
+        "reverse": {
+          "executable": true
+        },
+        "independentReverseRecoveryBps": "8806"
+      },
+      {
+        "notionalUsdMicros": "2000000",
+        "entry": {
+          "executable": true
+        },
+        "reverse": {
+          "executable": true
+        },
+        "independentReverseRecoveryBps": "8802"
+      },
+      {
+        "notionalUsdMicros": "5000000",
+        "entry": {
+          "executable": true
+        },
+        "reverse": {
+          "executable": true
+        },
+        "independentReverseRecoveryBps": "8792"
+      }
+    ]
+  },
+  "boundaries": {
+    "wallet": false,
+    "signer": false,
+    "transactionConstruction": false,
+    "broadcast": false,
+    "liveMoney": false
+  },
+  "edge": "UNPROVEN"
+}

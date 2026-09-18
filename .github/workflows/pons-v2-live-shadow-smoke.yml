@@ -17,8 +17,6 @@ jobs:
     env:
       PONS_SMOKE_BLOCK: '65808784'
       PONS_SMOKE_TOKEN: '0x633d3b4CCe2E3cD2e6D7588186cEEd26a634147D'
-      ROBINHOOD_ARCHIVE_RPC_URL: 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public'
-      ROBINHOOD_LOG_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
       PONS_SMOKE_RPC_MIN_INTERVAL_MS: '750'
     steps:
       - uses: actions/checkout@v4
@@ -28,8 +26,8 @@ jobs:
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm build
-      - name: Run real Robinhood/Pons shadow evaluation
-        run: pnpm ponsv2liveshadow
+      - name: Run indexed Pons creator-history evaluation from frozen M2F receipt
+        run: pnpm ponsv2creatorindexed
       - name: Preserve shadow receipt
         if: always()
         run: |
