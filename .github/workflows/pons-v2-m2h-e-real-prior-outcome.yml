@@ -327,6 +327,11 @@ jobs:
           test "${before}" = "${after}"
 
           jq -e '
+            .verdict == "REAL_PRIOR_24H_OUTCOME_CLASSIFIED" and
+            .outcome.status == "COMPLETE" and
+            .projectedOutcome.status == "COMPLETE" and
+            .prior.baseline.status == "COMPLETE" and
+            .creatorFeature.coverage == "COMPLETE" and
             .mode == "SHADOW_ONLY" and
             .edge == "UNPROVEN" and
             .boundaries.wallet == false and
