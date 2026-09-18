@@ -13,6 +13,8 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      ROBINHOOD_ARCHIVE_RPC_URL: ${{ secrets.ROBINHOOD_ARCHIVE_RPC_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

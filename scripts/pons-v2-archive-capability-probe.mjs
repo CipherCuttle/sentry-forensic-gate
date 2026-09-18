@@ -12,6 +12,12 @@ const getReservesData = encodeFunctionData({
 });
 
 const endpoints = [
+  ...(process.env.ROBINHOOD_ARCHIVE_RPC_URL
+    ? [{
+        name: 'CONFIGURED_ARCHIVE',
+        url: process.env.ROBINHOOD_ARCHIVE_RPC_URL
+      }]
+    : []),
   {
     name: 'ROBINHOOD_PUBLIC',
     url: 'https://rpc.mainnet.chain.robinhood.com'
@@ -126,6 +132,7 @@ console.log(JSON.stringify({
   priorLaunchBlock: priorLaunchBlock.toString(),
   decisionBlock: decisionBlock.toString(),
   curve,
+  configuredArchivePresent: Boolean(process.env.ROBINHOOD_ARCHIVE_RPC_URL),
   passing: passing.map((result) => result.name),
   results
 }, null, 2));

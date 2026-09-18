@@ -49,3 +49,30 @@ If none passes, M2H remains blocked on a real archive credential rather than
 weakening the historical evidence contract.
 
 `EDGE_UNPROVEN` remains explicit.
+
+
+## Credentialed continuation
+
+The keyless probe on run `35378025533` found no endpoint that could satisfy
+the full historical-state contract:
+
+- Robinhood public: block header available, historical state pruned;
+- BlockReq public: only recent 32,768 blocks;
+- PublicNode: archive requests require a personal token;
+- Alchemy docs demo: request origin is not whitelisted;
+- Triport public: returned HTTP 401 from GitHub Actions.
+
+The workflow now also probes an optional repository secret:
+
+`ROBINHOOD_ARCHIVE_RPC_URL`
+
+If present, it is injected only as an environment variable. The URL is not
+checked into source. GitHub masks matching secret values in logs.
+
+The configured endpoint must pass the exact same real historical gate:
+factory code, curve code, and `getReserves()` at block `64,935,684`.
+A credential alone grants no research authority.
+
+Robinhood's official docs recommend an archive provider such as Alchemy for
+historical reads. PublicNode also explicitly reports that its archive surface
+requires a personal token.
