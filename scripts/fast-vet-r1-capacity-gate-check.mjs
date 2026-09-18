@@ -201,7 +201,7 @@ assert.throws(
     }),
     creatorFeature: null
   }),
-  /FAST_VET_R1_COMPLETE_LADDER_MISMATCH/,
+  /MULTICHAIN_FAST_VET_COMPLETE_LADDER_MISMATCH/,
   'COMPLETE evidence may not omit frozen ladder rungs'
 );
 
