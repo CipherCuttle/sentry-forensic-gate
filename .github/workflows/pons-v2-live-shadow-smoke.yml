@@ -1,0 +1,48 @@
+name: pons-v2-live-shadow-smoke
+
+on:
+  push:
+    branches:
+      - agent/m2f-pons-live-shadow-smoke-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PONS_SMOKE_BLOCK: '65808784'
+      PONS_SMOKE_TOKEN: '0x633d3b4CCe2E3cD2e6D7588186cEEd26a634147D'
+      ROBINHOOD_ARCHIVE_RPC_URL: 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public'
+      PONS_SMOKE_RPC_MIN_INTERVAL_MS: '750'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+      - name: Run real Robinhood/Pons shadow evaluation
+        run: pnpm ponsv2liveshadow
+      - name: Preserve shadow receipt
+        if: always()
+        run: |
+          mkdir -p artifacts
+          {
+            echo "branch=${GITHUB_REF_NAME}"
+            echo "sha=${GITHUB_SHA}"
+            echo "block=${PONS_SMOKE_BLOCK}"
+            echo "token=${PONS_SMOKE_TOKEN}"
+            echo "mode=SHADOW_ONLY"
+            echo "edge=UNPROVEN"
+          } > artifacts/pons-v2-live-shadow-metadata.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-v2-live-shadow-smoke
+          path: artifacts/
+          if-no-files-found: error
