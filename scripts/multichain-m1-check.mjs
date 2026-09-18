@@ -86,12 +86,12 @@ const portableBaseline = {
   decisionBlock: 102n,
   decisionBlockHash: '0x1234',
   status: 'COMPLETE',
-  legs: [{
-    notionalUsdMicros: 1_000_000n,
+  legs: DEFAULT_BASELINE_NOTIONALS_USD_MICROS.map((notionalUsdMicros) => ({
+    notionalUsdMicros,
     entry: { executable: true },
     reverse: { executable: true },
     independentReverseRecoveryBps: 9_900n
-  }],
+  })),
   reverseSemantics: 'INDEPENDENT_SAME_STATE_NOT_SEQUENTIAL'
 };
 
@@ -151,6 +151,16 @@ assert.throws(
     creatorFeature: cleanCreator
   }),
   /MULTICHAIN_FAST_VET_AUTHORITY_DIGEST_MISSING/
+);
+assert.throws(
+  () => evaluatePortableFastVet({
+    baseline: {
+      ...portableBaseline,
+      legs: [portableBaseline.legs[2]]
+    },
+    creatorFeature: cleanCreator
+  }),
+  /MULTICHAIN_FAST_VET_COMPLETE_LADDER_MISMATCH/
 );
 
 const identity = {
