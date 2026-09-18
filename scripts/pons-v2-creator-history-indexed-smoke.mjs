@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import {
   CURRENT_PONS_V2_AUTHORITY,
@@ -18,7 +19,7 @@ const creator = receipt.launch.creator.toLowerCase();
 const targetBlock = BigInt(receipt.launch.blockNumber);
 const fromBlock = CURRENT_PONS_V2_AUTHORITY.fromBlock;
 const chunkSize = 1_000_000n;
-const blockscoutBase = process.env.ROBINHOOD_BLOCKSCOUT_URL ?? 'https://robinhoodchain.blockscout.com';
+const evidenceDir = process.env.PONS_INDEXED_EVIDENCE_DIR ?? 'artifacts/m2g-indexed';
 const eventTopic = '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607';
 const creatorTopic = `0x${creator.slice(2).padStart(64, '0')}`;
 
@@ -27,15 +28,32 @@ assert.equal(receipt.source.runId, 35294153203);
 assert.equal(receipt.baseline.launchId, receipt.launch.launchId);
 assert.equal(receipt.baseline.status, 'COMPLETE');
 
+const acquisition = await readJson(path.join(evidenceDir, 'acquisition.json'));
+assert.equal(acquisition.schema, 'ROBINHOOD_BLOCKSCOUT_INDEXED_ACQUISITION_R0');
+assert.equal(acquisition.factory.toLowerCase(), factory);
+assert.equal(acquisition.eventTopic.toLowerCase(), eventTopic);
+assert.equal(acquisition.creatorTopic.toLowerCase(), creatorTopic);
+assert.equal(BigInt(acquisition.scannedFromBlock), fromBlock);
+assert.equal(BigInt(acquisition.scannedThroughBlock), targetBlock);
+assert.equal(BigInt(acquisition.chunkSize), chunkSize);
+
 const ranges = [];
 for (let start = fromBlock; start <= targetBlock; start += chunkSize) {
   ranges.push({ fromBlock: start, toBlock: min(targetBlock, start + chunkSize - 1n) });
 }
 
-const rangeResults = await mapLimit(ranges, 4, async (range) => {
-  const logs = await fetchLogsComplete(range.fromBlock, range.toBlock);
-  return { ...range, logs };
-});
+assert.equal(acquisition.rangeCount, ranges.length);
+
+const rangeResults = [];
+for (const range of ranges) {
+  const body = await readJson(
+    path.join(evidenceDir, 'ranges', `${range.fromBlock}-${range.toBlock}.json`)
+  );
+  rangeResults.push({
+    ...range,
+    logs: parseIndexedLogResponse(body, range.fromBlock, range.toBlock)
+  });
+}
 
 const allLogs = rangeResults
   .flatMap((range) => range.logs)
@@ -66,9 +84,10 @@ for (const log of allLogs) {
       logIndex: log.logIndex
     })
   ]);
-  const blockHash = log.blockNumber === targetBlock
-    ? receipt.launch.blockHash
-    : await fetchBlockHash(log.blockNumber);
+  const block = await readJson(
+    path.join(evidenceDir, 'blocks', `${log.blockNumber}.json`)
+  );
+  const blockHash = requireBlockHash(block, log.blockNumber);
   launches.push({
     chainId: 4663,
     ecosystem: 'ROBINHOOD',
@@ -89,7 +108,7 @@ for (const log of allLogs) {
     sourceAuthority: {
       schema: 'ROBINHOOD_BLOCKSCOUT_INDEXED_TOKEN_LAUNCHED_R0',
       payload: {
-        blockscoutBase,
+        acquisitionSchema: acquisition.schema,
         factory,
         eventTopic,
         creator,
@@ -112,6 +131,7 @@ const target = launches.filter((x) =>
 assert.equal(target.length, 1, `PONS_BLOCKSCOUT_TARGET_CARDINALITY:${target.length}`);
 assert.equal(target[0].launchId, receipt.launch.launchId);
 assert.equal(target[0].eventId, receipt.launch.eventId);
+assert.equal(target[0].blockHash, receipt.launch.blockHash);
 
 const prior = launches.filter((x) =>
   x.blockNumber < targetBlock ||
@@ -166,6 +186,7 @@ console.log(JSON.stringify(jsonSafe({
   },
   scan: {
     source: 'ROBINHOOD_BLOCKSCOUT_INDEXED_LOGS',
+    acquisitionSchema: acquisition.schema,
     scannedFromBlock: fromBlock,
     scannedThroughBlock: targetBlock,
     requestedRangeCount: ranges.length,
@@ -200,84 +221,64 @@ console.log(JSON.stringify(jsonSafe({
   }
 }), null, 2));
 
-async function fetchLogsComplete(from, to) {
-  const url = new URL('/api', blockscoutBase);
-  url.searchParams.set('module', 'logs');
-  url.searchParams.set('action', 'getLogs');
-  url.searchParams.set('fromBlock', from.toString());
-  url.searchParams.set('toBlock', to.toString());
-  url.searchParams.set('address', factory);
-  url.searchParams.set('topic0', eventTopic);
-  url.searchParams.set('topic3', creatorTopic);
-  url.searchParams.set('topic0_3_opr', 'and');
-  url.searchParams.set('page', '1');
-  url.searchParams.set('offset', '1000');
-
-  const response = await fetchWithRetry(url);
-  const body = await response.json();
-  if (body.status === '0' && body.message === 'No logs found' && Array.isArray(body.result) && body.result.length === 0) {
+function parseIndexedLogResponse(body, from, to) {
+  if (
+    body.status === '0' &&
+    body.message === 'No logs found' &&
+    Array.isArray(body.result) &&
+    body.result.length === 0
+  ) {
     return [];
   }
   if (body.status !== '1' || body.message !== 'OK' || !Array.isArray(body.result)) {
-    throw new Error(`PONS_BLOCKSCOUT_LOG_RESPONSE_INVALID:${from}:${to}:${JSON.stringify(body).slice(0,256)}`);
+    throw new Error(
+      `PONS_BLOCKSCOUT_LOG_RESPONSE_INVALID:${from}:${to}:${JSON.stringify(body).slice(0, 256)}`
+    );
   }
   if (body.result.length >= 1000) {
-    if (from === to) throw new Error(`PONS_BLOCKSCOUT_LOG_CAP_AT_SINGLE_BLOCK:${from}`);
-    const mid = from + ((to - from) / 2n);
-    return [
-      ...(await fetchLogsComplete(from, mid)),
-      ...(await fetchLogsComplete(mid + 1n, to))
-    ];
+    throw new Error(`PONS_BLOCKSCOUT_LOG_CAP_REACHED:${from}:${to}`);
   }
   return body.result.map((log) => ({
+    address: String(log.address).toLowerCase(),
     blockNumber: BigInt(log.blockNumber),
     logIndex: Number(BigInt(log.logIndex)),
     timestampMs: Number(BigInt(log.timeStamp)) * 1000,
-    topics: log.topics.map((x) => x.toLowerCase()),
-    transactionHash: log.transactionHash.toLowerCase()
+    topics: log.topics.map((value) => String(value).toLowerCase()),
+    transactionHash: String(log.transactionHash).toLowerCase()
   }));
 }
 
-async function fetchBlockHash(blockNumber) {
-  const response = await fetchWithRetry(new URL(`/api/v2/blocks/${blockNumber}`, blockscoutBase));
-  const block = await response.json();
-  if (!block.hash || BigInt(block.height ?? block.block_number ?? blockNumber) !== blockNumber) {
-    throw new Error(`PONS_BLOCKSCOUT_BLOCK_INVALID:${blockNumber}`);
+function requireBlockHash(block, expectedBlockNumber) {
+  const hash = typeof block.hash === 'string' ? block.hash.toLowerCase() : '';
+  if (!/^0x[0-9a-f]{64}$/.test(hash)) {
+    throw new Error(`PONS_BLOCKSCOUT_BLOCK_HASH_INVALID:${expectedBlockNumber}`);
   }
-  return block.hash.toLowerCase();
+  const observedNumber =
+    block.height ?? block.block_number ?? block.number ?? expectedBlockNumber.toString();
+  if (BigInt(observedNumber) !== expectedBlockNumber) {
+    throw new Error(
+      `PONS_BLOCKSCOUT_BLOCK_NUMBER_MISMATCH:${expectedBlockNumber}:${observedNumber}`
+    );
+  }
+  return hash;
 }
 
-async function fetchWithRetry(url) {
-  let last;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    try {
-      const response = await fetch(url, { headers: { accept: 'application/json' } });
-      if (response.ok) return response;
-      last = new Error(`HTTP_${response.status}:${url}`);
-    } catch (error) {
-      last = error;
-    }
-    await sleep(500 * (attempt + 1));
+async function readJson(file) {
+  let raw;
+  try {
+    raw = await readFile(file, 'utf8');
+  } catch (error) {
+    throw new Error(`PONS_INDEXED_EVIDENCE_FILE_MISSING:${file}`, { cause: error });
   }
-  throw last;
-}
-
-async function mapLimit(items, limit, fn) {
-  const results = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const index = next++;
-      if (index >= items.length) return;
-      results[index] = await fn(items[index]);
-    }
-  });
-  await Promise.all(workers);
-  return results;
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`PONS_INDEXED_EVIDENCE_JSON_INVALID:${file}`, { cause: error });
+  }
 }
 
 function min(a, b) { return a < b ? a : b; }
-function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
 function jsonSafe(value) {
   if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) return value.map(jsonSafe);

@@ -106,3 +106,15 @@ Robinhood Blockscout's indexed Etherscan-compatible log API is used only for cre
 - requires the HMN target event exactly once and re-derives its Pons launch/event IDs.
 
 This is an indexed evidence source, not execution authority. The immutable M2F receipt remains the baseline authority.
+
+
+## Acquisition / evaluation boundary
+
+The Dev Spine correctly rejects direct network escape hatches in research JavaScript/TypeScript. M2G therefore separates acquisition from evaluation:
+
+1. the GitHub Actions workflow acquires raw Blockscout indexed responses into `artifacts/m2g-indexed/`;
+2. the research evaluator performs local-only completeness checks, identity derivation, provenance projection, and FAST_VET evaluation.
+
+Every expected 1,000,000-block range must exist. Only the exact Blockscout `OK` response or exact `No logs found` empty response is accepted. A range returning 1000 results fails as truncation risk. Every matching launch requires a separately acquired indexed block record, and HMN must match the immutable M2F launch ID, event ID, and launch block hash.
+
+The raw responses are uploaded with the workflow artifact. No research JS/TS file performs network calls.
