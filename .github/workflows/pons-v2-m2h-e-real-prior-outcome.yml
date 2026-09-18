@@ -12,10 +12,12 @@ permissions:
 jobs:
   real-prior-outcome:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     env:
-      PONS_M2H_E_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
-      PONS_M2H_E_RPC_MIN_INTERVAL_MS: '1000'
+      PONS_M2H_E_UPSTREAM_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+      PONS_M2H_E_ACQUISITION_DIR: 'artifacts/m2h-e-acquisition'
+      PONS_M2H_E_REPLAY_RPC_URL: 'http://127.0.0.1:18546'
+      PONS_M2H_E_ACQUIRE_RPC_URL: 'http://127.0.0.1:18545'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,12 +26,71 @@ jobs:
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm build
-      - name: Reconstruct real matured creator prior
+
+      - name: Acquire and cache exact historical RPC evidence
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts
-          pnpm ponsv2realoutcome | tee artifacts/m2h-e-real-prior-outcome.json
+          mkdir -p "${PONS_M2H_E_ACQUISITION_DIR}"
+          cache="${PONS_M2H_E_ACQUISITION_DIR}/rpc-cache.json"
+          python3 .github/acquisition/pons-v2-m2h-e-rpc-record-replay.py             --mode acquire             --cache "${cache}"             --port 18545             --upstream "${PONS_M2H_E_UPSTREAM_RPC_URL}"             --min-interval-ms 650             > "${PONS_M2H_E_ACQUISITION_DIR}/acquire-proxy.log" 2>&1 &
+          proxy_pid=$!
+          trap 'kill "${proxy_pid}" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do
+            curl --silent --fail http://127.0.0.1:18545/health >/dev/null && break
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:18545/health             > "${PONS_M2H_E_ACQUISITION_DIR}/acquire-health.json"
+
+          PONS_M2H_E_RPC_URL="${PONS_M2H_E_ACQUIRE_RPC_URL}"             pnpm ponsv2realoutcome             > "${PONS_M2H_E_ACQUISITION_DIR}/acquisition-driver-output.json"
+
+          kill "${proxy_pid}"
+          wait "${proxy_pid}" 2>/dev/null || true
+          trap - EXIT
+
+          sha256sum "${cache}"             > "${PONS_M2H_E_ACQUISITION_DIR}/rpc-cache.sha256"
+          jq -e '.schema == "ROBINHOOD_PONS_M2H_E_RPC_RECORD_REPLAY/1.0" and (.entries | length) > 0'             "${cache}" >/dev/null
+
+      - name: Replay locally and produce authoritative result
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache="${PONS_M2H_E_ACQUISITION_DIR}/rpc-cache.json"
+          before="$(sha256sum "${cache}" | awk '{print $1}')"
+
+          python3 .github/acquisition/pons-v2-m2h-e-rpc-record-replay.py             --mode replay             --cache "${cache}"             --port 18546             > "${PONS_M2H_E_ACQUISITION_DIR}/replay-proxy.log" 2>&1 &
+          replay_pid=$!
+          trap 'kill "${replay_pid}" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do
+            curl --silent --fail http://127.0.0.1:18546/health >/dev/null && break
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:18546/health             > "${PONS_M2H_E_ACQUISITION_DIR}/replay-health.json"
+
+          PONS_M2H_E_RPC_URL="${PONS_M2H_E_REPLAY_RPC_URL}"             pnpm ponsv2realoutcome             | tee artifacts/m2h-e-real-prior-outcome.json
+
+          PONS_M2H_E_RPC_URL="${PONS_M2H_E_REPLAY_RPC_URL}"             pnpm ponsv2realoutcome             > artifacts/m2h-e-real-prior-outcome-replay-2.json
+
+          cmp             artifacts/m2h-e-real-prior-outcome.json             artifacts/m2h-e-real-prior-outcome-replay-2.json
+
+          after="$(sha256sum "${cache}" | awk '{print $1}')"
+          test "${before}" = "${after}"
+
+          jq -e '
+            .mode == "SHADOW_ONLY" and
+            .edge == "UNPROVEN" and
+            .boundaries.wallet == false and
+            .boundaries.signer == false and
+            .boundaries.broadcast == false and
+            .boundaries.liveMoney == false and
+            .boundaries.robinhoodLiveAuthority == false and
+            .boundaries.arcLiveAuthority == false
+          ' artifacts/m2h-e-real-prior-outcome.json >/dev/null
+
+          kill "${replay_pid}"
+          wait "${replay_pid}" 2>/dev/null || true
+          trap - EXIT
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

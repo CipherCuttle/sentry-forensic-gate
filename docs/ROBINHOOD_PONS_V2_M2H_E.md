@@ -64,3 +64,27 @@ Conflicting duplicate 24h receipts remain fail-closed.
 - existing Ink exact-$1 authority unchanged;
 - `FAST_VET_R0` unchanged;
 - `EDGE_UNPROVEN`.
+
+## Record/replay acquisition boundary
+
+M2H-E does not allow research JavaScript to call NodeFlare directly.
+
+The workflow now uses a two-pass boundary:
+
+1. a workflow-only localhost acquisition proxy forwards exact JSON-RPC requests
+   with `curl`, records each raw upstream response, and caches by
+   `sha256(method + canonical params)`;
+2. the acquisition driver is explicitly non-authoritative and exists only to
+   enumerate the deterministic request set required by the reviewed adapters;
+3. upstream access is stopped;
+4. a replay-only localhost server serves only the immutable recorded response
+   set and fails closed on any cache miss;
+5. the same evaluator runs twice against replay; byte-identical outputs are
+   required;
+6. the RPC cache digest must remain unchanged across replay.
+
+Only the replay result is accepted as M2H-E research evidence.
+
+This restores the repository's acquisition/evaluation boundary while avoiding
+the previous one-request-per-second repeated-read path that exhausted the
+35-minute workflow timeout.
