@@ -1,0 +1,47 @@
+name: pons-e0-live-canary-r0-readiness
+
+on:
+  push:
+    branches:
+      - agent/pons-e0-live-canary-r0
+  pull_request:
+    paths:
+      - 'src/canary/ponsE0Contracts.ts'
+      - 'src/canary/ponsE0Intent.ts'
+      - 'src/canary/ponsE0Cli.ts'
+      - 'src/canary/viemPonsE0CanaryExecutor.ts'
+      - 'scripts/pons-e0-live-canary-r0-check.mjs'
+      - 'scripts/canary-boundary-check.mjs'
+      - '.github/workflows/pons-e0-live-canary-r0-readiness.yml'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+      - run: node --check scripts/canary-boundary-check.mjs
+      - run: node --check scripts/pons-e0-live-canary-r0-check.mjs
+      - name: Preserve narrow wallet authority
+        run: node scripts/canary-boundary-check.mjs
+      - name: Preserve research-only boundaries
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+      - name: Verify bounded Pons E0 contract
+        run: pnpm ponse0check
+      - name: Assert CI cannot go live
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${PONS_E0_PRIVATE_KEY:-}"
+          test "${PONS_E0_LIVE:-false}" != "true"
+          echo 'PONS_E0_CI_NO_LIVE_AUTHORITY=PASS'
