@@ -15,6 +15,8 @@ const evidenceDir = process.env.PONS_M2J_A_EVIDENCE_DIR ?? 'artifacts/m2j-a-acqu
 const scanBackBlocks = BigInt(process.env.PONS_M2J_A_SCAN_BACK_BLOCKS ?? '30000');
 const windowSeconds = BigInt(process.env.PONS_M2J_A_WINDOW_SECONDS ?? '43200');
 const maxMembers = Number(process.env.PONS_M2J_A_MAX_MEMBERS ?? '20');
+const eventTopic = '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607';
+const rangeSize = 5_000n;
 
 assert.equal(scanBackBlocks, 30_000n);
 assert.equal(windowSeconds, 43_200n);
@@ -23,6 +25,7 @@ assert.equal(maxMembers, 20);
 const acquisition = await readJson(path.join(evidenceDir, 'acquisition.json'));
 assert.equal(acquisition.schema, 'ROBINHOOD_PONS_M2J_A_ACQUISITION/1.0');
 assert.equal(acquisition.factory.toLowerCase(), CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase());
+assert.equal(acquisition.eventTopic.toLowerCase(), eventTopic);
 assert.equal(BigInt(acquisition.scanBackBlocks), scanBackBlocks);
 assert.equal(BigInt(acquisition.windowSeconds), windowSeconds);
 assert.equal(acquisition.maxMembers, maxMembers);
@@ -41,20 +44,48 @@ const expectedFromBlock = headBlock > scanBackBlocks ? headBlock - scanBackBlock
 assert.equal(BigInt(acquisition.fromBlock), expectedFromBlock);
 assert.equal(BigInt(acquisition.throughBlock), headBlock);
 
+const headFinalRpc = await readJson(path.join(evidenceDir, 'head-final.json'));
+const headFinal = requireRpcResult(headFinalRpc, 'head-final');
+assert.equal(BigInt(headFinal.number), headBlock, 'M2J_A_FINAL_HEAD_NUMBER_MISMATCH');
+assert.equal(
+  requireHash(headFinal.hash, 'M2J_A_FINAL_HEAD_HASH_INVALID'),
+  headHash,
+  'M2J_A_FROZEN_HEAD_REORG'
+);
+
 const rangeLines = (await readFile(path.join(evidenceDir, 'ranges.tsv'), 'utf8'))
   .trim()
   .split(/\n+/)
   .filter(Boolean);
 
+const expectedRanges = [];
+for (let from = expectedFromBlock; from <= headBlock; from += rangeSize) {
+  expectedRanges.push({
+    from,
+    to: from + rangeSize - 1n < headBlock ? from + rangeSize - 1n : headBlock
+  });
+}
+assert.equal(rangeLines.length, expectedRanges.length, 'M2J_A_RANGE_COUNT_MISMATCH');
+
 const logs = [];
-for (const line of rangeLines) {
+for (let i = 0; i < rangeLines.length; i += 1) {
+  const line = rangeLines[i];
   const [fromRaw, toRaw] = line.split('\t');
   const from = BigInt(fromRaw);
   const to = BigInt(toRaw);
+  assert.equal(from, expectedRanges[i].from, `M2J_A_RANGE_FROM_MISMATCH:${i}`);
+  assert.equal(to, expectedRanges[i].to, `M2J_A_RANGE_TO_MISMATCH:${i}`);
   const body = await readJson(path.join(evidenceDir, 'ranges', `${from}-${to}.json`));
   const result = requireRpcResult(body, `range:${from}:${to}`);
   assert.ok(Array.isArray(result), `M2J_A_LOG_RESULT_NOT_ARRAY:${from}:${to}`);
-  for (const raw of result) logs.push(raw);
+  for (const raw of result) {
+    const blockNumber = BigInt(raw.blockNumber);
+    assert.ok(
+      blockNumber >= from && blockNumber <= to,
+      `M2J_A_LOG_OUTSIDE_RANGE:${blockNumber}:${from}:${to}`
+    );
+    logs.push(raw);
+  }
 }
 
 const seenLogKeys = new Set();
