@@ -1,0 +1,70 @@
+name: pons-v2-m2i-capacity-divergence-scout
+
+on:
+  push:
+    branches:
+      - agent/m2i-capacity-divergence-scout-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PONS_M2I_RPC_URL: 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public'
+      PONS_M2I_SCAN_BACK_BLOCKS: '30000'
+      PONS_M2I_MAX_CANDIDATES: '12'
+      PONS_M2I_RPC_MIN_INTERVAL_MS: '750'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+
+      - name: Freeze prospective capacity-divergence candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          node scripts/pons-v2-m2i-capacity-divergence-scout.mjs \
+            | tee artifacts/m2i-capacity-divergence-selection.json
+
+          jq -e '
+            .mode == "SHADOW_ONLY" and
+            .edge == "UNPROVEN" and
+            .boundaries.wallet == false and
+            .boundaries.signer == false and
+            .boundaries.broadcast == false and
+            .boundaries.liveMoney == false and
+            .boundaries.robinhoodLiveAuthority == false and
+            .boundaries.arcLiveAuthority == false and
+            .boundaries.outcomeObservedDuringSelection == false and
+            (
+              .verdict == "NO_CAPACITY_DIVERGENCE_IN_BOUNDED_WINDOW" or
+              (
+                .verdict == "CAPACITY_DIVERGENCE_CANDIDATE_FROZEN" and
+                .frozenCandidate.targetTimestampMs > .selection.headTimestampMs and
+                .frozenCandidate.policyComparison.receipts.r0.hypotheticalAction == "WOULD_SKIP" and
+                (
+                  (.frozenCandidate.policyComparison.receipts.r0.reasons | index("PRIMARY_ENTRY_NOT_EXECUTABLE")) != null or
+                  (.frozenCandidate.policyComparison.receipts.r0.reasons | index("PRIMARY_REVERSE_NOT_EXECUTABLE")) != null
+                ) and
+                .frozenCandidate.policyComparison.receipts.r1.hypotheticalAction == "WOULD_TRADE" and
+                .frozenCandidate.policyComparison.receipts.buyEveryExecutableControl.hypotheticalAction == "WOULD_TRADE" and
+                (.frozenCandidate.policyComparison.receipts.r1.capacityUsdMicros | tonumber) < 1000000
+              )
+            )
+          ' artifacts/m2i-capacity-divergence-selection.json >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-v2-m2i-capacity-divergence-scout
+          path: artifacts/
+          if-no-files-found: error
