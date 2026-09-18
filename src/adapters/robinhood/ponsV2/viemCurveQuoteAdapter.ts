@@ -552,7 +552,7 @@ export class ViemPonsV2CurveQuoteAdapter implements MarketQuoteAdapter {
     amountInExecutable: bigint;
     amountOut: bigint;
     executable: boolean;
-    failureReason?: string;
+    failureReason: string | undefined;
     feeAmount: bigint;
     creatorTaxAmount: bigint;
     snipeTaxAmount: bigint;
