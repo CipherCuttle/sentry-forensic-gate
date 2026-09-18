@@ -79,9 +79,9 @@ const orderedLogs = [...logs]
     log.args?.pairToken?.toLowerCase() === PONS_V2_NATIVE_PAIR_TOKEN.toLowerCase()
   )
   .sort((a, b) => {
-    if (a.blockNumber! < b.blockNumber!) return -1;
-    if (a.blockNumber! > b.blockNumber!) return 1;
-    return a.logIndex! - b.logIndex!;
+    if (a.blockNumber < b.blockNumber) return -1;
+    if (a.blockNumber > b.blockNumber) return 1;
+    return a.logIndex - b.logIndex;
   });
 
 const selectionRule = {
@@ -105,7 +105,8 @@ let selected = null;
 
 for (const log of orderedLogs) {
   if (checks.length >= maxCandidates || selected) break;
-  const launchBlock = log.blockNumber!;
+  assert.ok(log.blockNumber !== null && log.logIndex !== null, 'M2I_FILTERED_LOG_INCOMPLETE');
+  const launchBlock = log.blockNumber;
   const decisionBlock = launchBlock + 2n;
   if (decisionBlock > headBlock) continue;
 
