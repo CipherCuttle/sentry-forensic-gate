@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/m2f-pons-live-shadow-smoke-v1
+      - agent/m2g-pons-creator-history-v1
   workflow_dispatch:
 
 permissions:
