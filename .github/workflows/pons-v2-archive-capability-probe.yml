@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${PONS_ARCHIVE_PROBE_DIR}"
-          BLOCK_TAG=0x3defa04
+          BLOCK_TAG=0x3ded704
           FACTORY=0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e
           CURVE=0x918cc3734621d966995d2663dcf587ce0d4768fc
           CALL_DATA="$(node --input-type=module - <<'NODE'
