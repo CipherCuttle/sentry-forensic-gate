@@ -1,3 +1,4 @@
+import { encodeAbiParameters, keccak256 } from 'viem';
 import type { Hex } from '../../../domain.js';
 import { PONS_V2_NATIVE_PAIR_TOKEN, ROBINHOOD_CHAIN_ID } from './contracts.js';
 
@@ -66,6 +67,12 @@ export function validateRobinhoodUsdCalibrationAuthority(
   if (authority.throughBlock !== undefined && authority.throughBlock < authority.fromBlock) {
     throw new Error('ROBINHOOD_USD_CALIBRATION_BLOCK_RANGE_INVALID');
   }
+  const derivedPoolId = deriveRobinhoodEthUsdgV4PoolId();
+  if (norm(derivedPoolId) !== norm(authority.poolId)) {
+    throw new Error(
+      `ROBINHOOD_USD_CALIBRATION_POOL_ID_MISMATCH:expected=${derivedPoolId}:actual=${authority.poolId}`
+    );
+  }
   for (const [label, value] of [
     ['POOL_MANAGER', authority.poolManager],
     ['STATE_VIEW', authority.stateView],
@@ -105,4 +112,28 @@ export function assertRobinhoodUsdCalibrationBlock(
       `ROBINHOOD_USD_CALIBRATION_BLOCK_AFTER_EPOCH:block=${blockNumber}:through=${authority.throughBlock}`
     );
   }
+}
+
+
+export function deriveRobinhoodEthUsdgV4PoolId(): Hex {
+  return keccak256(encodeAbiParameters(
+    [
+      { type: 'address' },
+      { type: 'address' },
+      { type: 'uint24' },
+      { type: 'int24' },
+      { type: 'address' }
+    ],
+    [
+      ROBINHOOD_ETH_USDG_V4_POOL_KEY.currency0,
+      ROBINHOOD_ETH_USDG_V4_POOL_KEY.currency1,
+      ROBINHOOD_ETH_USDG_V4_POOL_KEY.fee,
+      ROBINHOOD_ETH_USDG_V4_POOL_KEY.tickSpacing,
+      ROBINHOOD_ETH_USDG_V4_POOL_KEY.hooks
+    ]
+  ));
+}
+
+function norm(value: string): string {
+  return value.toLowerCase();
 }

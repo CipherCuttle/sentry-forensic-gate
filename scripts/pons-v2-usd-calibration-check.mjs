@@ -9,7 +9,8 @@ import {
   CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY,
   EIP1967_IMPLEMENTATION_SLOT,
   ROBINHOOD_ETH_USDG_V4_POOL_ID,
-  ROBINHOOD_ETH_USDG_V4_POOL_KEY
+  ROBINHOOD_ETH_USDG_V4_POOL_KEY,
+  deriveRobinhoodEthUsdgV4PoolId
 } from '../dist/adapters/robinhood/ponsV2/v4UsdCalibrationAuthority.js';
 import {
   ViemRobinhoodUsdCalibrationAdapter
@@ -155,6 +156,7 @@ assert.equal(
   ROBINHOOD_ETH_USDG_V4_POOL_ID,
   '0x387bf619da4d3fb62bb276482693dba1b9b3520f573cabdfe033384a24125982'
 );
+assert.equal(deriveRobinhoodEthUsdgV4PoolId(), ROBINHOOD_ETH_USDG_V4_POOL_ID);
 
 const oneDollar = await adapter().calibrateUsd({
   launch,
@@ -224,7 +226,7 @@ await assert.rejects(
 
 await assert.rejects(
   () => adapter({
-    blockHashSequence: [decisionHash, decisionHash, `0x${'dd'.repeat(32)}`]
+    blockHashSequence: [decisionHash, `0x${'dd'.repeat(32)}`]
   }).calibrateUsd({
     launch, market, decisionBlock: 120n, decisionBlockHash: decisionHash, notionalUsdMicros: 1_000_000n
   }),
