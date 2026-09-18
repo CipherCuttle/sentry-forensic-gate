@@ -1,3 +1,4 @@
+import { createPublicClient, defineChain, http } from 'viem';
 import assert from 'node:assert/strict';
 import {
   CURRENT_PONS_V2_AUTHORITY,
@@ -19,19 +20,36 @@ assert.ok(
   archiveRpcUrl,
   'ROBINHOOD_ARCHIVE_RPC_URL is required; the public Robinhood RPC is pruned and cannot prove the frozen decision block'
 );
+const minRpcIntervalMs = Number(process.env.PONS_SMOKE_RPC_MIN_INTERVAL_MS ?? '750');
+assert.ok(
+  Number.isSafeInteger(minRpcIntervalMs) && minRpcIntervalMs >= 100,
+  'PONS_SMOKE_RPC_MIN_INTERVAL_MS must be an integer >= 100'
+);
+
+const robinhood = defineChain({
+  id: 4663,
+  name: 'Robinhood Chain',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: [archiveRpcUrl] } }
+});
+const rawClient = createPublicClient({
+  chain: robinhood,
+  transport: http(archiveRpcUrl, { retryCount: 2, retryDelay: 1500 })
+});
+const client = pacedClient(rawClient, minRpcIntervalMs);
 
 const launchAdapter = new ViemPonsV2LaunchAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
-  rpcUrl: archiveRpcUrl
+  client
 });
 const quoteAdapter = new ViemPonsV2CurveQuoteAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
   templateAuthority: CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
-  rpcUrl: archiveRpcUrl
+  client
 });
 const usdAdapter = new ViemRobinhoodUsdCalibrationAdapter({
   authority: CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY,
-  rpcUrl: archiveRpcUrl
+  client
 });
 
 const launches = await launchAdapter.catchUp(launchBlock, launchBlock);
@@ -128,7 +146,8 @@ const receipt = {
   fastVet: vet,
   transport: {
     archiveRequired: true,
-    endpointClass: 'PUBLIC_ARCHIVE_SMOKE'
+    endpointClass: 'PUBLIC_ARCHIVE_SMOKE',
+    minRpcIntervalMs
   },
   boundaries: {
     wallet: false,
@@ -149,4 +168,47 @@ function jsonSafe(value) {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonSafe(item)]));
   }
   return value;
+}
+
+
+function pacedClient(rawClient, minIntervalMs) {
+  let tail = Promise.resolve();
+  let lastStartedAt = 0;
+
+  const paced = (operation) => {
+    const run = tail.then(async () => {
+      const waitMs = Math.max(0, lastStartedAt + minIntervalMs - Date.now());
+      if (waitMs > 0) await sleep(waitMs);
+      lastStartedAt = Date.now();
+      return operation();
+    });
+    tail = run.catch(() => undefined);
+    return run;
+  };
+
+  return new Proxy(rawClient, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (
+        typeof value !== 'function' ||
+        ![
+          'getChainId',
+          'getBlockNumber',
+          'getBlock',
+          'getBytecode',
+          'getLogs',
+          'getStorageAt',
+          'readContract',
+          'call'
+        ].includes(String(property))
+      ) {
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+      return (...args) => paced(() => value.apply(target, args));
+    }
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

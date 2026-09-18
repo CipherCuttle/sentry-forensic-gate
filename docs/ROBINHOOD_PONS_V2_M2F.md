@@ -76,3 +76,19 @@ That is a provider-capability failure, not a strategy result. Robinhood's develo
 M2F therefore requires `ROBINHOOD_ARCHIVE_RPC_URL` and refuses to silently fall back to the pruned public RPC. The smoke workflow currently uses the keyless BlockReq Robinhood archive route.
 
 The archive provider is **transport, not authority**. Every concrete adapter still verifies chain ID, pinned runtime code hashes, source records, decision-block hashes, USDG implementation authority, and market identity. Changing the RPC provider does not change frozen strategy semantics.
+
+
+## Public archive pacing
+
+The first archive-backed run proved that BlockReq can answer the historical state calls, but the free endpoint rate-limited a later decision-block `eth_call` during the intentionally redundant authority/state checks.
+
+M2F does not remove or weaken those checks. The one-shot smoke now injects one shared client that serializes the existing high-level read methods with a minimum `750 ms` start interval. This is transport pacing only:
+
+- same launch block;
+- same decision block;
+- same code-hash checks;
+- same market-state reads;
+- same five notionals;
+- same FAST_VET semantics.
+
+A rate-limit/provider failure still escapes and cannot become strategy evidence.
