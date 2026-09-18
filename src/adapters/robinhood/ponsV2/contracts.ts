@@ -22,6 +22,13 @@ export const ponsV2TokenLaunchedEvent = {
 export const ponsV2FactoryReadAbi = [
   {
     type: 'function',
+    name: 'launchDeployer',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
     name: 'getLaunchedToken',
     stateMutability: 'view',
     inputs: [{ name: 'token', type: 'address' }],
@@ -80,5 +87,93 @@ export const ponsV2CurveStateReadAbi = [
     stateMutability: 'view',
     inputs: [],
     outputs: [{ name: '', type: 'bool' }]
+  }
+] as const;
+
+
+export const ponsV2LaunchDeployerReadAbi = [
+  {
+    type: 'function',
+    name: 'factory',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  }
+] as const;
+
+export const ponsV2CurveQuoteReadAbi = [
+  ...ponsV2CurveStateReadAbi,
+  {
+    type: 'function',
+    name: 'factory',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
+    name: 'token',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
+    name: 'pairToken',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }]
+  },
+  {
+    type: 'function',
+    name: 'getReserves',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      { name: 'quoteReserve_', type: 'uint256' },
+      { name: 'tokenReserve_', type: 'uint256' }
+    ]
+  },
+  {
+    type: 'function',
+    name: 'trackedQuote',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }]
+  },
+  {
+    type: 'function',
+    name: 'sellableTokens',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }]
+  },
+  {
+    type: 'function',
+    name: 'feeBps',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }]
+  },
+  {
+    type: 'function',
+    name: 'creatorTaxBps',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }]
+  },
+  {
+    type: 'function',
+    name: 'snipeTaxExempt',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }]
+  },
+  {
+    type: 'function',
+    name: 'currentSnipeTaxBps',
+    stateMutability: 'view',
+    inputs: [{ name: 'recipient', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }]
   }
 ] as const;
