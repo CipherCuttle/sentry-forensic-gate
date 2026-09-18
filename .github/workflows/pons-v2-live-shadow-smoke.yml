@@ -52,8 +52,11 @@ jobs:
 
           acquire_range() {
             from="$1"; to="$2"
-            curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 1 --get \
-              "${BLOCKSCOUT_BASE}/api" \
+            curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 \
+              --user-agent "Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)" \
+              --header "Accept: application/json" \
+              --header "Referer: ${BLOCKSCOUT_BASE}/" \
+              --get "${BLOCKSCOUT_BASE}/api" \
               --data-urlencode "module=logs" \
               --data-urlencode "action=getLogs" \
               --data-urlencode "fromBlock=${from}" \
@@ -68,14 +71,17 @@ jobs:
           }
           export -f acquire_range
           export BLOCKSCOUT_BASE PONS_FACTORY PONS_EVENT_TOPIC PONS_CREATOR_TOPIC PONS_INDEXED_EVIDENCE_DIR
-          xargs -a "${PONS_INDEXED_EVIDENCE_DIR}/ranges.tsv" -n 2 -P 4 bash -c 'acquire_range "$1" "$2"' _
+          xargs -a "${PONS_INDEXED_EVIDENCE_DIR}/ranges.tsv" -n 2 -P 1 bash -c 'acquire_range "$1" "$2"' _
 
           jq -r '.result[]? | .blockNumber // empty' "${PONS_INDEXED_EVIDENCE_DIR}"/ranges/*.json \
             | sort -u > "${PONS_INDEXED_EVIDENCE_DIR}/block-hex.txt"
           while IFS= read -r hex; do
             [ -z "${hex}" ] && continue
             dec=$((16#${hex#0x}))
-            curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 1 \
+            curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 \
+              --user-agent "Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)" \
+              --header "Accept: application/json" \
+              --header "Referer: ${BLOCKSCOUT_BASE}/" \
               "${BLOCKSCOUT_BASE}/api/v2/blocks/${dec}" \
               > "${PONS_INDEXED_EVIDENCE_DIR}/blocks/${dec}.json"
           done < "${PONS_INDEXED_EVIDENCE_DIR}/block-hex.txt"

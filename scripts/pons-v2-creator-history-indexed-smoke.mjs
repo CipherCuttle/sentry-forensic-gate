@@ -253,8 +253,10 @@ function requireBlockHash(block, expectedBlockNumber) {
   if (!/^0x[0-9a-f]{64}$/.test(hash)) {
     throw new Error(`PONS_BLOCKSCOUT_BLOCK_HASH_INVALID:${expectedBlockNumber}`);
   }
-  const observedNumber =
-    block.height ?? block.block_number ?? block.number ?? expectedBlockNumber.toString();
+  const observedNumber = block.height ?? block.block_number ?? block.number;
+  if (observedNumber === undefined || observedNumber === null) {
+    throw new Error(`PONS_BLOCKSCOUT_BLOCK_NUMBER_MISSING:${expectedBlockNumber}`);
+  }
   if (BigInt(observedNumber) !== expectedBlockNumber) {
     throw new Error(
       `PONS_BLOCKSCOUT_BLOCK_NUMBER_MISMATCH:${expectedBlockNumber}:${observedNumber}`
