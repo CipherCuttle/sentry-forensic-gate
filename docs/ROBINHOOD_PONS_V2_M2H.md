@@ -76,3 +76,18 @@ A credential alone grants no research authority.
 Robinhood's official docs recommend an archive provider such as Alchemy for
 historical reads. PublicNode also explicitly reports that its archive surface
 requires a personal token.
+
+
+## Acquisition / evaluation boundary
+
+The repository's research guardrail correctly rejects direct network calls in
+research JavaScript/TypeScript. M2H-A therefore follows the same boundary as
+M2G:
+
+1. workflow shell performs read-only JSON-RPC acquisition with `curl`;
+2. raw response envelopes are stored under `artifacts/pons-v2-archive-probe/`;
+3. the JavaScript probe only reads local files, decodes `getReserves()`, and
+   evaluates the frozen capability contract.
+
+The optional `ROBINHOOD_ARCHIVE_RPC_URL` secret is used only by the workflow
+acquisition step. It is never emitted into the manifest or evaluator output.
