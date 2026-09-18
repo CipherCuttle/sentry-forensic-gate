@@ -120,7 +120,15 @@ const rawStateClient = createPublicClient({
   chain: robinhood,
   transport: http(archiveRpcUrl, {
     retryCount: 4,
-    retryDelay: 2500
+    retryDelay: 3000,
+    fetchOptions: {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)',
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      }
+    }
   })
 });
 const stateClient = pacedClient(rawStateClient, minRpcIntervalMs);
