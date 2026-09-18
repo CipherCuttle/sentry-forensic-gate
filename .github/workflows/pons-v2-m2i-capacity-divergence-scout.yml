@@ -209,42 +209,44 @@ jobs:
                               if done is not None:
                                   done.set()
           
-                      transport = entry.get("transport", {})
-                      parsed = entry.get("parsedResponse")
-                      if (
-                          transport.get("curlReturnCode") != 0
-                          or not isinstance(transport.get("httpStatus"), int)
-                          or transport.get("httpStatus", 0) < 200
-                          or transport.get("httpStatus", 0) >= 300
-                          or not isinstance(parsed, dict)
-                      ):
-                          return {
-                              "jsonrpc": "2.0",
-                              "id": rpc_id,
-                              "error": {
-                                  "code": -32097,
-                                  "message": "M2H_E_RECORDED_TRANSPORT_FAILURE",
-                                  "data": {
-                                      "requestKey": key,
-                                      "httpStatus": transport.get("httpStatus"),
-                                      "curlReturnCode": transport.get("curlReturnCode"),
-                                  },
+                  if entry is None:
+                      raise RuntimeError("M2I_RPC_CACHE_ENTRY_MISSING_AFTER_ACQUIRE")
+                  transport = entry.get("transport", {})
+                  parsed = entry.get("parsedResponse")
+                  if (
+                      transport.get("curlReturnCode") != 0
+                      or not isinstance(transport.get("httpStatus"), int)
+                      or transport.get("httpStatus", 0) < 200
+                      or transport.get("httpStatus", 0) >= 300
+                      or not isinstance(parsed, dict)
+                  ):
+                      return {
+                          "jsonrpc": "2.0",
+                          "id": rpc_id,
+                          "error": {
+                              "code": -32097,
+                              "message": "M2H_E_RECORDED_TRANSPORT_FAILURE",
+                              "data": {
+                                  "requestKey": key,
+                                  "httpStatus": transport.get("httpStatus"),
+                                  "curlReturnCode": transport.get("curlReturnCode"),
                               },
-                          }
+                          },
+                      }
           
-                      if "error" in parsed:
-                          return {"jsonrpc": "2.0", "id": rpc_id, "error": parsed["error"]}
-                      if "result" not in parsed:
-                          return {
-                              "jsonrpc": "2.0",
-                              "id": rpc_id,
-                              "error": {
-                                  "code": -32096,
-                                  "message": "M2H_E_RECORDED_RESULT_MISSING",
-                                  "data": {"requestKey": key},
-                              },
-                          }
-                      return {"jsonrpc": "2.0", "id": rpc_id, "result": parsed["result"]}
+                  if "error" in parsed:
+                      return {"jsonrpc": "2.0", "id": rpc_id, "error": parsed["error"]}
+                  if "result" not in parsed:
+                      return {
+                          "jsonrpc": "2.0",
+                          "id": rpc_id,
+                          "error": {
+                              "code": -32096,
+                              "message": "M2H_E_RECORDED_RESULT_MISSING",
+                              "data": {"requestKey": key},
+                          },
+                      }
+                  return {"jsonrpc": "2.0", "id": rpc_id, "result": parsed["result"]}
           
           def main():
               parser = argparse.ArgumentParser()
