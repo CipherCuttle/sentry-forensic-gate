@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/m2h-pons-forward-outcome-v1
+      - agent/m2h-d-nodeflare-archive-probe-v1
   workflow_dispatch:
 
 permissions:
@@ -86,6 +87,7 @@ jobs:
 
           : > "${PONS_ARCHIVE_PROBE_DIR}/providers.tsv"
           acquire_rpc ROBINHOOD_PUBLIC 'https://rpc.mainnet.chain.robinhood.com' false
+          acquire_rpc NODEFLARE_PUBLIC 'https://rpc.nodeflare.app/robinhood/public' false
           acquire_rpc BLOCKREQ_PUBLIC 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public' false
           acquire_rpc TRIPORT_PUBLIC 'https://triport.io/rpc/robinhood/public' false
           acquire_rpc PUBLICNODE 'https://robinhood-rpc.publicnode.com' false
