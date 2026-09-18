@@ -105,6 +105,7 @@ const partialCreator = evaluateFastVetR1CapacityGate({
   creatorFeature: creator({
     coverage: 'PARTIAL',
     priorLaunchCount: 3,
+    outcomeReceiptCount: 1,
     classifiedOutcomeCount: 1,
     unresolvedOutcomeCount: 2,
     normalWinCount: 1
@@ -121,6 +122,7 @@ const adverseCreator = evaluateShadowPolicyComparison({
   creatorFeature: creator({
     coverage: 'PARTIAL',
     priorLaunchCount: 2,
+    outcomeReceiptCount: 1,
     classifiedOutcomeCount: 1,
     unresolvedOutcomeCount: 1,
     catastrophicLossCount: 1
