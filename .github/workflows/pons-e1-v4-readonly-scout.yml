@@ -1,0 +1,30 @@
+name: pons-e1-v4-readonly-scout
+
+on:
+  push:
+    branches:
+      - agent/pons-e1-v4-exit-recovery-v1
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies without native postinstall
+        run: npm install --package-lock=false --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Find current graduated native Pons launch
+        env:
+          PONS_E1_RPC_URL: https://rpc.mainnet.chain.robinhood.com
+          PONS_E1_SCOUT_LOOKBACK_BLOCKS: '100000'
+          PONS_E1_SCOUT_CHUNK_BLOCKS: '2000'
+        run: node scripts/pons-e1-v4-graduated-scout.mjs

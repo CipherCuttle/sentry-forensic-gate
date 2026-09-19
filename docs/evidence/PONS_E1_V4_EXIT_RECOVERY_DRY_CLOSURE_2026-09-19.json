@@ -1,0 +1,123 @@
+{
+  "schema": "sentry.pons-e1-v4-exit-recovery-dry-closure/1.0",
+  "stage": "PONS_E1_V4_EXIT_RECOVERY_V1",
+  "status": "CLOSED_PASS_DRY_ONLY",
+  "closureDate": "2026-09-19",
+  "baseHead": "74cf98d08d232ceced34d8faea16e0c7e075dd98",
+  "implementationHeadReviewed": "59ed822cf20a7bbd76fb700ef640ded830603306",
+  "authority": {
+    "liveMoneyAuthority": false,
+    "signingAuthority": false,
+    "broadcastAuthority": false,
+    "mergeAuthority": false,
+    "scope": "read-only verification and deterministic calldata construction only"
+  },
+  "chain": {
+    "name": "Robinhood Chain",
+    "chainId": 4663
+  },
+  "pinnedExecutionSurface": {
+    "ponsV2Factory": "0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e",
+    "ponsV2MemeHook": "0xE5e702641Ea86F4ae6cC3cDaeD2B886f976Be044",
+    "poolManager": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+    "stateView": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+    "quoter": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+    "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    "permit2RuntimeCodeHash": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
+    "universalRouter": "0x8876789976dEcBfCbBbe364623C63652db8C0904",
+    "universalRouterVersion": "2.1.1",
+    "universalRouterRuntimeCodeHash": "0x2ce6aaaf9f4151f5e1cbf774668772f17f532ae11b15e9284fd0a072a8b0fbde"
+  },
+  "realChainVerification": {
+    "verdict": "PONS_E1_V4_EXIT_RECOVERY_DRY_READY",
+    "mode": "READ_ONLY_DRY_RUN",
+    "verificationBlockNumber": "67430408",
+    "verificationBlockHash": "0x341c5c9b9ea2fd3a9840a9e63ef3de683e6bc450b1b8a04730f1eae38aed4a2b",
+    "launchBlockNumber": "67420348",
+    "launchTransactionHash": "0x20803d3763a1c00c8d255f45abeac97ca8d02eeadf4d6521395efedfade4b7f5",
+    "token": "0x8ECD7b553E36248164616c271B4B3C171bC8226b",
+    "curve": "0x90fB03B62593cf132433Bf3A9a57c2e93545bBD0",
+    "phase": 2,
+    "ownerContext": "0xE152cd6ab035c0a8b7D8147373dd201579873a41",
+    "ownerContextUse": "public third-party EOA used only as read-only balance/simulation context; no key, signature, authorization, or transaction was requested or used",
+    "poolId": "0x07ec2169905bb540d5cb43c03160269628d8791ba6746108333a20609204ddf4",
+    "poolKey": {
+      "currency0": "0x0000000000000000000000000000000000000000",
+      "currency1": "0x8ECD7b553E36248164616c271B4B3C171bC8226b",
+      "fee": 0,
+      "tickSpacing": 200,
+      "hooks": "0xE5e702641Ea86F4ae6cC3cDaeD2B886f976Be044"
+    },
+    "liquidity": "29277002188455995389594",
+    "fullOwnerTokenBalance": "3975359897761331367429707",
+    "quotedNativeOutWei": "4044979660458957",
+    "slippageBps": 500,
+    "minimumNativeOutWei": "3842730677436009",
+    "currentTokenAllowanceToPermit2": "0",
+    "currentPermit2AllowanceToRouter": "0",
+    "currentPermit2Expiration": "0"
+  },
+  "constructedPlan": {
+    "callCount": 3,
+    "erc20Approval": "approve(Permit2, exact full balance)",
+    "permit2Approval": "approve(token, pinned Universal Router v2.1.1, exact full balance, bounded expiration)",
+    "routerCommand": "0x10",
+    "routerCommandName": "V4_SWAP",
+    "v4Actions": "0x060c0f",
+    "v4ActionNames": [
+      "SWAP_EXACT_IN_SINGLE",
+      "SETTLE_ALL",
+      "TAKE_ALL"
+    ],
+    "zeroForOne": false,
+    "hookData": "0x",
+    "minHopPriceX36": "0",
+    "inputFence": "SETTLE_ALL(token, exact full balance)",
+    "outputFence": "SWAP amountOutMinimum and TAKE_ALL(native, same minimum)"
+  },
+  "verification": {
+    "offlineCalldataDecodeRegression": "PASS",
+    "readinessWorkflow": {
+      "runId": 35472589315,
+      "conclusion": "success"
+    },
+    "realGraduatedPoolSmoke": {
+      "runId": 35472589314,
+      "conclusion": "success"
+    },
+    "graduatedNativeScout": {
+      "runId": 35472589342,
+      "conclusion": "success"
+    },
+    "signerPresent": false,
+    "broadcastPathPresent": false
+  },
+  "hostileReview": {
+    "fullReviewCompleted": true,
+    "criticalFindings": 0,
+    "highFindings": 1,
+    "finding": "Recovery verifier pinned factory/router/Permit2/hook/PoolManager/StateView/Quoter but did not bind the factory's external launch-deployer/template dependency graph.",
+    "fixHead": "59ed822cf20a7bbd76fb700ef640ded830603306",
+    "repair": "Pinned launch-deployer runtime and required factory↔launchDeployer↔factory, factory↔hook, and factory/hook/router/quoter↔same PoolManager linkage.",
+    "targetedRereview": "PASS",
+    "remainingCriticalOrHigh": 0
+  },
+  "protocolSemanticsReviewed": {
+    "ponsAfterSwapReturnDelta": true,
+    "tokenToNativeExactInputSpecifiedSide": "token input",
+    "hookFeeSide": "unspecified native output",
+    "exactTokenInputCapRemainsValid": true,
+    "quoterIncludesHookEffects": true
+  },
+  "nextBoundary": {
+    "stage": "PONS_E2_SIGNED_V4_EXIT_RECOVERY",
+    "requirements": [
+      "fresh explicit owner live-money authority",
+      "dedicated wallet that actually holds a recoverable graduated Pons token",
+      "fresh full-balance quote immediately before signing",
+      "persistent crash-safe state before every broadcast-sensitive transition",
+      "post-failure approval reconciliation and cleanup/revocation behavior",
+      "no recurring or autonomous authority"
+    ]
+  }
+}

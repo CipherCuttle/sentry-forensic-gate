@@ -1,0 +1,64 @@
+name: pons-e1-v4-exit-recovery-readiness
+
+on:
+  push:
+    branches:
+      - agent/pons-e1-v4-exit-recovery-v1
+  pull_request:
+    paths:
+      - 'src/canary/ponsE1V4ExitRecovery.ts'
+      - 'src/canary/viemPonsE1V4RecoveryVerifier.ts'
+      - 'src/canary/ponsE1V4RecoveryCli.ts'
+      - 'src/adapters/robinhood/ponsV2/v4ExitRecoveryAuthority.ts'
+      - 'scripts/pons-e1-v4-exit-recovery-check.mjs'
+      - 'docs/PONS_E1_V4_EXIT_RECOVERY_V1.md'
+      - '.github/workflows/pons-e1-v4-exit-recovery-readiness.yml'
+      - 'package.json'
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PONS_E1_LIVE: ''
+      PONS_E1_PRIVATE_KEY: ''
+      PONS_E0_PRIVATE_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies without native postinstall
+        run: npm install --package-lock=false --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify V4 recovery calldata
+        run: npm run ponse1v4recoverycheck
+
+      - name: Assert dry-only execution boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            src/canary/ponsE1V4ExitRecovery.ts
+            src/canary/viemPonsE1V4RecoveryVerifier.ts
+            src/canary/ponsE1V4RecoveryCli.ts
+          )
+
+          if grep -En 'createWalletClient|privateKeyToAccount|sendRawTransaction|signTransaction' "${files[@]}"; then
+            echo "E1 dry-only boundary violated: signing/broadcast primitive present"
+            exit 1
+          fi
+
+          grep -q "PONS_E1_V4_RECOVERY_DRY_ONLY_NO_SIGNER_ALLOWED"             src/canary/ponsE1V4RecoveryCli.ts
+
+          if [[ -n "${PONS_E1_LIVE}" || -n "${PONS_E1_PRIVATE_KEY}" || -n "${PONS_E0_PRIVATE_KEY}" ]]; then
+            echo "E1 readiness CI must not receive live/key authority"
+            exit 1
+          fi
+
+          echo "PONS_E1_V4_RECOVERY_DRY_ONLY_BOUNDARY_PASS"

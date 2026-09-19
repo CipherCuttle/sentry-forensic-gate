@@ -1,0 +1,34 @@
+name: pons-e1-v4-readonly-verifier-smoke
+
+on:
+  push:
+    branches:
+      - agent/pons-e1-v4-exit-recovery-v1
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PONS_E1_TOKEN: '0x8ECD7b553E36248164616c271B4B3C171bC8226b'
+      PONS_E1_OWNER: '0xE152cd6ab035c0a8b7D8147373dd201579873a41'
+      PONS_E1_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
+      PONS_E1_SLIPPAGE_BPS: '500'
+      PONS_E1_LIVE: ''
+      PONS_E1_PRIVATE_KEY: ''
+      PONS_E0_PRIVATE_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies without native postinstall
+        run: npm install --package-lock=false --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify real graduated Pons V4 recovery plan read-only
+        run: npm run start:pons-e1-v4-recovery
