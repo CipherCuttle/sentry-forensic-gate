@@ -26,7 +26,8 @@ import {
 } from './ponsE2RecoveryState.js';
 import { reconcilePonsE2Recovery } from './ponsE2RecoveryReconcile.js';
 import {
-  ViemPonsE2V4RecoveryExecutor
+  ViemPonsE2V4RecoveryExecutor,
+  hasActivePonsE2Permit2Allowance
 } from './viemPonsE2V4RecoveryExecutor.js';
 
 if (process.env.PONS_E2_ENABLED !== 'true') {
@@ -183,7 +184,7 @@ if (tokenAfterExit !== 0n) {
 }
 
 const permit2Residual = await executor.getPermit2AllowanceToRouter(token);
-if (permit2Residual.amount !== 0n || permit2Residual.expiration !== 0n) {
+if (hasActivePonsE2Permit2Allowance(permit2Residual.amount)) {
   state = await executeStep({
     intent: intents.permit2Revoke,
     signedStatus: 'PERMIT2_REVOKE_SIGNED',
@@ -217,7 +218,7 @@ if (tokenAllowanceFinal !== 0n) {
     `PONS_E2_FINAL_TOKEN_ALLOWANCE_NOT_ZERO:${tokenAllowanceFinal}`
   );
 }
-if (permit2Final.amount !== 0n || permit2Final.expiration !== 0n) {
+if (hasActivePonsE2Permit2Allowance(permit2Final.amount)) {
   throw new Error(
     `PONS_E2_FINAL_PERMIT2_AUTHORITY_NOT_ZERO:${permit2Final.amount}:${permit2Final.expiration}`
   );
