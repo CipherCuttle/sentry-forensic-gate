@@ -24,7 +24,9 @@ const result = await verifyPonsE1V4Recovery({
   token: getAddress(tokenRaw),
   owner: getAddress(ownerRaw),
   slippageBps,
-  rpcUrl: process.env.PONS_E1_RPC_URL
+  ...(process.env.PONS_E1_RPC_URL
+    ? { rpcUrl: process.env.PONS_E1_RPC_URL }
+    : {})
 });
 
 console.log(JSON.stringify(jsonSafe({
