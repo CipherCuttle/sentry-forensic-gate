@@ -1,0 +1,71 @@
+{
+  "schema": "sentry.pons-e0-real-money-closure/1.0",
+  "stage": "PONS_E0_LIVE_CANARY_R0",
+  "status": "CLOSED_PASS_WITH_AUTHORITY_DEVIATION",
+  "chain": {
+    "name": "Robinhood Chain",
+    "chainId": 4663
+  },
+  "wallet": "0x9343835Fe138FFfF68293B361b3C69FEbd83C031",
+  "token": "0x891324B8953B77aC22f764b0e63A336a6C259d62",
+  "curve": "0x32c5ad4Ae02b6f16Df43C0b4bE44b69B42ff9D87",
+  "implementationHead": "421c44e6936b1473f5e26450f7532792df97d9d9",
+  "authorizedIntent": {
+    "nominalUsdMicrosPerRoundtrip": "1000000",
+    "intendedRoundtrips": 1,
+    "recurringAuthority": false
+  },
+  "observedRoundtrips": [
+    {
+      "index": 1,
+      "buyTransactionHash": "0x7bbf92280bbb96368c8b67de4d00f6d87e00f718428c9c526a2f46ac1ab02b85",
+      "approvalTransactionHash": "0x10de48730f72e60f89ac26773c716f16c62afa7e6fee27d9c64fd05e1ef1b236",
+      "sellTransactionHash": "0x81eb234c80827b1065cdc95426b2c31d1ea6764570e15f40c9a374f84556a194",
+      "buyValueWei": "379566398672148",
+      "sellReturnWei": "357134024510626",
+      "buyFeeWei": "9018314610000",
+      "approvalFeeWei": "3108477260000",
+      "sellFeeWei": "5177589480000",
+      "netWalletCostWei": "39736755511522",
+      "result": "COMPLETE_EXIT"
+    },
+    {
+      "index": 2,
+      "buyTransactionHash": "0x037d8733841417833e853ca498e401768f439b9619bdc4e6eeb08ad53cc109ab",
+      "approvalTransactionHash": "0xd719720fe0b28e0b5089b01cbfa0cb81e6f0948cc1d1f488dc41e7cccb3cf6d1",
+      "sellTransactionHash": "0x86c68763ced62767a230eb9d7af057ae5dbf0a1fbe3308cadd1cf27095152def",
+      "buyValueWei": "379881494321170",
+      "sellReturnWei": "357430498006790",
+      "buyFeeWei": "6854698720000",
+      "approvalFeeWei": "3094586166000",
+      "sellFeeWei": "5239931130000",
+      "netWalletCostWei": "37640212330380",
+      "result": "COMPLETE_EXIT"
+    }
+  ],
+  "accounting": {
+    "initialWalletBalanceWei": "1986000000000000",
+    "finalWalletBalanceWei": "1908623032158098",
+    "totalNetWalletCostWei": "77376967841902",
+    "targetTokenBalanceAfterClosure": "0",
+    "targetTokenBalanceEvidence": "canary completion assertion plus Blockscout token-balances empty",
+    "curveAllowanceAfterClosure": "0",
+    "curveAllowanceEvidence": "canary completion assertion"
+  },
+  "verification": {
+    "allSixTransactionsSucceededOnChain": true,
+    "fullAcquiredBalanceSoldEachRound": true,
+    "targetTokenBalanceZeroAfterClosure": true,
+    "patchedZeroPriorityFeeSignerProvenLive": true
+  },
+  "authorityDeviation": {
+    "present": true,
+    "description": "Two complete real-money roundtrips were observed although the operator authority was intended for one bounded roundtrip. The first successful roundtrip consumed the one-shot authority; the second was an unintended additional execution. No further live E0 authority exists.",
+    "response": "Freeze further live E0 execution and require fresh explicit authority for any future real-money stage."
+  },
+  "nextBoundary": {
+    "liveE0Authority": "EXHAUSTED",
+    "mergeAuthority": "NONE",
+    "requiredBeforeRepeatedOrLargerLiveOperation": "Reviewed graduation/V4 recovery plus fresh explicit owner authority"
+  }
+}
