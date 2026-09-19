@@ -28,6 +28,6 @@ jobs:
           PONS_E0_WALLET: "0x9343835Fe138FFfF68293B361b3C69FEbd83C031"
           PONS_E0_RPC_URL: "https://rpc.mainnet.chain.robinhood.com"
           PONS_E0_ARCHIVE_RPC_URL: "https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public"
-          PONS_E0_LAUNCH_BLOCK: "66674866"
-          PONS_E0_TOKEN: "0xEB827294B837B2439aE6d35d5a3c3343A0eC3C11"
+          PONS_E0_LAUNCH_BLOCK: "66674220"
+          PONS_E0_TOKEN: "0x9f60b06Ed64944387348BEa319a4c30A8A323661"
         run: node dist/canary/ponsE0Cli.js
