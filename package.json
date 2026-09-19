@@ -47,7 +47,9 @@
     "ponse0check": "node scripts/pons-e0-live-canary-r0-check.mjs",
     "start:pons-e0": "node dist/canary/ponsE0Cli.js",
     "ponse1v4recoverycheck": "node scripts/pons-e1-v4-exit-recovery-check.mjs",
-    "start:pons-e1-v4-recovery": "node dist/canary/ponsE1V4RecoveryCli.js"
+    "start:pons-e1-v4-recovery": "node dist/canary/ponsE1V4RecoveryCli.js",
+    "ponse2v4recoverycheck": "node scripts/pons-e2-v4-recovery-check.mjs",
+    "start:pons-e2-v4-recovery": "node dist/canary/ponsE2V4RecoveryCli.js"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",

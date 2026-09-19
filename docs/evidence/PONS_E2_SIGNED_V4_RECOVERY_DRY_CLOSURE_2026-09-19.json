@@ -1,0 +1,111 @@
+{
+  "schema": "sentry.pons-e2-signed-v4-recovery-dry-closure/1.0",
+  "stage": "PONS_E2_SIGNED_V4_RECOVERY_V1",
+  "status": "CLOSED_PASS_ENGINEERING_DRY_ONLY",
+  "closureDate": "2026-09-19",
+  "baseHead": "abba43ab1bfe28a47778372c08e13ba878e90f49",
+  "implementationHeadReviewed": "7c3ddfb4d566bfd3e827cbb29aef02b6149836a3",
+  "implementationHeadWithReconciliationRegression": "1524404d75955ae3c8d6cc7ad806b48d5c597da9",
+  "authority": {
+    "liveMoneyAuthority": false,
+    "broadcastAuthority": false,
+    "mergeAuthority": false,
+    "privateKeyUsed": false,
+    "realTransactionSigned": false,
+    "realTransactionBroadcast": false
+  },
+  "scope": {
+    "signedExecutorImplemented": true,
+    "exactErc20Approval": true,
+    "exactPermit2Allowance": true,
+    "fullBalanceV4Exit": true,
+    "postExitApprovalCleanup": true,
+    "safePreExitApprovalCleanup": true,
+    "crashSafePersistentState": true,
+    "readOnlyCrashReconciliation": true,
+    "automaticRetryAfterAmbiguity": false
+  },
+  "stateMachine": {
+    "terminalSuccess": "COMPLETED",
+    "terminalSafeAbort": "ABORTED_CLEAN",
+    "nonterminalRestartPolicy": "MANUAL_RECONCILIATION_ONLY",
+    "signedBeforeBroadcastPersistence": true,
+    "submittedBeforeReceiptPersistence": true,
+    "ambiguousBroadcastAutoRetry": false
+  },
+  "permit2Semantics": {
+    "revokeCall": "approve(token, router, 0, 0)",
+    "zeroExpirationInputStoresBlockTimestamp": true,
+    "activeAuthorityDefinition": "amount != 0",
+    "completionRequirement": "Permit2 amount == 0; stored expiration is evidence only"
+  },
+  "safeAbortPolicy": {
+    "tokenApprovalIncludedNextStepFailsBeforeSigning": "revoke ERC20 allowance and ABORTED_CLEAN",
+    "permit2ApprovalIncludedExitFailsBeforeSigning": "revoke Permit2 amount, revoke ERC20 allowance, ABORTED_CLEAN",
+    "exitSignedOrLater": "no automatic cleanup or resend; manual reconciliation only"
+  },
+  "realChainDryVerification": {
+    "verdict": "PONS_E2_SIGNED_V4_RECOVERY_DRY_READY",
+    "mode": "DRY_RUN_NO_SIGNER",
+    "blockNumber": "67444089",
+    "blockHash": "0x05ffa371ed46ceb74c278a74ab01de6348a18754284ce27c0b2774585b547682",
+    "token": "0x8ECD7b553E36248164616c271B4B3C171bC8226b",
+    "ownerContext": "0xE152cd6ab035c0a8b7D8147373dd201579873a41",
+    "ownerContextUse": "public read-only balance and eth_call simulation context only",
+    "poolId": "0x07ec2169905bb540d5cb43c03160269628d8791ba6746108333a20609204ddf4",
+    "tokenBalance": "3975359897761331367429707",
+    "quotedNativeOutWei": "4046035129791204",
+    "minimumNativeOutWei": "3843733373301643",
+    "slippageBps": 500,
+    "currentTokenAllowanceToPermit2": "0",
+    "currentPermit2AllowanceToRouter": "0"
+  },
+  "offlineVerification": {
+    "signedTransactionIdentityFence": true,
+    "zeroPriorityFeeNormalization": true,
+    "atomicStateReservation": true,
+    "immutablePlanFields": true,
+    "nonterminalRestartFailsClosed": true,
+    "safeAbortStateTransitions": true,
+    "permit2AmountZeroRevocationRegression": true,
+    "reconcilerNeverAutoRetries": true,
+    "reconcilerDistinguishesNotObservedAndReceiptSuccess": true
+  },
+  "verificationRun": {
+    "workflow": "pons-e2-v4-recovery-readiness",
+    "runId": 35473795266,
+    "conclusion": "success"
+  },
+  "hostileReview": {
+    "criticalFindings": 0,
+    "highFindings": 2,
+    "findings": [
+      {
+        "finding": "Permit2 approve(...,0,0) stores block.timestamp as expiration, so requiring stored expiration == 0 would falsely fail a successful revoke.",
+        "repair": "Define active Permit2 authority by amount != 0; keep expiration only as evidence."
+      },
+      {
+        "finding": "A pre-exit failure after an approval could leave ERC20/Permit2 authority live while forcing manual intervention.",
+        "repair": "Before EXIT_SIGNED, safely revoke any created approvals and persist ABORTED_CLEAN. From EXIT_SIGNED onward, ambiguity remains reconciliation-only."
+      }
+    ],
+    "targetedRereview": "PASS",
+    "remainingCriticalOrHigh": 0,
+    "boundaryIntegrationNote": "Normal CI initially rejected the E2 dummy-key signer regression under the global research-only JavaScript rule. The repair did not relax research code: E2 executor authority was explicitly added to the existing canary boundary, and only the E2 signer regression script was narrowly exempted while canary-boundary-check enforces no broadcast/live behavior."
+  },
+  "nextBoundary": {
+    "recommendedStage": "PONS_E3_E0_TO_E2_FAILOVER_INTEGRATION",
+    "description": "Integrate curve exit first, then phase-2 V4 recovery fallback under one bounded state machine without granting live authority.",
+    "liveRequirementBeforeAnyBroadcast": "fresh explicit owner authority"
+  },
+  "canaryBoundaryIntegration": {
+    "head": "e680d0c17c3200f9415922b133fb54400e2c0714",
+    "e2ExecutorAddedToAllowedCanaryAuthorityFiles": true,
+    "globalResearchOnlyTypescriptBoundaryUnchanged": true,
+    "javascriptException": "scripts/pons-e2-v4-recovery-check.mjs only",
+    "exceptionGuardedBy": "scripts/canary-boundary-check.mjs",
+    "signerRegressionUsesFixedDummyKeyOnly": true,
+    "signerRegressionBroadcastCallForbidden": true,
+    "signerRegressionLiveEnvForbidden": true
+  }
+}

@@ -3,7 +3,8 @@ import path from 'node:path';
 
 const allowedWalletAuthorityFiles = new Set([
   path.normalize('src/canary/viemCanaryExecutor.ts'),
-  path.normalize('src/canary/viemPonsE0CanaryExecutor.ts')
+  path.normalize('src/canary/viemPonsE0CanaryExecutor.ts'),
+  path.normalize('src/canary/viemPonsE2V4RecoveryExecutor.ts')
 ]);
 const allowedIdentifiers = new Set(['createWalletClient', 'privateKeyToAccount', 'sendRawTransaction', 'signTransaction']);
 const forbiddenIdentifiers = new Set([
@@ -86,6 +87,57 @@ for (const required of [
 ]) {
   if (!ponsExecutor.includes(required)) findings.push(`missing-pons-e0-fail-closed-guard:${required}`);
 }
+const ponsE2Executor = fs.readFileSync(
+  path.normalize('src/canary/viemPonsE2V4RecoveryExecutor.ts'),
+  'utf8'
+);
+for (const required of [
+  'readonly walletAddress: Address',
+  'private readonly account: LocalAccount',
+  'PONS_E2_PRIVATE_KEY_FORMAT_INVALID',
+  'PONS_E2_BROADCAST_AUTHORITY_DISABLED',
+  'PONS_E2_INTENT_OWNER_MUST_EQUAL_WALLET',
+  'PONS_E2_FULL_BALANCE_DRIFT',
+  'PONS_E2_TOKEN_APPROVAL_REQUIRES_ZERO_ALLOWANCE',
+  'PONS_E2_PERMIT2_APPROVAL_REQUIRES_ZERO_ALLOWANCE',
+  'PONS_E2_EXIT_FRESH_QUOTE_BELOW_FROZEN_MIN',
+  'PONS_E2_EXIT_TOKEN_ALLOWANCE_NOT_EXACT',
+  'PONS_E2_EXIT_PERMIT2_ALLOWANCE_NOT_EXACT',
+  'PONS_E2_BROADCAST_SIGNED_AUTHORITY_UNKNOWN',
+  'PONS_E2_SIGNED_SIGNER_MISMATCH',
+  'PONS_E2_SIGNED_CHAIN_ID_MISMATCH',
+  'PONS_E2_SIGNED_TARGET_MISMATCH',
+  'PONS_E2_SIGNED_CALLDATA_MISMATCH'
+]) {
+  if (!ponsE2Executor.includes(required)) {
+    findings.push(`missing-pons-e2-fail-closed-guard:${required}`);
+  }
+}
+
+const ponsE2Check = fs.readFileSync(
+  path.normalize('scripts/pons-e2-v4-recovery-check.mjs'),
+  'utf8'
+);
+for (const required of [
+  '0000000000000000000000000000000000000000000000000000000000000001',
+  'broadcastPerformed: false',
+  'liveMoneyAuthority: false',
+  'reconcilerNeverAutoRetries: true'
+]) {
+  if (!ponsE2Check.includes(required)) {
+    findings.push(`pons-e2-check-missing-boundary-proof:${required}`);
+  }
+}
+for (const forbidden of [
+  '.broadcastExact(',
+  'PONS_E2_BROADCAST_AUTHORITY=true',
+  'PONS_E2_LIVE=true'
+]) {
+  if (ponsE2Check.includes(forbidden)) {
+    findings.push(`pons-e2-check-live-behavior-forbidden:${forbidden}`);
+  }
+}
+
 if (findings.length) throw new Error(`CANARY_BOUNDARY_VIOLATION\n${findings.join('\n')}`);
 console.log('canary-boundary-check: PASS');
 
