@@ -22,6 +22,9 @@ import {
   assertSignedPonsE2Transaction,
   hasActivePonsE2Permit2Allowance
 } from '../dist/canary/viemPonsE2V4RecoveryExecutor.js';
+import {
+  reconcilePonsE2Recovery
+} from '../dist/canary/ponsE2RecoveryReconcile.js';
 
 const PRIVATE_KEY =
   '0x0000000000000000000000000000000000000000000000000000000000000001';
@@ -285,6 +288,69 @@ assert.throws(
   /PONS_E2_TERMINAL_STATE_USE_NEW_STATE_PATH:ABORTED_CLEAN/
 );
 
+const reconcileStatePath = path.join(dir, 'reconcile.json');
+let reconcileState = reservePonsE2RecoveryState(reconcileStatePath, {
+  token: TOKEN,
+  wallet: account.address,
+  poolId: POOL_ID,
+  tokenAmount: plan.tokenAmount.toString(),
+  minNativeOut: plan.minNativeOut.toString(),
+  deadline: plan.deadline.toString(),
+  permit2Expiration: plan.permit2Expiration.toString()
+});
+reconcileState = transitionPonsE2RecoveryState(
+  reconcileStatePath,
+  reconcileState,
+  'TOKEN_APPROVAL_SIGNED',
+  { latestTransactionHash: h1, tokenApprovalTransactionHash: h1 }
+);
+
+const notObservedClient = {
+  async readContract({ address, functionName }) {
+    if (functionName === 'balanceOf') return plan.tokenAmount;
+    if (functionName === 'allowance' && address.toLowerCase() === TOKEN.toLowerCase()) {
+      return plan.tokenAmount;
+    }
+    if (functionName === 'allowance') return [0n, 123456, 7];
+    throw new Error(`unexpected readContract ${functionName}`);
+  },
+  async getTransactionReceipt() {
+    throw new Error('TransactionReceiptNotFound');
+  },
+  async getTransaction() {
+    throw new Error('TransactionNotFound');
+  }
+};
+const notObserved = await reconcilePonsE2Recovery({
+  state: reconcileState,
+  client: notObservedClient
+});
+assert.equal(notObserved.transactionObservation, 'NOT_OBSERVED');
+assert.equal(notObserved.autoRetryAllowed, false);
+assert.equal(notObserved.nextAction, 'MANUAL_REVIEW_ONLY');
+assert.equal(notObserved.tokenAllowanceToPermit2, plan.tokenAmount);
+
+const successClient = {
+  async readContract({ address, functionName }) {
+    if (functionName === 'balanceOf') return 0n;
+    if (functionName === 'allowance' && address.toLowerCase() === TOKEN.toLowerCase()) {
+      return 0n;
+    }
+    if (functionName === 'allowance') return [0n, 999999, 8];
+    throw new Error(`unexpected readContract ${functionName}`);
+  },
+  async getTransactionReceipt() {
+    return { status: 'success', blockNumber: 999n };
+  }
+};
+const observed = await reconcilePonsE2Recovery({
+  state,
+  client: successClient
+});
+assert.equal(observed.transactionObservation, 'RECEIPT_SUCCESS');
+assert.equal(observed.receiptBlockNumber, 999n);
+assert.equal(observed.autoRetryAllowed, false);
+
 console.log(JSON.stringify({
   verdict: 'PONS_E2_V4_RECOVERY_OFFLINE_PASS',
   exactTokenApproval: true,
@@ -298,6 +364,8 @@ console.log(JSON.stringify({
   immutablePlanFields: true,
   cleanupIntentsPresent: true,
   permit2AmountZeroMeansRevoked: true,
+  reconcilerNeverAutoRetries: true,
+  reconcilerDistinguishesUnobservedAndSuccess: true,
   broadcastPerformed: false,
   liveMoneyAuthority: false
 }, null, 2));
