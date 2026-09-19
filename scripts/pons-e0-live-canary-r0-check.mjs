@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+import { parseTransaction, serializeTransaction } from 'viem';
 import {
   PONS_E0_LIVE_CANARY_R0,
   PONS_E0_NOTIONAL_USD_MICROS,
@@ -124,6 +125,25 @@ assert.ok(cliSource.includes("fs.openSync(file, 'wx', 0o600)"), 'live state must
 assert.ok(cliSource.includes('PONS_E0_ENTRY_SPEND_NOT_EXACT_CALIBRATED_DOLLAR'));
 assert.ok(executorSource.includes('PONS_E0_EXACT_BUY_VALUE_NOT_AUTHORIZED'));
 assert.ok(executorSource.includes('this.buyAuthorizationConsumed = true'));
+assert.ok(
+  executorSource.includes('(parsed.maxPriorityFeePerGas ?? 0n) !== signed.maxPriorityFeePerGas'),
+  'signed zero priority fee must normalize omitted parsed field to zero'
+);
+
+const zeroTipSerialized = serializeTransaction({
+  type: 'eip1559',
+  chainId: 4663,
+  nonce: 0,
+  gas: 21_000n,
+  maxFeePerGas: 1n,
+  maxPriorityFeePerGas: 0n,
+  to: TOKEN,
+  value: 0n,
+  data: '0x'
+});
+const zeroTipParsed = parseTransaction(zeroTipSerialized);
+assert.equal(zeroTipParsed.maxPriorityFeePerGas, undefined);
+assert.equal(zeroTipParsed.maxPriorityFeePerGas ?? 0n, 0n);
 
 console.log(JSON.stringify({
   verdict: 'PONS_E0_LIVE_CANARY_R0_OFFLINE_PASS',
