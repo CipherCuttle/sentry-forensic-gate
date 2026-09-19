@@ -54,6 +54,8 @@ const tokenRaw = process.env.PONS_E0_TOKEN;
 if (!tokenRaw) throw new Error('PONS_E0_TOKEN_REQUIRED');
 const token = getAddress(tokenRaw);
 const rpcUrl = process.env.PONS_E0_RPC_URL ?? DEFAULT_ROBINHOOD_RPC_URL;
+const archiveRpcUrl = process.env.PONS_E0_ARCHIVE_RPC_URL ?? rpcUrl;
+const launchBlockHint = envOptionalBigInt('PONS_E0_LAUNCH_BLOCK');
 const slippageBps = envInt('PONS_E0_SLIPPAGE_BPS', 500);
 if (slippageBps < 0 || slippageBps > 1_000) throw new Error('PONS_E0_SLIPPAGE_INVALID');
 
@@ -70,6 +72,12 @@ const client = createPublicClient({
   chain: robinhood,
   transport: http(rpcUrl, { retryCount: 2, retryDelay: 1_000 })
 });
+const archiveClient = archiveRpcUrl === rpcUrl
+  ? client
+  : createPublicClient({
+      chain: robinhood,
+      transport: http(archiveRpcUrl, { retryCount: 4, retryDelay: 1_500 })
+    });
 
 const executor = live
   ? new ViemPonsE0CanaryExecutor({
@@ -91,6 +99,12 @@ const launchAdapter = new ViemPonsV2LaunchAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
   client
 });
+const historicalLaunchAdapter = archiveClient === client
+  ? launchAdapter
+  : new ViemPonsV2LaunchAdapter({
+      authority: CURRENT_PONS_V2_AUTHORITY,
+      client: archiveClient
+    });
 const quoteAdapter = new ViemPonsV2CurveQuoteAdapter({
   authority: CURRENT_PONS_V2_AUTHORITY,
   templateAuthority: CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
@@ -111,7 +125,13 @@ if (existing?.status === 'COMPLETED') {
   throw new Error('PONS_E0_ALREADY_COMPLETED_USE_NEW_STATE_PATH');
 }
 
-const launch = await findRecentLaunch(client, launchAdapter, token);
+const launch = await findRecentLaunch(
+  client,
+  archiveClient,
+  historicalLaunchAdapter,
+  token,
+  launchBlockHint
+);
 const plan = await buildFreshEntryPlan({
   client,
   launch,
@@ -447,40 +467,55 @@ async function buildFreshExitPlan(params: {
 }
 
 async function findRecentLaunch(
-  client: PublicClient,
+  headClient: PublicClient,
+  logClient: PublicClient,
   adapter: ViemPonsV2LaunchAdapter,
-  expectedToken: Address
+  expectedToken: Address,
+  launchBlockHint: bigint | null
 ): Promise<NormalizedLaunchCandidate> {
-  const head = await client.getBlockNumber();
+  const head = await headClient.getBlockNumber();
   const requestedFrom = head > 30_000n ? head - 30_000n : CURRENT_PONS_V2_AUTHORITY.fromBlock;
   const fromBlock = requestedFrom < CURRENT_PONS_V2_AUTHORITY.fromBlock
     ? CURRENT_PONS_V2_AUTHORITY.fromBlock
     : requestedFrom;
-  const logChunkSize = 2_000n;
 
   let matchCount = 0;
   let matchedBlockNumber: bigint | null = null;
   let matchedLogIndex: number | null = null;
 
-  for (let chunkFrom = fromBlock; chunkFrom <= head; chunkFrom += logChunkSize) {
-    const chunkTo = chunkFrom + logChunkSize - 1n < head
-      ? chunkFrom + logChunkSize - 1n
-      : head;
-    const chunkLogs = await client.getLogs({
+  const readRange = async (rangeFrom: bigint, rangeTo: bigint): Promise<void> => {
+    const rangeLogs = await logClient.getLogs({
       address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
       event: ponsV2TokenLaunchedEvent,
       args: { token: expectedToken },
-      fromBlock: chunkFrom,
-      toBlock: chunkTo,
+      fromBlock: rangeFrom,
+      toBlock: rangeTo,
       strict: true
     });
-    for (const log of chunkLogs) {
+    for (const log of rangeLogs) {
       matchCount += 1;
       if (log.blockNumber === null || log.logIndex === null) {
         throw new Error('PONS_E0_RECENT_LAUNCH_IDENTITY_MISSING');
       }
       matchedBlockNumber = log.blockNumber;
       matchedLogIndex = log.logIndex;
+    }
+  };
+
+  if (launchBlockHint !== null) {
+    if (launchBlockHint < fromBlock || launchBlockHint > head) {
+      throw new Error(
+        `PONS_E0_LAUNCH_BLOCK_HINT_OUTSIDE_RECENT_WINDOW:${launchBlockHint}:${fromBlock}:${head}`
+      );
+    }
+    await readRange(launchBlockHint, launchBlockHint);
+  } else {
+    const logChunkSize = 2_000n;
+    for (let chunkFrom = fromBlock; chunkFrom <= head; chunkFrom += logChunkSize) {
+      const chunkTo = chunkFrom + logChunkSize - 1n < head
+        ? chunkFrom + logChunkSize - 1n
+        : head;
+      await readRange(chunkFrom, chunkTo);
     }
   }
 
@@ -602,6 +637,13 @@ function requirePrivateKey(value: Hex | undefined): Hex {
 function requireWallet(value: string | undefined): Address {
   if (!value) throw new Error('PONS_E0_DRY_RUN_REQUIRES_WALLET');
   return getAddress(value);
+}
+
+function envOptionalBigInt(name: string): bigint | null {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return null;
+  if (!/^[0-9]+$/.test(raw)) throw new Error(`PONS_E0_ENV_BIGINT_INVALID:${name}`);
+  return BigInt(raw);
 }
 
 function envBigInt(name: string, fallback: bigint): bigint {
