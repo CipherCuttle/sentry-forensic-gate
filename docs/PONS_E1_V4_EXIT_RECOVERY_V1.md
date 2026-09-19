@@ -1,5 +1,51 @@
 # PONS_E1_V4_EXIT_RECOVERY_V1
 
+## Closure
+
+**Status: CLOSED / PASS (DRY-ONLY)**
+
+The E1 recovery plan was verified against a real current Robinhood Pons
+phase-2/native launch without using a private key, signer, or broadcast path.
+
+Live read-only evidence:
+
+- token: `0x8ECD7b553E36248164616c271B4B3C171bC8226b`;
+- phase: 2;
+- pool id:
+  `0x07ec2169905bb540d5cb43c03160269628d8791ba6746108333a20609204ddf4`;
+- read-only EOA balance context:
+  `3975359897761331367429707` raw token units;
+- full-balance V4 quote:
+  `4044979660458957` wei native ETH;
+- 5% minimum-output fence:
+  `3842730677436009` wei;
+- existing ERC20→Permit2 allowance: zero;
+- existing Permit2→router allowance: zero.
+
+The EOA was public chain state used only for read-only balance and simulation
+context. No key, signature, authorization, or transaction from that address was
+requested or used.
+
+Hostile review found one High: the initial verifier did not bind the factory's
+external launch-deployer/template dependency graph. The repair pins the
+launch-deployer runtime and verifies:
+
+- factory ↔ launchDeployer ↔ factory;
+- factory ↔ meme hook;
+- factory/hook/router/quoter ↔ the same reviewed PoolManager.
+
+The one targeted rereview passed with no remaining Critical/High findings.
+
+Canonical closure receipt:
+
+`docs/evidence/PONS_E1_V4_EXIT_RECOVERY_DRY_CLOSURE_2026-09-19.json`
+
+E1 grants no live-money, signing, broadcast, recurring, autonomous, or merge
+authority.
+
+The next stage may add a bounded signed V4 recovery executor only with fresh
+explicit owner authority and crash-safe approval/transaction reconciliation.
+
 ## Objective
 
 Build the smallest fail-closed recovery path for a Pons V2 token that can no
