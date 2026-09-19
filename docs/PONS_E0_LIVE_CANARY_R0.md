@@ -1,5 +1,30 @@
 # PONS_E0_LIVE_CANARY_R0
 
+## Closure
+
+**Status: CLOSED / PASS WITH AUTHORITY DEVIATION**
+
+Real-money E0 execution was proven on Robinhood Chain using the dedicated canary wallet.
+
+Observed live properties:
+
+- exact nominal $1 entry path executed;
+- native Pons curve BUY succeeded;
+- exact token approval succeeded;
+- full acquired balance SELL succeeded;
+- target-token balance returned to zero;
+- curve allowance returned to zero as asserted by the canary before completion;
+- zero-priority-fee EIP-1559 signing path was proven live after normalizing viem's omitted parsed zero field;
+- no recurring or autonomous live authority is granted.
+
+Two complete real-money roundtrips were observed. The first consumed the intended one-shot authority; the second was an unintended additional execution. This is recorded as an authority deviation, not silently reclassified as authorized.
+
+Canonical closure receipt:
+
+`docs/evidence/PONS_E0_REAL_MONEY_CLOSURE_2026-09-19.json`
+
+Further E0 live execution is frozen. Any additional real-money operation requires fresh explicit owner authority. Repeated/larger operation also requires reviewed graduation/V4 recovery.
+
 ## Objective
 
 Prove the Robinhood/Pons write path with the smallest bounded real-money experiment:
@@ -72,4 +97,4 @@ The readiness workflow never receives a key and asserts that live mode is disabl
 
 This branch implements the capability but does not itself authorize a broadcast.
 
-No merge authority is implied. No Robinhood recurring-live authority is implied. E0 is bounded to one operator-authorized roundtrip.
+No merge authority is implied. No Robinhood recurring-live authority is implied. The original one-shot live authority is exhausted; further real-money E0 execution requires fresh explicit owner authority.
