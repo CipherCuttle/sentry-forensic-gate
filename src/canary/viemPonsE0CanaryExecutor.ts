@@ -416,7 +416,7 @@ export async function assertSignedPonsE0Transaction(
   if (parsed.maxFeePerGas !== signed.maxFeePerGas) {
     throw new Error('PONS_E0_SIGNED_MAX_FEE_MISMATCH');
   }
-  if (parsed.maxPriorityFeePerGas !== signed.maxPriorityFeePerGas) {
+  if ((parsed.maxPriorityFeePerGas ?? 0n) !== signed.maxPriorityFeePerGas) {
     throw new Error('PONS_E0_SIGNED_PRIORITY_FEE_MISMATCH');
   }
   assertFeeAndGasCaps(
