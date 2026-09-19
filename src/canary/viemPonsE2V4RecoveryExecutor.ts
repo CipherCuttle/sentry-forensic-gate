@@ -455,12 +455,6 @@ export class ViemPonsE2V4RecoveryExecutor {
     }
 
     const head = await this.publicClient.getBlockNumber();
-    const tokenBalance = await this.getTokenBalance(intent.token);
-    if (tokenBalance !== 0n) {
-      throw new Error(
-        `PONS_E2_CLEANUP_REQUIRES_ZERO_TOKEN_BALANCE:${tokenBalance}`
-      );
-    }
 
     if (intent.kind === 'PERMIT2_REVOKE_ROUTER') {
       const permit2Code = await this.publicClient.getBytecode({
