@@ -6,8 +6,7 @@ import {
   getAddress,
   http,
   keccak256,
-  parseTransaction,
-  privateKeyToAccount,
+  parseTransaction
   recoverTransactionAddress,
   type Address,
   type Hex,
@@ -15,6 +14,7 @@ import {
   type PublicClient,
   type WalletClient
 } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import {
   DEFAULT_ROBINHOOD_RPC_URL,
   ROBINHOOD_CHAIN_ID,
