@@ -4,6 +4,9 @@ import { ROBINHOOD_CHAIN_ID } from './contracts.js';
 export const ROBINHOOD_PERMIT2: Hex =
   '0x000000000022D473030F116dDEE9F6B43aC78BA3';
 
+export const ROBINHOOD_PERMIT2_RUNTIME_CODE_HASH: Hex =
+  '0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131';
+
 export const ROBINHOOD_UNIVERSAL_ROUTER_V2_1_1: Hex =
   '0x8876789976dEcBfCbBbe364623C63652db8C0904';
 
@@ -15,6 +18,7 @@ export interface PonsV2V4ExitRecoveryAuthority {
   chainId: typeof ROBINHOOD_CHAIN_ID;
   fromBlock: bigint;
   permit2: Hex;
+  permit2RuntimeCodeHash: Hex;
   universalRouter: Hex;
   universalRouterVersion: '2.1.1';
   universalRouterRuntimeCodeHash: Hex;
@@ -26,6 +30,7 @@ Readonly<PonsV2V4ExitRecoveryAuthority> = Object.freeze({
   chainId: ROBINHOOD_CHAIN_ID,
   fromBlock: 18_127n,
   permit2: ROBINHOOD_PERMIT2,
+  permit2RuntimeCodeHash: ROBINHOOD_PERMIT2_RUNTIME_CODE_HASH,
   universalRouter: ROBINHOOD_UNIVERSAL_ROUTER_V2_1_1,
   universalRouterVersion: '2.1.1',
   universalRouterRuntimeCodeHash:
@@ -55,10 +60,12 @@ export function validatePonsV2V4ExitRecoveryAuthority(
       throw new Error(`PONS_E1_V4_RECOVERY_${label}_ADDRESS_INVALID`);
     }
   }
-  if (
-    !/^0x[0-9a-fA-F]{64}$/.test(authority.universalRouterRuntimeCodeHash) ||
-    /^0x0{64}$/i.test(authority.universalRouterRuntimeCodeHash)
-  ) {
-    throw new Error('PONS_E1_V4_RECOVERY_ROUTER_HASH_INVALID');
+  for (const [label, value] of [
+    ['PERMIT2', authority.permit2RuntimeCodeHash],
+    ['ROUTER', authority.universalRouterRuntimeCodeHash]
+  ] as const) {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(value) || /^0x0{64}$/i.test(value)) {
+      throw new Error(`PONS_E1_V4_RECOVERY_${label}_HASH_INVALID`);
+    }
   }
 }
