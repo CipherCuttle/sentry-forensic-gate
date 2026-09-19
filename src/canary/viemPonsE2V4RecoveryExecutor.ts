@@ -6,7 +6,7 @@ import {
   getAddress,
   http,
   keccak256,
-  parseTransaction
+  parseTransaction,
   recoverTransactionAddress,
   type Address,
   type Hex,
