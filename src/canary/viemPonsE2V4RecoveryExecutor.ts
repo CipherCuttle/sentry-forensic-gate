@@ -476,7 +476,7 @@ export class ViemPonsE2V4RecoveryExecutor {
         throw new Error('PONS_E2_CLEANUP_PERMIT2_RUNTIME_DRIFT');
       }
       const current = await this.getPermit2AllowanceToRouter(intent.token);
-      if (current.amount === 0n && current.expiration === 0n) {
+      if (!hasActivePonsE2Permit2Allowance(current.amount)) {
         throw new Error('PONS_E2_PERMIT2_REVOKE_NOT_REQUIRED');
       }
     } else {
@@ -581,4 +581,9 @@ function assertFeeAndGasCaps(
       `PONS_E2_PRIORITY_FEE_CAP_EXCEEDED:${maxPriorityFeePerGas}:${caps.maxPriorityFeePerGas}`
     );
   }
+}
+
+
+export function hasActivePonsE2Permit2Allowance(amount: bigint): boolean {
+  return amount !== 0n;
 }
