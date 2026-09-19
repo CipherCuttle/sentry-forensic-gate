@@ -163,20 +163,35 @@ state = await executeStep({
   includedStatus: 'TOKEN_APPROVAL_INCLUDED',
   hashField: 'tokenApprovalTransactionHash'
 });
-state = await executeStep({
-  intent: intents.permit2Approval,
-  signedStatus: 'PERMIT2_APPROVAL_SIGNED',
-  submittedStatus: 'PERMIT2_APPROVAL_SUBMITTED',
-  includedStatus: 'PERMIT2_APPROVAL_INCLUDED',
-  hashField: 'permit2ApprovalTransactionHash'
-});
-state = await executeStep({
-  intent: intents.exit,
-  signedStatus: 'EXIT_SIGNED',
-  submittedStatus: 'EXIT_SUBMITTED',
-  includedStatus: 'EXIT_INCLUDED',
-  hashField: 'exitTransactionHash'
-});
+try {
+  state = await executeStep({
+    intent: intents.permit2Approval,
+    signedStatus: 'PERMIT2_APPROVAL_SIGNED',
+    submittedStatus: 'PERMIT2_APPROVAL_SUBMITTED',
+    includedStatus: 'PERMIT2_APPROVAL_INCLUDED',
+    hashField: 'permit2ApprovalTransactionHash'
+  });
+} catch (error) {
+  if (state.status === 'TOKEN_APPROVAL_INCLUDED') {
+    await abortPreExitClean(error);
+  }
+  throw error;
+}
+
+try {
+  state = await executeStep({
+    intent: intents.exit,
+    signedStatus: 'EXIT_SIGNED',
+    submittedStatus: 'EXIT_SUBMITTED',
+    includedStatus: 'EXIT_INCLUDED',
+    hashField: 'exitTransactionHash'
+  });
+} catch (error) {
+  if (state.status === 'PERMIT2_APPROVAL_INCLUDED') {
+    await abortPreExitClean(error);
+  }
+  throw error;
+}
 
 const tokenAfterExit = await executor.getTokenBalance(token);
 if (tokenAfterExit !== 0n) {
@@ -244,6 +259,66 @@ console.log(JSON.stringify(jsonSafe({
   finalPermit2Expiration: permit2Final.expiration,
   stoppedAfterRecovery: true
 }), null, 2));
+
+async function abortPreExitClean(cause: unknown): Promise<never> {
+  if (
+    state.status !== 'TOKEN_APPROVAL_INCLUDED' &&
+    state.status !== 'PERMIT2_APPROVAL_INCLUDED'
+  ) {
+    throw cause;
+  }
+
+  const permit2Residual = await executor.getPermit2AllowanceToRouter(token);
+  if (hasActivePonsE2Permit2Allowance(permit2Residual.amount)) {
+    if (state.status !== 'PERMIT2_APPROVAL_INCLUDED') {
+      throw new Error(
+        `PONS_E2_UNEXPECTED_PERMIT2_AUTHORITY_BEFORE_APPROVAL:${permit2Residual.amount}`
+      );
+    }
+    state = await executeStep({
+      intent: intents.permit2Revoke,
+      signedStatus: 'PERMIT2_REVOKE_SIGNED',
+      submittedStatus: 'PERMIT2_REVOKE_SUBMITTED',
+      includedStatus: 'PERMIT2_REVOKE_INCLUDED',
+      hashField: 'permit2RevokeTransactionHash'
+    });
+  }
+
+  const tokenResidual = await executor.getTokenAllowanceToPermit2(token);
+  if (tokenResidual !== 0n) {
+    state = await executeStep({
+      intent: intents.tokenRevoke,
+      signedStatus: 'TOKEN_REVOKE_SIGNED',
+      submittedStatus: 'TOKEN_REVOKE_SUBMITTED',
+      includedStatus: 'TOKEN_REVOKE_INCLUDED',
+      hashField: 'tokenRevokeTransactionHash'
+    });
+  }
+
+  const [tokenAllowanceAfter, permit2After] = await Promise.all([
+    executor.getTokenAllowanceToPermit2(token),
+    executor.getPermit2AllowanceToRouter(token)
+  ]);
+  if (tokenAllowanceAfter !== 0n) {
+    throw new Error(
+      `PONS_E2_ABORT_CLEAN_TOKEN_ALLOWANCE_NOT_ZERO:${tokenAllowanceAfter}`
+    );
+  }
+  if (hasActivePonsE2Permit2Allowance(permit2After.amount)) {
+    throw new Error(
+      `PONS_E2_ABORT_CLEAN_PERMIT2_AUTHORITY_NOT_ZERO:${permit2After.amount}`
+    );
+  }
+
+  state = transitionPonsE2RecoveryState(
+    statePath,
+    state,
+    'ABORTED_CLEAN'
+  );
+
+  const message = cause instanceof Error ? cause.message : String(cause);
+  throw new Error(`PONS_E2_PRE_EXIT_ABORTED_CLEAN:${message}`);
+}
 
 async function executeStep(params: {
   intent: PonsE2RecoveryIntent;
