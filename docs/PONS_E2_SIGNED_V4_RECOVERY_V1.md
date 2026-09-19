@@ -168,6 +168,26 @@ E1:
 The address is used only as public balance and `eth_call` simulation context.
 No key or authorization from it is used.
 
+## Repository boundary integration
+
+The repository's global research-only rules continue to forbid wallet/signing
+authority outside `src/canary`.
+
+E2 extends the existing canary authority list with only:
+
+`src/canary/viemPonsE2V4RecoveryExecutor.ts`
+
+The dummy-key signer regression is the only JavaScript rule exception:
+
+`scripts/pons-e2-v4-recovery-check.mjs`
+
+That exception is itself checked by `scripts/canary-boundary-check.mjs`, which
+requires the fixed dummy key and dry-only evidence and rejects any
+`.broadcastExact(...)`, `PONS_E2_LIVE=true`, or
+`PONS_E2_BROADCAST_AUTHORITY=true` behavior in the test script.
+
+The global research-only TypeScript boundary is unchanged.
+
 ## Review closure
 
 One hostile review found:
