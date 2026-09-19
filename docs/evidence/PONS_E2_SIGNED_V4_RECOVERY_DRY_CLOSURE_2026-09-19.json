@@ -90,11 +90,22 @@
       }
     ],
     "targetedRereview": "PASS",
-    "remainingCriticalOrHigh": 0
+    "remainingCriticalOrHigh": 0,
+    "boundaryIntegrationNote": "Normal CI initially rejected the E2 dummy-key signer regression under the global research-only JavaScript rule. The repair did not relax research code: E2 executor authority was explicitly added to the existing canary boundary, and only the E2 signer regression script was narrowly exempted while canary-boundary-check enforces no broadcast/live behavior."
   },
   "nextBoundary": {
     "recommendedStage": "PONS_E3_E0_TO_E2_FAILOVER_INTEGRATION",
     "description": "Integrate curve exit first, then phase-2 V4 recovery fallback under one bounded state machine without granting live authority.",
     "liveRequirementBeforeAnyBroadcast": "fresh explicit owner authority"
+  },
+  "canaryBoundaryIntegration": {
+    "head": "e680d0c17c3200f9415922b133fb54400e2c0714",
+    "e2ExecutorAddedToAllowedCanaryAuthorityFiles": true,
+    "globalResearchOnlyTypescriptBoundaryUnchanged": true,
+    "javascriptException": "scripts/pons-e2-v4-recovery-check.mjs only",
+    "exceptionGuardedBy": "scripts/canary-boundary-check.mjs",
+    "signerRegressionUsesFixedDummyKeyOnly": true,
+    "signerRegressionBroadcastCallForbidden": true,
+    "signerRegressionLiveEnvForbidden": true
   }
 }
