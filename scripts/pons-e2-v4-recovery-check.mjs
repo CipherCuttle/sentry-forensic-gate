@@ -19,7 +19,8 @@ import {
   transitionPonsE2RecoveryState
 } from '../dist/canary/ponsE2RecoveryState.js';
 import {
-  assertSignedPonsE2Transaction
+  assertSignedPonsE2Transaction,
+  hasActivePonsE2Permit2Allowance
 } from '../dist/canary/viemPonsE2V4RecoveryExecutor.js';
 
 const PRIVATE_KEY =
@@ -58,6 +59,8 @@ assert.equal(intents.exit.tokenAmount, plan.tokenAmount);
 assert.equal(intents.exit.minNativeOut, plan.minNativeOut);
 assert.equal(intents.permit2Revoke.value, 0n);
 assert.equal(intents.tokenRevoke.value, 0n);
+assert.equal(hasActivePonsE2Permit2Allowance(1n), true);
+assert.equal(hasActivePonsE2Permit2Allowance(0n), false);
 
 for (const intent of Object.values(intents)) {
   assertPonsE2RecoveryIntentCalldata(intent);
@@ -239,6 +242,7 @@ console.log(JSON.stringify({
   nonterminalRestartFailsClosed: true,
   immutablePlanFields: true,
   cleanupIntentsPresent: true,
+  permit2AmountZeroMeansRevoked: true,
   broadcastPerformed: false,
   liveMoneyAuthority: false
 }, null, 2));
