@@ -36,6 +36,6 @@ jobs:
         env:
           PONS_E0_CANARY_ENABLED: "true"
           PONS_E0_WALLET: "0x9343835Fe138FFfF68293B361b3C69FEbd83C031"
-          PONS_E0_RPC_URL: "https://rpc.nodeflare.app/robinhood/public"
+          PONS_E0_RPC_URL: "https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public"
           PONS_E0_TOKEN: ${{ matrix.token }}
         run: pnpm start:pons-e0
