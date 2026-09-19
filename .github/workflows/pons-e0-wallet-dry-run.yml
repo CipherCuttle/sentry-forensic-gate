@@ -1,4 +1,4 @@
-name: PONS E0 provider-hotfix dry run
+name: PONS E0 provider-split dry run
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   dry-run:
-    name: provider-hotfix wallet dry run
+    name: provider-split wallet dry run
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,8 @@ jobs:
         env:
           PONS_E0_CANARY_ENABLED: "true"
           PONS_E0_WALLET: "0x9343835Fe138FFfF68293B361b3C69FEbd83C031"
-          PONS_E0_RPC_URL: "https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public"
+          PONS_E0_RPC_URL: "https://rpc.mainnet.chain.robinhood.com"
+          PONS_E0_ARCHIVE_RPC_URL: "https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public"
+          PONS_E0_LAUNCH_BLOCK: "66669956"
           PONS_E0_TOKEN: "0x991D1FEd9bd6aA28ce3Fc519ab265Fca68F9875c"
         run: node dist/canary/ponsE0Cli.js
