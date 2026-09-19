@@ -452,26 +452,49 @@ async function findRecentLaunch(
   expectedToken: Address
 ): Promise<NormalizedLaunchCandidate> {
   const head = await client.getBlockNumber();
-  const from = head > 30_000n ? head - 30_000n : CURRENT_PONS_V2_AUTHORITY.fromBlock;
-  const logs = await client.getLogs({
-    address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
-    event: ponsV2TokenLaunchedEvent,
-    args: { token: expectedToken },
-    fromBlock: from < CURRENT_PONS_V2_AUTHORITY.fromBlock ? CURRENT_PONS_V2_AUTHORITY.fromBlock : from,
-    toBlock: head,
-    strict: true
-  });
-  if (logs.length !== 1) {
-    throw new Error(`PONS_E0_RECENT_LAUNCH_CARDINALITY:${logs.length}`);
+  const requestedFrom = head > 30_000n ? head - 30_000n : CURRENT_PONS_V2_AUTHORITY.fromBlock;
+  const fromBlock = requestedFrom < CURRENT_PONS_V2_AUTHORITY.fromBlock
+    ? CURRENT_PONS_V2_AUTHORITY.fromBlock
+    : requestedFrom;
+  const logChunkSize = 2_000n;
+
+  let matchCount = 0;
+  let matchedBlockNumber: bigint | null = null;
+  let matchedLogIndex: number | null = null;
+
+  for (let chunkFrom = fromBlock; chunkFrom <= head; chunkFrom += logChunkSize) {
+    const chunkTo = chunkFrom + logChunkSize - 1n < head
+      ? chunkFrom + logChunkSize - 1n
+      : head;
+    const chunkLogs = await client.getLogs({
+      address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
+      event: ponsV2TokenLaunchedEvent,
+      args: { token: expectedToken },
+      fromBlock: chunkFrom,
+      toBlock: chunkTo,
+      strict: true
+    });
+    for (const log of chunkLogs) {
+      matchCount += 1;
+      if (log.blockNumber === null || log.logIndex === null) {
+        throw new Error('PONS_E0_RECENT_LAUNCH_IDENTITY_MISSING');
+      }
+      matchedBlockNumber = log.blockNumber;
+      matchedLogIndex = log.logIndex;
+    }
   }
-  const log = logs[0]!;
-  if (log.blockNumber === null || log.logIndex === null) {
+
+  if (matchCount !== 1) {
+    throw new Error(`PONS_E0_RECENT_LAUNCH_CARDINALITY:${matchCount}`);
+  }
+  if (matchedBlockNumber === null || matchedLogIndex === null) {
     throw new Error('PONS_E0_RECENT_LAUNCH_IDENTITY_MISSING');
   }
-  const launches = await adapter.catchUp(log.blockNumber, log.blockNumber);
+
+  const launches = await adapter.catchUp(matchedBlockNumber, matchedBlockNumber);
   const launch = launches.find((candidate) =>
     getAddress(candidate.token) === expectedToken &&
-    candidate.logIndex === log.logIndex
+    candidate.logIndex === matchedLogIndex
   );
   if (!launch) throw new Error('PONS_E0_LAUNCH_MATERIALIZATION_FAILED');
   return launch;
