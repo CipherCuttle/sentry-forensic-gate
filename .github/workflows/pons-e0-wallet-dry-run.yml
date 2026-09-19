@@ -1,0 +1,41 @@
+name: PONS E0 wallet dry run
+
+on:
+  push:
+    branches:
+      - ops/pons-e0-wallet-dry-run-20260919
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    name: dry-run ${{ matrix.token }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        token:
+          - "0xA4Fd0339b1e81a5CD6E702D29BDcc820918AB438"
+          - "0xD56127b7FfA74D66EAFeD11eb1e4b8ac585420Ea"
+          - "0x0479B65e1402ED3dA7b32FE5042CB92b0Ab2f893"
+          - "0x41635dbB97FBD864559c32387bcAeC6E74A39A71"
+          - "0xa607554295d2a2915705b909B4955A958691063E"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Wallet-specific Pons E0 dry run
+        env:
+          PONS_E0_CANARY_ENABLED: "true"
+          PONS_E0_WALLET: "0x9343835Fe138FFfF68293B361b3C69FEbd83C031"
+          PONS_E0_TOKEN: ${{ matrix.token }}
+        run: pnpm start:pons-e0
