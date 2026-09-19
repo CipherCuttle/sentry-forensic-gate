@@ -1,4 +1,4 @@
-name: PONS E0 wallet dry run
+name: PONS E0 provider-hotfix dry run
 
 on:
   push:
@@ -10,10 +10,12 @@ permissions:
 
 jobs:
   dry-run:
-    name: single wallet-specific dry run
+    name: provider-hotfix wallet dry run
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/pons-e0-provider-compat-hotfix-v1
       - uses: pnpm/action-setup@v4
         with:
           version: 10.15.0
@@ -22,10 +24,11 @@ jobs:
           node-version: 20
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm build
+      - run: pnpm ponse0check
       - name: Wallet-specific Pons E0 dry run
         env:
           PONS_E0_CANARY_ENABLED: "true"
           PONS_E0_WALLET: "0x9343835Fe138FFfF68293B361b3C69FEbd83C031"
-          PONS_E0_RPC_URL: "https://rpc.mainnet.chain.robinhood.com"
-          PONS_E0_TOKEN: "0x9edDE11f534Cd56eDAfE46B29fE33319726E9aE5"
-        run: pnpm start:pons-e0
+          PONS_E0_RPC_URL: "https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public"
+          PONS_E0_TOKEN: "0x991D1FEd9bd6aA28ce3Fc519ab265Fca68F9875c"
+        run: node dist/canary/ponsE0Cli.js
