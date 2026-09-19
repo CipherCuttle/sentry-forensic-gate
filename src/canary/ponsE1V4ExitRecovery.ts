@@ -184,6 +184,9 @@ export function buildPonsE1V4RecoveryPlan(
   if (minNativeOut <= 0n) {
     throw new Error('PONS_E1_V4_RECOVERY_MIN_NATIVE_OUT_ZERO');
   }
+  if (minNativeOut > UINT128_MAX) {
+    throw new Error('PONS_E1_V4_RECOVERY_MIN_NATIVE_OUT_UINT128_INVALID');
+  }
 
   const swapParam = encodeAbiParameters(
     [{
@@ -206,10 +209,6 @@ export function buildPonsE1V4RecoveryPlan(
       hookData: '0x'
     }]
   );
-
-  if (minNativeOut > UINT128_MAX) {
-    throw new Error('PONS_E1_V4_RECOVERY_MIN_NATIVE_OUT_UINT128_INVALID');
-  }
 
   const settleAllParam = encodeAbiParameters(
     [{ type: 'address' }, { type: 'uint256' }],
