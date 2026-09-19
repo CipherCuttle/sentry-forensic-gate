@@ -127,7 +127,7 @@ if (existing?.status === 'COMPLETED') {
 
 const launch = await findRecentLaunch(
   client,
-  archiveClient,
+  client,
   historicalLaunchAdapter,
   token,
   launchBlockHint
@@ -502,21 +502,21 @@ async function findRecentLaunch(
     }
   };
 
-  if (launchBlockHint !== null) {
-    if (launchBlockHint < fromBlock || launchBlockHint > head) {
-      throw new Error(
-        `PONS_E0_LAUNCH_BLOCK_HINT_OUTSIDE_RECENT_WINDOW:${launchBlockHint}:${fromBlock}:${head}`
-      );
-    }
-    await readRange(launchBlockHint, launchBlockHint);
-  } else {
-    const logChunkSize = 2_000n;
-    for (let chunkFrom = fromBlock; chunkFrom <= head; chunkFrom += logChunkSize) {
-      const chunkTo = chunkFrom + logChunkSize - 1n < head
-        ? chunkFrom + logChunkSize - 1n
-        : head;
-      await readRange(chunkFrom, chunkTo);
-    }
+  if (
+    launchBlockHint !== null &&
+    (launchBlockHint < fromBlock || launchBlockHint > head)
+  ) {
+    throw new Error(
+      `PONS_E0_LAUNCH_BLOCK_HINT_OUTSIDE_RECENT_WINDOW:${launchBlockHint}:${fromBlock}:${head}`
+    );
+  }
+
+  const logChunkSize = 2_000n;
+  for (let chunkFrom = fromBlock; chunkFrom <= head; chunkFrom += logChunkSize) {
+    const chunkTo = chunkFrom + logChunkSize - 1n < head
+      ? chunkFrom + logChunkSize - 1n
+      : head;
+    await readRange(chunkFrom, chunkTo);
   }
 
   if (matchCount !== 1) {
@@ -524,6 +524,11 @@ async function findRecentLaunch(
   }
   if (matchedBlockNumber === null || matchedLogIndex === null) {
     throw new Error('PONS_E0_RECENT_LAUNCH_IDENTITY_MISSING');
+  }
+  if (launchBlockHint !== null && matchedBlockNumber !== launchBlockHint) {
+    throw new Error(
+      `PONS_E0_LAUNCH_BLOCK_HINT_MISMATCH:${launchBlockHint}:${matchedBlockNumber}`
+    );
   }
 
   const launches = await adapter.catchUp(matchedBlockNumber, matchedBlockNumber);
