@@ -204,7 +204,7 @@ state = transitionPonsE2RecoveryState(statePath, state, 'COMPLETED');
 assert.equal(readPonsE2RecoveryState(statePath)?.status, 'COMPLETED');
 assert.throws(
   () => assertPonsE2StateMayStart(state),
-  /PONS_E2_ALREADY_COMPLETED_USE_NEW_STATE_PATH/
+  /PONS_E2_TERMINAL_STATE_USE_NEW_STATE_PATH:COMPLETED/
 );
 
 const statePath2 = path.join(dir, 'nonterminal.json');
@@ -231,6 +231,60 @@ assert.throws(
   /PONS_E2_STATE_IMMUTABLE_FIELD_DRIFT/
 );
 
+
+const statePath3 = path.join(dir, 'abort-clean.json');
+let abortState = reservePonsE2RecoveryState(statePath3, {
+  token: TOKEN,
+  wallet: account.address,
+  poolId: POOL_ID,
+  tokenAmount: plan.tokenAmount.toString(),
+  minNativeOut: plan.minNativeOut.toString(),
+  deadline: plan.deadline.toString(),
+  permit2Expiration: plan.permit2Expiration.toString()
+});
+abortState = transitionPonsE2RecoveryState(
+  statePath3,
+  abortState,
+  'TOKEN_APPROVAL_SIGNED',
+  { latestTransactionHash: h1, tokenApprovalTransactionHash: h1 }
+);
+abortState = transitionPonsE2RecoveryState(
+  statePath3,
+  abortState,
+  'TOKEN_APPROVAL_SUBMITTED'
+);
+abortState = transitionPonsE2RecoveryState(
+  statePath3,
+  abortState,
+  'TOKEN_APPROVAL_INCLUDED'
+);
+abortState = transitionPonsE2RecoveryState(
+  statePath3,
+  abortState,
+  'TOKEN_REVOKE_SIGNED',
+  { latestTransactionHash: h2, tokenRevokeTransactionHash: h2 }
+);
+abortState = transitionPonsE2RecoveryState(
+  statePath3,
+  abortState,
+  'TOKEN_REVOKE_SUBMITTED'
+);
+abortState = transitionPonsE2RecoveryState(
+  statePath3,
+  abortState,
+  'TOKEN_REVOKE_INCLUDED'
+);
+abortState = transitionPonsE2RecoveryState(
+  statePath3,
+  abortState,
+  'ABORTED_CLEAN'
+);
+assert.equal(abortState.status, 'ABORTED_CLEAN');
+assert.throws(
+  () => assertPonsE2StateMayStart(abortState),
+  /PONS_E2_TERMINAL_STATE_USE_NEW_STATE_PATH:ABORTED_CLEAN/
+);
+
 console.log(JSON.stringify({
   verdict: 'PONS_E2_V4_RECOVERY_OFFLINE_PASS',
   exactTokenApproval: true,
@@ -240,6 +294,7 @@ console.log(JSON.stringify({
   zeroPriorityFeeNormalization: true,
   crashSafeAtomicReservation: true,
   nonterminalRestartFailsClosed: true,
+  safePreExitAbortCleanupState: true,
   immutablePlanFields: true,
   cleanupIntentsPresent: true,
   permit2AmountZeroMeansRevoked: true,
