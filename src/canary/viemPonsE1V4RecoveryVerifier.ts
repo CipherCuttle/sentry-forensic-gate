@@ -22,10 +22,15 @@ import {
   ROBINHOOD_EXPLORER_URL,
   ponsV2CurveStateReadAbi,
   ponsV2FactoryReadAbi,
+  ponsV2LaunchDeployerReadAbi,
   ponsV2MemeHookReadAbi,
   uniswapV4QuoterReadAbi,
   uniswapV4StateViewReadAbi
 } from '../adapters/robinhood/ponsV2/contracts.js';
+import {
+  CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
+  assertPonsV2CurveTemplateBlock
+} from '../adapters/robinhood/ponsV2/curveTemplateAuthority.js';
 import {
   CURRENT_PONS_V2_FORWARD_OUTCOME_AUTHORITY,
   assertPonsV2ForwardOutcomeBlock
@@ -169,6 +174,10 @@ export async function verifyPonsE1V4Recovery(
     throw new Error('PONS_E1_V4_RECOVERY_CHAIN_ID_MISMATCH');
   }
   assertPonsV2AuthorityBlock(CURRENT_PONS_V2_AUTHORITY, blockNumber);
+  assertPonsV2CurveTemplateBlock(
+    CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
+    blockNumber
+  );
   assertPonsV2ForwardOutcomeBlock(
     CURRENT_PONS_V2_FORWARD_OUTCOME_AUTHORITY,
     blockNumber
@@ -420,10 +429,22 @@ async function assertRuntimeAuthorities(
   const recovery = CURRENT_PONS_V2_V4_EXIT_RECOVERY_AUTHORITY;
   const outcome = CURRENT_PONS_V2_FORWARD_OUTCOME_AUTHORITY;
   const usd = CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY;
-  const [factoryCode, routerCode, permit2Code, hookCode, poolManagerCode, stateViewCode, quoterCode] =
-    await Promise.all([
+  const [
+    factoryCode,
+    launchDeployerCode,
+    routerCode,
+    permit2Code,
+    hookCode,
+    poolManagerCode,
+    stateViewCode,
+    quoterCode
+  ] = await Promise.all([
       client.getBytecode({
         address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
+        blockNumber
+      }),
+      client.getBytecode({
+        address: CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY.launchDeployer as Address,
         blockNumber
       }),
       client.getBytecode({ address: recovery.universalRouter as Address, blockNumber }),
@@ -434,6 +455,11 @@ async function assertRuntimeAuthorities(
       client.getBytecode({ address: usd.quoter as Address, blockNumber })
     ]);
   assertCodeHash('FACTORY', factoryCode, CURRENT_PONS_V2_AUTHORITY.factoryRuntimeCodeHash);
+  assertCodeHash(
+    'LAUNCH_DEPLOYER',
+    launchDeployerCode,
+    CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY.launchDeployerRuntimeCodeHash
+  );
   assertCodeHash('ROUTER', routerCode, recovery.universalRouterRuntimeCodeHash);
   assertCodeHash('PERMIT2', permit2Code, recovery.permit2RuntimeCodeHash);
   assertCodeHash('MEME_HOOK', hookCode, outcome.memeHookRuntimeCodeHash);
@@ -441,7 +467,52 @@ async function assertRuntimeAuthorities(
   assertCodeHash('STATE_VIEW', stateViewCode, usd.stateViewRuntimeCodeHash);
   assertCodeHash('QUOTER', quoterCode, usd.quoterRuntimeCodeHash);
 
-  const [routerPoolManager, quoterPoolManager] = await Promise.all([
+  const [
+    factoryLaunchDeployer,
+    factoryHook,
+    factoryPoolManager,
+    launchDeployerFactory,
+    hookFactory,
+    hookPoolManager,
+    routerPoolManager,
+    quoterPoolManager
+  ] = await Promise.all([
+    client.readContract({
+      address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
+      abi: ponsV2FactoryReadAbi,
+      functionName: 'launchDeployer',
+      blockNumber
+    }),
+    client.readContract({
+      address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
+      abi: ponsV2FactoryReadAbi,
+      functionName: 'memeHook',
+      blockNumber
+    }),
+    client.readContract({
+      address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
+      abi: ponsV2FactoryReadAbi,
+      functionName: 'poolManager',
+      blockNumber
+    }),
+    client.readContract({
+      address: CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY.launchDeployer as Address,
+      abi: ponsV2LaunchDeployerReadAbi,
+      functionName: 'factory',
+      blockNumber
+    }),
+    client.readContract({
+      address: outcome.memeHook as Address,
+      abi: ponsV2MemeHookReadAbi,
+      functionName: 'factory',
+      blockNumber
+    }),
+    client.readContract({
+      address: outcome.memeHook as Address,
+      abi: ponsV2MemeHookReadAbi,
+      functionName: 'poolManager',
+      blockNumber
+    }),
     client.readContract({
       address: recovery.universalRouter as Address,
       abi: universalRouterReadAbi,
@@ -455,11 +526,36 @@ async function assertRuntimeAuthorities(
       blockNumber
     })
   ]);
-  if (getAddress(routerPoolManager as Address) !== getAddress(usd.poolManager)) {
-    throw new Error('PONS_E1_V4_RECOVERY_ROUTER_POOL_MANAGER_DRIFT');
+  if (
+    getAddress(factoryLaunchDeployer as Address) !==
+    getAddress(CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY.launchDeployer)
+  ) {
+    throw new Error('PONS_E1_V4_RECOVERY_FACTORY_LAUNCH_DEPLOYER_DRIFT');
   }
-  if (getAddress(quoterPoolManager as Address) !== getAddress(usd.poolManager)) {
-    throw new Error('PONS_E1_V4_RECOVERY_QUOTER_POOL_MANAGER_DRIFT');
+  if (
+    getAddress(launchDeployerFactory as Address) !==
+    getAddress(CURRENT_PONS_V2_AUTHORITY.factory)
+  ) {
+    throw new Error('PONS_E1_V4_RECOVERY_LAUNCH_DEPLOYER_FACTORY_DRIFT');
+  }
+  if (getAddress(factoryHook as Address) !== getAddress(outcome.memeHook)) {
+    throw new Error('PONS_E1_V4_RECOVERY_FACTORY_HOOK_DRIFT');
+  }
+  if (
+    getAddress(hookFactory as Address) !==
+    getAddress(CURRENT_PONS_V2_AUTHORITY.factory)
+  ) {
+    throw new Error('PONS_E1_V4_RECOVERY_HOOK_FACTORY_DRIFT');
+  }
+  for (const [label, actual] of [
+    ['FACTORY', factoryPoolManager],
+    ['HOOK', hookPoolManager],
+    ['ROUTER', routerPoolManager],
+    ['QUOTER', quoterPoolManager]
+  ] as const) {
+    if (getAddress(actual as Address) !== getAddress(usd.poolManager)) {
+      throw new Error(`PONS_E1_V4_RECOVERY_${label}_POOL_MANAGER_DRIFT`);
+    }
   }
 }
 
