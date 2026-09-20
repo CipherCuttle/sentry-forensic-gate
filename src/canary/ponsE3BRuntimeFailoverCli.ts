@@ -94,7 +94,14 @@ let runtimeState = reservePonsE3BRuntimeState(statePath, {
   e0BuyTransactionHash: e0.buyTransactionHash
 });
 
-const head = await client.getBlockNumber();
+const currentHead = await client.getBlockNumber();
+const replayBlock = envOptionalBigInt('PONS_E3B_OBSERVATION_BLOCK');
+if (replayBlock !== null && replayBlock > currentHead) {
+  throw new Error(
+    `PONS_E3B_OBSERVATION_BLOCK_IN_FUTURE:${replayBlock}:${currentHead}`
+  );
+}
+const head = replayBlock ?? currentHead;
 const block = await client.getBlock({ blockNumber: head });
 if (!block.hash) throw new Error('PONS_E3B_BLOCK_HASH_MISSING');
 
@@ -461,6 +468,15 @@ function printAndExit(payload: Record<string, unknown>, code: number): never {
     autoRetryAllowed: false
   }), null, 2));
   process.exit(code);
+}
+
+function envOptionalBigInt(name: string): bigint | null {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return null;
+  if (!/^[0-9]+$/.test(raw)) {
+    throw new Error(`PONS_E3B_ENV_BIGINT_INVALID:${name}`);
+  }
+  return BigInt(raw);
 }
 
 function envInt(name: string, fallback: number): number {
