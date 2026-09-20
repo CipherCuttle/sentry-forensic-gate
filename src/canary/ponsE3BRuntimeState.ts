@@ -23,6 +23,7 @@ export interface PonsE3BRuntimeState {
   tokenAmount: string;
   e0Status: 'BUY_INCLUDED' | 'APPROVAL_INCLUDED';
   e0TransactionHash: string;
+  e0BuyTransactionHash: string;
   latestTransactionHash?: string;
   curveRevokeTransactionHash?: string;
   reason?: string;
@@ -106,7 +107,8 @@ export function transitionPonsE3BRuntimeState(
     'curve',
     'tokenAmount',
     'e0Status',
-    'e0TransactionHash'
+    'e0TransactionHash',
+    'e0BuyTransactionHash'
   ] as const) {
     if (patch[key] !== undefined && patch[key] !== current[key]) {
       throw new Error(`PONS_E3B_STATE_IMMUTABLE_FIELD_DRIFT:${key}`);
@@ -151,7 +153,7 @@ function assertState(state: PonsE3BRuntimeState): void {
   if (state.e0Status !== 'BUY_INCLUDED' && state.e0Status !== 'APPROVAL_INCLUDED') {
     throw new Error(`PONS_E3B_E0_STATUS_INVALID:${String(state.e0Status)}`);
   }
-  for (const key of ['token', 'wallet', 'curve', 'tokenAmount', 'e0TransactionHash'] as const) {
+  for (const key of ['token', 'wallet', 'curve', 'tokenAmount', 'e0TransactionHash', 'e0BuyTransactionHash'] as const) {
     if (typeof state[key] !== 'string' || state[key].length === 0) {
       throw new Error(`PONS_E3B_STATE_FIELD_INVALID:${key}`);
     }
