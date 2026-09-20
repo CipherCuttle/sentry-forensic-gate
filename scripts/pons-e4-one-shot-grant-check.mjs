@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   assertPonsE4RecoveryGrant,
   assertPonsE4V4OldCurveAuthorityCleared,
+  computePonsE4ExecutionSurfaceDigest,
   consumePonsE4EntryGrant,
   getPonsE4ConsumedReceiptPath
 } from '../dist/canary/ponsE4OneShotGrant.js';
@@ -18,7 +19,9 @@ const BUY_HASH =
   '0x5555555555555555555555555555555555555555555555555555555555555555';
 const TOKEN_AMOUNT = 123_456_789n;
 const CODE_HEAD = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-const IDENTITY = { codeHead: CODE_HEAD, treeClean: true };
+const SURFACE_DIGEST = computePonsE4ExecutionSurfaceDigest();
+assert.match(SURFACE_DIGEST, /^0x[0-9a-f]{64}$/);
+const IDENTITY = { executionSurfaceDigestSha256: SURFACE_DIGEST };
 const NOW = 2_000_000_100;
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pons-e4-grant-'));
 
@@ -39,6 +42,7 @@ function grantObject(overrides = {}) {
     entryNotAfterEpochS: 2_000_000_600,
     recoveryNotAfterEpochS: 2_000_003_600,
     codeHead: CODE_HEAD,
+    executionSurfaceDigestSha256: SURFACE_DIGEST,
     e0StatePath: statePath,
     permissions: [
       'E0_BUY',
@@ -238,41 +242,24 @@ assert.throws(
   /PONS_E4_GRANT_QUOTE_IN_EXCEEDS_CAP/
 );
 
-const wrongHead = writeGrant('wrong-head');
+const wrongDigest = writeGrant('wrong-digest', {
+  executionSurfaceDigestSha256:
+    '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+});
 assert.throws(
   () =>
     consumePonsE4EntryGrant({
-      grantPath: wrongHead.file,
+      grantPath: wrongDigest.file,
       expectedToken: TOKEN,
       expectedWallet: WALLET,
       expectedNotionalUsdMicros: 1_000_000n,
       expectedSlippageBps: 500,
       actualQuoteInWei: 500_000_000_000_000n,
-      expectedE0StatePath: wrongHead.grant.e0StatePath,
+      expectedE0StatePath: wrongDigest.grant.e0StatePath,
       currentEpochS: NOW,
-      runtimeIdentity: {
-        codeHead: 'cccccccccccccccccccccccccccccccccccccccc',
-        treeClean: true
-      }
+      runtimeIdentity: IDENTITY
     }),
-  /PONS_E4_RUNTIME_CODE_HEAD_MISMATCH/
-);
-
-const dirtyTree = writeGrant('dirty-tree');
-assert.throws(
-  () =>
-    consumePonsE4EntryGrant({
-      grantPath: dirtyTree.file,
-      expectedToken: TOKEN,
-      expectedWallet: WALLET,
-      expectedNotionalUsdMicros: 1_000_000n,
-      expectedSlippageBps: 500,
-      actualQuoteInWei: 500_000_000_000_000n,
-      expectedE0StatePath: dirtyTree.grant.e0StatePath,
-      currentEpochS: NOW,
-      runtimeIdentity: { codeHead: CODE_HEAD, treeClean: false }
-    }),
-  /PONS_E4_RUNTIME_WORKTREE_NOT_CLEAN/
+  /PONS_E4_RUNTIME_EXECUTION_SURFACE_DIGEST_MISMATCH/
 );
 
 const expiredEntry = writeGrant('expired-entry', {
@@ -341,8 +328,8 @@ console.log(JSON.stringify({
   verdict: 'PONS_E4_ONE_SHOT_GRANT_OFFLINE_PASS',
   exactOneDollarNotional: true,
   exactTokenAndWalletBinding: true,
-  exactCodeHeadBinding: true,
-  cleanWorktreeRequired: true,
+  exactCodeHeadRecorded: true,
+  compiledExecutionSurfaceDigestBinding: true,
   quoteInCapEnforced: true,
   entryWindowBounded: true,
   recoveryWindowBounded: true,
