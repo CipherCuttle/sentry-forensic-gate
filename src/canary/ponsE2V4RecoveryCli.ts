@@ -152,6 +152,14 @@ const verification = await verifyPonsE1V4Recovery({
   slippageBps,
   client
 });
+if (verification.tokenBalance !== e4Grant.e0Operation.tokensOwned) {
+  throw new Error(
+    `PONS_E4_E2_RECOVERY_TOKEN_AMOUNT_MISMATCH:${verification.tokenBalance}:${e4Grant.e0Operation.tokensOwned}`
+  );
+}
+if (getAddress(verification.curve) !== getAddress(e4Grant.e0Operation.curve)) {
+  throw new Error('PONS_E4_E2_RECOVERY_CURVE_MISMATCH');
+}
 const intents = buildPonsE2RecoveryIntents({
   plan: verification.plan,
   poolId: verification.poolId
