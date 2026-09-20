@@ -108,6 +108,15 @@ export class ViemPonsE3BCurveCleanupExecutor {
     });
   }
 
+  async getTokenBalance(token: Address): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: token,
+      abi: ponsE0TokenAbi,
+      functionName: 'balanceOf',
+      args: [this.walletAddress]
+    });
+  }
+
   async preflight(
     intent: PonsE3BCurveRevokeIntent
   ): Promise<PonsE3BCleanupPreflight> {
