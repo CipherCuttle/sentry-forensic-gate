@@ -69,6 +69,7 @@ export function decidePonsE3PostBuyExit(params: {
   token: Address;
   owner: Address;
   postBuyTokenBalance: bigint;
+  e0CurveAllowance: bigint;
   curveExit: PonsE3CurveExitObservation;
   v4Recovery?: PonsE3V4RecoveryProof;
 }): PonsE3FailoverDecision {
@@ -103,12 +104,25 @@ export function decidePonsE3PostBuyExit(params: {
     };
   }
 
+  if (params.e0CurveAllowance < 0n) {
+    return stop(token, owner, tokenAmount, 'PONS_E3_E0_CURVE_ALLOWANCE_INVALID');
+  }
+
   if (params.curveExit.status === 'ERROR') {
     return stop(
       token,
       owner,
       tokenAmount,
       `PONS_E3_CURVE_EXIT_ERROR_FAIL_CLOSED:${params.curveExit.reason}`
+    );
+  }
+
+  if (params.e0CurveAllowance !== 0n) {
+    return stop(
+      token,
+      owner,
+      tokenAmount,
+      'PONS_E3_RESIDUAL_CURVE_ALLOWANCE_REQUIRES_CLEANUP'
     );
   }
 
