@@ -200,6 +200,22 @@ assert.throws(
   () => transitionPonsE3BRuntimeState(statePath, state, 'V4_HANDOFF_READY'),
   /PONS_E3B_STATE_TRANSITION_INVALID/
 );
+state = transitionPonsE3BRuntimeState(
+  statePath,
+  state,
+  'CURVE_REVOKE_SUBMITTED',
+  { latestTransactionHash: TX_HASH }
+);
+state = transitionPonsE3BRuntimeState(
+  statePath,
+  state,
+  'CURVE_REVOKE_INCLUDED',
+  { latestTransactionHash: TX_HASH }
+);
+assert.throws(
+  () => transitionPonsE3BRuntimeState(statePath, state, 'V4_HANDOFF_READY'),
+  /PONS_E3B_STATE_TRANSITION_INVALID/
+);
 
 console.log(JSON.stringify({
   verdict: 'PONS_E3B_RUNTIME_FAILOVER_OFFLINE_PASS',
@@ -211,6 +227,7 @@ console.log(JSON.stringify({
   v4HandoffRequiresSharedBlockHash: true,
   stateReservationIsExclusive: true,
   signedCleanupCannotSkipSubmissionAndInclusion: true,
+  includedCleanupRequiresNewProofCycle: true,
   autoRetryAllowed: false,
   liveMoneyAuthority: false,
   signingAuthority: false,
