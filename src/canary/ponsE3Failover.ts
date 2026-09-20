@@ -30,6 +30,9 @@ export interface PonsE3V4RecoveryProof {
   token: Address;
   owner: Address;
   tokenBalance: bigint;
+  blockNumber: bigint;
+  blockHash: Hex;
+  curveAllowanceBlockHash: Hex;
   poolId: Hex;
   currentTokenAllowanceToPermit2: bigint;
   currentPermit2AllowanceToRouter: bigint;
@@ -132,6 +135,9 @@ export function decidePonsE3PostBuyExit(params: {
   }
   if (proof.verdict !== 'PONS_E1_V4_EXIT_RECOVERY_DRY_READY') {
     return stop(token, owner, tokenAmount, 'PONS_E3_V4_RECOVERY_VERDICT_INVALID');
+  }
+  if (proof.blockHash.toLowerCase() !== proof.curveAllowanceBlockHash.toLowerCase()) {
+    return stop(token, owner, tokenAmount, 'PONS_E3_V4_RECOVERY_BLOCK_HASH_DRIFT');
   }
   if (getAddress(proof.token) !== token) {
     return stop(token, owner, tokenAmount, 'PONS_E3_V4_RECOVERY_TOKEN_MISMATCH');
