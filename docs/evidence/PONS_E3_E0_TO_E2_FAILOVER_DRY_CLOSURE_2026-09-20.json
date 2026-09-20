@@ -1,0 +1,114 @@
+{
+  "schema": "sentry.pons-e3-e0-to-e2-failover-dry-closure/1.0",
+  "stage": "PONS_E3_E0_TO_E2_FAILOVER_V1",
+  "status": "CLOSED_PASS_DRY_AUTHORITY_LAYER",
+  "closureDate": "2026-09-20",
+  "baseHead": "faab7e8c342719fde550c288c5d557baab771f1f",
+  "implementationHead": "f33cf77e50e34bc4e7e9af76c2f775019c1e0504",
+  "closureDocHead": "2283835af16162314fe2a9824d815d095655d9db",
+  "authority": {
+    "liveMoneyAuthority": false,
+    "signingAuthority": false,
+    "broadcastAuthority": false,
+    "privateKeyUsed": false,
+    "realTransactionSigned": false,
+    "realTransactionBroadcast": false
+  },
+  "scope": {
+    "curveExitPriority": true,
+    "partialCurveExitAllowed": false,
+    "v4FallbackRequiresExactE1Proof": true,
+    "v4FallbackRequiresExactPostBuyBalance": true,
+    "v4FallbackRequiresZeroE0CurveAllowance": true,
+    "v4FallbackRequiresZeroPermit2SideAuthority": true,
+    "v4FallbackConstructsExactE2Intents": true,
+    "arbitraryCurveErrorsTriggerV4": false,
+    "liveE0ToE2RuntimeWiring": false
+  },
+  "failClosedStops": [
+    "PONS_E3_POST_BUY_TOKEN_BALANCE_NOT_POSITIVE",
+    "PONS_E3_CURVE_EXIT_NOT_FULL_BALANCE",
+    "PONS_E3_CURVE_EXIT_QUOTE_INVALID",
+    "PONS_E3_CURVE_EXIT_ERROR_FAIL_CLOSED",
+    "PONS_E3_RESIDUAL_CURVE_ALLOWANCE_REQUIRES_CLEANUP",
+    "PONS_E3_V4_RECOVERY_PROOF_MISSING",
+    "PONS_E3_V4_RECOVERY_BLOCK_HASH_DRIFT",
+    "PONS_E3_V4_RECOVERY_TOKEN_MISMATCH",
+    "PONS_E3_V4_RECOVERY_OWNER_MISMATCH",
+    "PONS_E3_V4_RECOVERY_BALANCE_DRIFT",
+    "PONS_E3_V4_RECOVERY_PLAN_IDENTITY_DRIFT",
+    "PONS_E3_V4_RECOVERY_DIRTY_PREEXISTING_AUTHORITY",
+    "PONS_E3_V4_RECOVERY_INTENT_AMOUNT_DRIFT"
+  ],
+  "realChainDryVerification": {
+    "verdict": "PONS_E3_FAILOVER_DRY_READY",
+    "mode": "DRY_RUN_NO_SIGNER",
+    "route": "V4_RECOVERY",
+    "token": "0x8ECD7b553E36248164616c271B4B3C171bC8226b",
+    "ownerContext": "0xE152cd6ab035c0a8b7D8147373dd201579873a41",
+    "ownerContextUse": "public read-only balance, allowance and eth_call context only",
+    "tokenBalance": "3975359897761331367429707",
+    "poolId": "0x07ec2169905bb540d5cb43c03160269628d8791ba6746108333a20609204ddf4",
+    "minimumNativeOutWei": "3831337779631528",
+    "signerAvailable": false,
+    "broadcastAvailable": false,
+    "liveMoneyAuthority": false
+  },
+  "offlineVerification": {
+    "curveExitPreferredWhenExecutable": true,
+    "v4RequiresExactE1Proof": true,
+    "v4RequiresExactPostBuyBalance": true,
+    "v4ProofAndCurveAllowanceShareBlockHash": true,
+    "v4RequiresCleanRecoveryAuthority": true,
+    "residualE0CurveAllowanceBlocksV4": true,
+    "arbitraryCurveErrorsFailClosed": true,
+    "partialCurveExitForbidden": true
+  },
+  "verificationRuns": {
+    "e3Readiness": {
+      "runId": 35513119960,
+      "conclusion": "success"
+    },
+    "normalCi": {
+      "runId": 35513119940,
+      "conclusion": "success"
+    },
+    "e0ReadinessRegression": {
+      "runId": 35513119943,
+      "conclusion": "success"
+    },
+    "e1ReadinessRegression": {
+      "runId": 35513119979,
+      "conclusion": "success"
+    },
+    "e2ReadinessRegression": {
+      "runId": 35513119977,
+      "conclusion": "success"
+    },
+    "canarySniperRegression": {
+      "runId": 35513119925,
+      "conclusion": "success"
+    }
+  },
+  "hostileReview": {
+    "criticalFindings": 0,
+    "highFindings": 2,
+    "findings": [
+      {
+        "finding": "Graduation after E0 curve approval could permit V4 recovery while leaving token-to-curve spend authority behind.",
+        "repair": "Read and bind E0 token-to-curve allowance; V4 fallback requires it to equal zero."
+      },
+      {
+        "finding": "The new curve-allowance read was initially pinned only by block number, permitting mixed proof state across a reorg.",
+        "repair": "Re-read the verification block after the allowance observation and require the block hash to equal E1's frozen hash."
+      }
+    ],
+    "remainingCriticalOrHigh": 0,
+    "reviewLoopPolicy": "One bounded hostile-review cycle; adjacent repair was resolved inside the targeted rereview without opening another review loop."
+  },
+  "nextBoundary": {
+    "recommendedStage": "PONS_E3B_RUNTIME_FAILOVER_WIRING",
+    "description": "Wire the proven E3 decision layer into E0 post-BUY state, preserve crash-safe E0-to-E2 handoff state, and add a separately reviewed exact old-curve allowance cleanup path while remaining live-disabled.",
+    "liveRequirementBeforeAnyBroadcast": "fresh explicit owner authority"
+  }
+}
