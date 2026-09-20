@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { getAddress, type Address } from 'viem';
 import { ROBINHOOD_CHAIN_ID } from '../adapters/robinhood/ponsV2/contracts.js';
 
@@ -27,6 +26,28 @@ const MAX_ENTRY_WINDOW_S = 30 * 60;
 const MAX_RECOVERY_WINDOW_S = 24 * 60 * 60;
 const ABSOLUTE_MAX_QUOTE_IN_WEI = 10_000_000_000_000_000n;
 
+export const PONS_E4_EXECUTION_SURFACE_FILES = Object.freeze([
+  'dist/canary/ponsE4OneShotGrant.js',
+  'dist/canary/ponsE0Cli.js',
+  'dist/canary/ponsE0Intent.js',
+  'dist/canary/ponsE0Contracts.js',
+  'dist/canary/viemPonsE0CanaryExecutor.js',
+  'dist/canary/ponsE3BRuntimeFailover.js',
+  'dist/canary/ponsE3BRuntimeState.js',
+  'dist/canary/ponsE3BCurveCleanupCli.js',
+  'dist/canary/viemPonsE3BCurveCleanupExecutor.js',
+  'dist/canary/ponsE2V4RecoveryCli.js',
+  'dist/canary/ponsE2V4RecoveryIntent.js',
+  'dist/canary/ponsE2RecoveryState.js',
+  'dist/canary/viemPonsE2V4RecoveryExecutor.js',
+  'dist/canary/ponsE1V4ExitRecovery.js',
+  'dist/canary/viemPonsE1V4RecoveryVerifier.js',
+  'dist/adapters/robinhood/ponsV2/authority.js',
+  'dist/adapters/robinhood/ponsV2/contracts.js',
+  'dist/adapters/robinhood/ponsV2/curveTemplateAuthority.js',
+  'package.json'
+] as const);
+
 export interface PonsE4Grant {
   version: typeof PONS_E4_GRANT_VERSION;
   purpose: typeof PONS_E4_GRANT_PURPOSE;
@@ -41,6 +62,7 @@ export interface PonsE4Grant {
   entryNotAfterEpochS: number;
   recoveryNotAfterEpochS: number;
   codeHead: string;
+  executionSurfaceDigestSha256: string;
   e0StatePath: string;
   permissions: readonly PonsE4Permission[];
 }
@@ -62,13 +84,13 @@ export interface PonsE4ConsumedReceipt {
   token: Address;
   wallet: Address;
   codeHead: string;
+  executionSurfaceDigestSha256: string;
   e0StatePath: string;
   consumedAtEpochS: number;
 }
 
 export interface PonsE4RuntimeIdentityOverride {
-  codeHead: string;
-  treeClean: boolean;
+  executionSurfaceDigestSha256: string;
 }
 
 export function consumePonsE4EntryGrant(params: {
@@ -130,6 +152,7 @@ export function consumePonsE4EntryGrant(params: {
     token: loaded.grant.token,
     wallet: loaded.grant.wallet,
     codeHead: loaded.grant.codeHead,
+    executionSurfaceDigestSha256: loaded.grant.executionSurfaceDigestSha256,
     e0StatePath: path.resolve(loaded.grant.e0StatePath),
     consumedAtEpochS: now
   };
@@ -225,6 +248,12 @@ export function assertPonsE4RecoveryGrant(params: {
     throw new Error('PONS_E4_CONSUMED_CODE_HEAD_MISMATCH');
   }
   if (
+    receipt.executionSurfaceDigestSha256 !==
+    loaded.grant.executionSurfaceDigestSha256
+  ) {
+    throw new Error('PONS_E4_CONSUMED_EXECUTION_SURFACE_DIGEST_MISMATCH');
+  }
+  if (
     path.resolve(receipt.e0StatePath) !==
     path.resolve(loaded.grant.e0StatePath)
   ) {
@@ -300,12 +329,12 @@ function assertGrantCommon(
   grant: PonsE4Grant,
   identity: PonsE4RuntimeIdentityOverride
 ): void {
-  if (!identity.treeClean) {
-    throw new Error('PONS_E4_RUNTIME_WORKTREE_NOT_CLEAN');
-  }
-  if (grant.codeHead !== identity.codeHead) {
+  if (
+    grant.executionSurfaceDigestSha256 !==
+    identity.executionSurfaceDigestSha256
+  ) {
     throw new Error(
-      `PONS_E4_RUNTIME_CODE_HEAD_MISMATCH:${identity.codeHead}:${grant.codeHead}`
+      `PONS_E4_RUNTIME_EXECUTION_SURFACE_DIGEST_MISMATCH:${identity.executionSurfaceDigestSha256}:${grant.executionSurfaceDigestSha256}`
     );
   }
 }
@@ -382,6 +411,9 @@ function assertGrantShape(grant: PonsE4Grant): void {
   }
   if (!/^[0-9a-f]{40}$/.test(grant.codeHead)) {
     throw new Error('PONS_E4_GRANT_CODE_HEAD_INVALID');
+  }
+  if (!/^0x[0-9a-f]{64}$/.test(grant.executionSurfaceDigestSha256)) {
+    throw new Error('PONS_E4_GRANT_EXECUTION_SURFACE_DIGEST_INVALID');
   }
   if (
     typeof grant.e0StatePath !== 'string' ||
@@ -468,6 +500,9 @@ function assertReceipt(receipt: PonsE4ConsumedReceipt): void {
   if (!/^[0-9a-f]{40}$/.test(receipt.codeHead)) {
     throw new Error('PONS_E4_CONSUMED_CODE_HEAD_INVALID');
   }
+  if (!/^0x[0-9a-f]{64}$/.test(receipt.executionSurfaceDigestSha256)) {
+    throw new Error('PONS_E4_CONSUMED_EXECUTION_SURFACE_DIGEST_INVALID');
+  }
   if (
     typeof receipt.e0StatePath !== 'string' ||
     receipt.e0StatePath.length === 0
@@ -482,25 +517,27 @@ function assertReceipt(receipt: PonsE4ConsumedReceipt): void {
   }
 }
 
+export function computePonsE4ExecutionSurfaceDigest(
+  root = process.cwd()
+): string {
+  const hash = createHash('sha256');
+  for (const relative of PONS_E4_EXECUTION_SURFACE_FILES) {
+    const file = path.resolve(root, relative);
+    if (!fs.existsSync(file)) {
+      throw new Error(`PONS_E4_EXECUTION_SURFACE_FILE_MISSING:${relative}`);
+    }
+    const content = fs.readFileSync(file);
+    hash.update(relative);
+    hash.update('\0');
+    hash.update(content);
+    hash.update('\0');
+  }
+  return `0x${hash.digest('hex')}`;
+}
+
 function readRuntimeIdentity(): PonsE4RuntimeIdentityOverride {
-  let codeHead: string;
-  let status: string;
-  try {
-    codeHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      encoding: 'utf8'
-    }).trim();
-    status = execFileSync('git', ['status', '--porcelain'], {
-      encoding: 'utf8'
-    });
-  } catch {
-    throw new Error('PONS_E4_RUNTIME_GIT_IDENTITY_UNAVAILABLE');
-  }
-  if (!/^[0-9a-f]{40}$/.test(codeHead)) {
-    throw new Error('PONS_E4_RUNTIME_CODE_HEAD_INVALID');
-  }
   return {
-    codeHead,
-    treeClean: status.trim().length === 0
+    executionSurfaceDigestSha256: computePonsE4ExecutionSurfaceDigest()
   };
 }
 
