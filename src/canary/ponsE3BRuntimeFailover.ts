@@ -10,6 +10,7 @@ import {
   decidePonsE3PostBuyExit,
   type PonsE3V4RecoveryProof
 } from './ponsE3Failover.js';
+import type { PonsE2RecoveryIntentSet } from './ponsE2V4RecoveryIntent.js';
 
 export const PONS_E3B_RUNTIME_FAILOVER_V1 =
   'PONS_E3B_RUNTIME_FAILOVER_V1' as const;
@@ -53,9 +54,7 @@ export type PonsE3BRuntimeDecision =
       curve: Address;
       tokenAmount: bigint;
       poolId: Hex;
-      e2Intents: ReturnType<typeof decidePonsE3PostBuyExit> extends infer R
-        ? R extends { route: 'V4_RECOVERY'; intents: infer I } ? I : never
-        : never;
+      e2Intents: PonsE2RecoveryIntentSet;
     }
   | {
       version: typeof PONS_E3B_RUNTIME_FAILOVER_V1;
