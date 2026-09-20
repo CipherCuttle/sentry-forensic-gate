@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { keccak256 } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -8,6 +10,7 @@ import { buildPonsE1V4RecoveryPlan } from '../dist/canary/ponsE1V4ExitRecovery.j
 import {
   PONS_E3B_RUNTIME_FAILOVER_V1,
   assertPonsE3BCurveRevokeIntent,
+  buildPonsE3BCurveRevokeIntent,
   decidePonsE3BRuntimeFailover
 } from '../dist/canary/ponsE3BRuntimeFailover.js';
 import {
@@ -16,6 +19,9 @@ import {
   reservePonsE3BRuntimeState,
   transitionPonsE3BRuntimeState
 } from '../dist/canary/ponsE3BRuntimeState.js';
+import {
+  assertSignedPonsE3BCleanupTransaction
+} from '../dist/canary/viemPonsE3BCurveCleanupExecutor.js';
 
 const TOKEN = '0x1111111111111111111111111111111111111111';
 const OWNER = '0x2222222222222222222222222222222222222222';
@@ -153,6 +159,44 @@ const reorg = decidePonsE3BRuntimeFailover({
 assert.equal(reorg.route, 'STOP');
 assert.match(reorg.reason, /PONS_E3B_E3_HANDOFF_REJECTED:PONS_E3_V4_RECOVERY_BLOCK_HASH_DRIFT/);
 
+const dummyKey =
+  '0x0000000000000000000000000000000000000000000000000000000000000001';
+const dummyAccount = privateKeyToAccount(dummyKey);
+const signerIntent = buildPonsE3BCurveRevokeIntent({
+  token: TOKEN,
+  owner: dummyAccount.address,
+  curve: CURVE
+});
+const serializedTransaction = await dummyAccount.signTransaction({
+  chainId: 4663,
+  type: 'eip1559',
+  nonce: 7,
+  gas: 75_000n,
+  maxFeePerGas: 1_000_000_000n,
+  maxPriorityFeePerGas: 0n,
+  to: signerIntent.target,
+  value: 0n,
+  data: signerIntent.calldata
+});
+const signed = {
+  nonce: 7,
+  transactionHash: keccak256(serializedTransaction),
+  serializedTransaction,
+  gas: 75_000n,
+  maxFeePerGas: 1_000_000_000n,
+  maxPriorityFeePerGas: 0n
+};
+await assertSignedPonsE3BCleanupTransaction(
+  signerIntent,
+  signed,
+  dummyAccount.address,
+  {
+    maxGas: 100_000n,
+    maxFeePerGas: 2_000_000_000n,
+    maxPriorityFeePerGas: 0n
+  }
+);
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pons-e3b-'));
 const statePath = path.join(dir, 'state.json');
 let state = reservePonsE3BRuntimeState(statePath, {
@@ -230,6 +274,9 @@ console.log(JSON.stringify({
   stateReservationIsExclusive: true,
   signedCleanupCannotSkipSubmissionAndInclusion: true,
   includedCleanupRequiresNewProofCycle: true,
+  signedCleanupIdentityFence: true,
+  zeroPriorityFeeNormalization: true,
+  broadcastPerformed: false,
   autoRetryAllowed: false,
   liveMoneyAuthority: false,
   signingAuthority: false,
