@@ -45,6 +45,16 @@ export interface PonsE4Grant {
   permissions: readonly PonsE4Permission[];
 }
 
+export interface PonsE4E0Operation {
+  status: 'BUY_INCLUDED' | 'APPROVAL_INCLUDED';
+  token: Address;
+  wallet: Address;
+  curve: Address;
+  tokensOwned: bigint;
+  buyTransactionHash: string;
+  grantId: string;
+}
+
 export interface PonsE4ConsumedReceipt {
   version: 'PONS_E4_ONE_SHOT_FAILOVER_CANARY_CONSUMED_V1';
   grantId: string;
@@ -151,12 +161,15 @@ export function assertPonsE4RecoveryGrant(params: {
   expectedToken: Address;
   expectedWallet: Address;
   requiredPermission: 'E3B_CURVE_REVOKE' | 'E2_V4_RECOVERY';
+  expectedTokenAmount?: bigint;
+  expectedBuyTransactionHash?: string;
   currentEpochS?: number;
   runtimeIdentity?: PonsE4RuntimeIdentityOverride;
 }): {
   grant: PonsE4Grant;
   receipt: PonsE4ConsumedReceipt;
   consumedReceiptPath: string;
+  e0Operation: PonsE4E0Operation;
 } {
   const now = params.currentEpochS ?? Math.floor(Date.now() / 1000);
   const loaded = loadGrant(params.grantPath);
@@ -217,7 +230,24 @@ export function assertPonsE4RecoveryGrant(params: {
     throw new Error('PONS_E4_CONSUMED_OUTSIDE_ENTRY_WINDOW');
   }
 
-  return { grant: loaded.grant, receipt, consumedReceiptPath };
+  const e0Operation = readBoundE0Operation(loaded.grant);
+  if (
+    params.expectedTokenAmount !== undefined &&
+    e0Operation.tokensOwned !== params.expectedTokenAmount
+  ) {
+    throw new Error(
+      `PONS_E4_RECOVERY_TOKEN_AMOUNT_MISMATCH:${e0Operation.tokensOwned}:${params.expectedTokenAmount}`
+    );
+  }
+  if (
+    params.expectedBuyTransactionHash !== undefined &&
+    e0Operation.buyTransactionHash.toLowerCase() !==
+      params.expectedBuyTransactionHash.toLowerCase()
+  ) {
+    throw new Error('PONS_E4_RECOVERY_BUY_HASH_MISMATCH');
+  }
+
+  return { grant: loaded.grant, receipt, consumedReceiptPath, e0Operation };
 }
 
 export function getPonsE4ConsumedReceiptPath(grantPath: string): string {
@@ -339,6 +369,54 @@ function assertGrantShape(grant: PonsE4Grant): void {
   ) {
     throw new Error('PONS_E4_GRANT_PERMISSIONS_INVALID');
   }
+}
+
+function readBoundE0Operation(grant: PonsE4Grant): PonsE4E0Operation {
+  if (!fs.existsSync(grant.e0StatePath)) {
+    throw new Error('PONS_E4_RECOVERY_E0_STATE_MISSING');
+  }
+  const state = JSON.parse(
+    fs.readFileSync(grant.e0StatePath, 'utf8')
+  ) as Record<string, unknown>;
+  if (state.version !== 'PONS_E0_LIVE_CANARY_R0') {
+    throw new Error('PONS_E4_RECOVERY_E0_STATE_VERSION_INVALID');
+  }
+  if (state.status !== 'BUY_INCLUDED' && state.status !== 'APPROVAL_INCLUDED') {
+    throw new Error(
+      `PONS_E4_RECOVERY_E0_STATE_NOT_HANDOFFABLE:${String(state.status)}`
+    );
+  }
+  if (
+    typeof state.token !== 'string' ||
+    typeof state.wallet !== 'string' ||
+    typeof state.curve !== 'string' ||
+    typeof state.tokensOwned !== 'string' ||
+    !/^[0-9]+$/.test(state.tokensOwned) ||
+    BigInt(state.tokensOwned) <= 0n ||
+    typeof state.buyTransactionHash !== 'string' ||
+    !/^0x[0-9a-fA-F]{64}$/.test(state.buyTransactionHash) ||
+    typeof state.e4GrantId !== 'string'
+  ) {
+    throw new Error('PONS_E4_RECOVERY_E0_STATE_SHAPE_INVALID');
+  }
+  if (state.e4GrantId !== grant.grantId) {
+    throw new Error('PONS_E4_RECOVERY_E0_GRANT_ID_MISMATCH');
+  }
+  if (getAddress(state.token) !== getAddress(grant.token)) {
+    throw new Error('PONS_E4_RECOVERY_E0_TOKEN_MISMATCH');
+  }
+  if (getAddress(state.wallet) !== getAddress(grant.wallet)) {
+    throw new Error('PONS_E4_RECOVERY_E0_WALLET_MISMATCH');
+  }
+  return {
+    status: state.status,
+    token: getAddress(state.token),
+    wallet: getAddress(state.wallet),
+    curve: getAddress(state.curve),
+    tokensOwned: BigInt(state.tokensOwned),
+    buyTransactionHash: state.buyTransactionHash,
+    grantId: state.e4GrantId
+  };
 }
 
 function assertReceipt(receipt: PonsE4ConsumedReceipt): void {
