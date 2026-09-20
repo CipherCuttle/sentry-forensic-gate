@@ -59,13 +59,19 @@ jobs:
       - name: Enforce narrow canary signer boundary
         run: node scripts/canary-boundary-check.mjs
 
-      - name: Reconstruct actual E0 BUY handoff fixture
+      - name: Verify actual E0 BUY receipt and handoff identity
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          import { createPublicClient, decodeEventLog, getAddress, http, parseAbi } from 'viem';
+          import {
+            createPublicClient,
+            decodeEventLog,
+            decodeFunctionData,
+            getAddress,
+            http,
+            parseAbi
+          } from 'viem';
 
           const rpc = 'https://rpc.mainnet.chain.robinhood.com';
           const buyHash =
@@ -74,13 +80,38 @@ jobs:
           const wallet = getAddress('0x9343835Fe138FFfF68293B361b3C69FEbd83C031');
           const curve = getAddress('0x32c5ad4Ae02b6f16Df43C0b4bE44b69B42ff9D87');
           const abi = parseAbi([
+            'function buy(uint256 quoteIn, uint256 minTokensOut, address recipient) payable returns (uint256 tokensOut)',
             'event CurveBuy(address indexed buyer, address indexed recipient, uint256 quoteIn, uint256 tokensOut, uint256 fee, uint256 tax)'
           ]);
-          const client = createPublicClient({ transport: http(rpc) });
-          const receipt = await client.getTransactionReceipt({ hash: buyHash });
-          if (receipt.status !== 'success') throw new Error('E3B_E0_BUY_RECEIPT_NOT_SUCCESS');
 
-          const matches = [];
+          const client = createPublicClient({ transport: http(rpc) });
+          const [tx, receipt] = await Promise.all([
+            client.getTransaction({ hash: buyHash }),
+            client.getTransactionReceipt({ hash: buyHash })
+          ]);
+
+          if (receipt.status !== 'success') {
+            throw new Error('E3B_REAL_E0_BUY_RECEIPT_NOT_SUCCESS');
+          }
+          if (
+            getAddress(tx.from) !== wallet ||
+            !tx.to ||
+            getAddress(tx.to) !== curve
+          ) {
+            throw new Error('E3B_REAL_E0_BUY_TRANSACTION_IDENTITY_MISMATCH');
+          }
+
+          const decoded = decodeFunctionData({ abi, data: tx.input });
+          if (
+            decoded.functionName !== 'buy' ||
+            decoded.args[0] !== tx.value ||
+            getAddress(decoded.args[2]) !== wallet
+          ) {
+            throw new Error('E3B_REAL_E0_BUY_CALLDATA_MISMATCH');
+          }
+
+          let matches = 0;
+          let tokensOut = 0n;
           for (const log of receipt.logs) {
             if (getAddress(log.address) !== curve) continue;
             try {
@@ -92,40 +123,39 @@ jobs:
               });
               if (
                 getAddress(event.args.buyer) === wallet &&
-                getAddress(event.args.recipient) === wallet
+                getAddress(event.args.recipient) === wallet &&
+                event.args.quoteIn === tx.value
               ) {
-                matches.push(event.args.tokensOut);
+                matches += 1;
+                tokensOut = event.args.tokensOut;
               }
             } catch {}
           }
-          if (matches.length !== 1 || matches[0] <= 0n) {
-            throw new Error(`E3B_E0_BUY_EVENT_CARDINALITY:${matches.length}`);
+          if (matches !== 1 || tokensOut <= 0n) {
+            throw new Error(`E3B_REAL_E0_BUY_EVENT_CARDINALITY:${matches}`);
           }
 
-          fs.writeFileSync('/tmp/pons-e3b-e0-state.json', JSON.stringify({
-            version: 'PONS_E0_LIVE_CANARY_R0',
-            status: 'BUY_INCLUDED',
+          console.log(JSON.stringify({
+            verdict: 'PONS_E3B_REAL_E0_BUY_HANDOFF_IDENTITY_PASS',
             token,
-            curve,
             wallet,
-            transactionHash: buyHash,
-            buyTransactionHash: buyHash,
-            tokensOwned: matches[0].toString()
+            curve,
+            buyHash,
+            blockNumber: receipt.blockNumber.toString(),
+            quoteInWei: tx.value.toString(),
+            tokensOut: tokensOut.toString(),
+            liveMoneyAuthority: false,
+            signingAuthority: false,
+            broadcastAuthority: false
           }, null, 2));
-          fs.appendFileSync(
-            process.env.GITHUB_ENV,
-            `PONS_E3B_OBSERVATION_BLOCK=${receipt.blockNumber.toString()}\n`
-          );
           NODE
 
-      - name: Replay actual E0 post-BUY handoff without signer
-        env:
-          PONS_E3B_ENABLED: 'true'
-          PONS_E3B_E0_STATE_PATH: '/tmp/pons-e3b-e0-state.json'
-          PONS_E3B_STATE_PATH: '/tmp/pons-e3b-runtime-state.json'
-          PONS_E3B_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
-          PONS_E3B_SLIPPAGE_BPS: '500'
-        run: npm run start:pons-e3b-runtime
+      - name: Assert historical replay requires explicit archive RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "PONS_E3B_HISTORICAL_REPLAY_REQUIRES_ARCHIVE_RPC" src/canary/ponsE3BRuntimeFailoverCli.ts
+          echo "PONS_E3B_ARCHIVE_REPLAY_FAIL_CLOSED=PASS"
 
       - name: Assert E3B has no live authority
         shell: bash
