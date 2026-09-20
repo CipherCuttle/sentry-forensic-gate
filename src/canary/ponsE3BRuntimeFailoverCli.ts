@@ -6,11 +6,14 @@ import {
   defineChain,
   getAddress,
   http,
+  keccak256,
   type Address,
   type Hex
 } from 'viem';
+import { CURRENT_PONS_V2_AUTHORITY } from '../adapters/robinhood/ponsV2/authority.js';
 import {
   DEFAULT_ROBINHOOD_RPC_URL,
+  PONS_V2_NATIVE_PAIR_TOKEN,
   ROBINHOOD_CHAIN_ID,
   ROBINHOOD_EXPLORER_URL
 } from '../adapters/robinhood/ponsV2/contracts.js';
@@ -90,7 +93,16 @@ const head = await client.getBlockNumber();
 const block = await client.getBlock({ blockNumber: head });
 if (!block.hash) throw new Error('PONS_E3B_BLOCK_HASH_MISSING');
 
-const [tokenBalance, graduated, readyToGraduate, curveAllowance] = await Promise.all([
+const [
+  tokenBalance,
+  graduated,
+  readyToGraduate,
+  curveAllowance,
+  curveFactory,
+  curveToken,
+  curvePairToken,
+  factoryCode
+] = await Promise.all([
   client.readContract({
     address: e0.token,
     abi: ponsE0TokenAbi,
@@ -116,8 +128,48 @@ const [tokenBalance, graduated, readyToGraduate, curveAllowance] = await Promise
     functionName: 'allowance',
     args: [e0.wallet, e0.curve],
     blockNumber: head
+  }),
+  client.readContract({
+    address: e0.curve,
+    abi: ponsE0CurveTradeAbi,
+    functionName: 'factory',
+    blockNumber: head
+  }),
+  client.readContract({
+    address: e0.curve,
+    abi: ponsE0CurveTradeAbi,
+    functionName: 'token',
+    blockNumber: head
+  }),
+  client.readContract({
+    address: e0.curve,
+    abi: ponsE0CurveTradeAbi,
+    functionName: 'pairToken',
+    blockNumber: head
+  }),
+  client.getBytecode({
+    address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
+    blockNumber: head
   })
 ]);
+
+if (getAddress(curveFactory) !== getAddress(CURRENT_PONS_V2_AUTHORITY.factory)) {
+  throw new Error('PONS_E3B_CURVE_FACTORY_MISMATCH');
+}
+if (getAddress(curveToken) !== e0.token) {
+  throw new Error('PONS_E3B_CURVE_TOKEN_MISMATCH');
+}
+if (getAddress(curvePairToken) !== getAddress(PONS_V2_NATIVE_PAIR_TOKEN)) {
+  throw new Error('PONS_E3B_CURVE_PAIR_TOKEN_MISMATCH');
+}
+if (
+  !factoryCode ||
+  factoryCode === '0x' ||
+  keccak256(factoryCode).toLowerCase() !==
+    CURRENT_PONS_V2_AUTHORITY.factoryRuntimeCodeHash.toLowerCase()
+) {
+  throw new Error('PONS_E3B_FACTORY_RUNTIME_DRIFT');
+}
 
 if (tokenBalance !== e0.tokensOwned) {
   runtimeState = transitionPonsE3BRuntimeState(
