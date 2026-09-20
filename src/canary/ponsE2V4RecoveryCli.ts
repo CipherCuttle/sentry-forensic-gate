@@ -29,7 +29,11 @@ import {
   ViemPonsE2V4RecoveryExecutor,
   hasActivePonsE2Permit2Allowance
 } from './viemPonsE2V4RecoveryExecutor.js';
-import { assertPonsE4RecoveryGrant } from './ponsE4OneShotGrant.js';
+import {
+  assertPonsE4RecoveryGrant,
+  assertPonsE4V4OldCurveAuthorityCleared
+} from './ponsE4OneShotGrant.js';
+import { ponsE0TokenAbi } from './ponsE0Contracts.js';
 
 if (process.env.PONS_E2_ENABLED !== 'true') {
   throw new Error('PONS_E2_REQUIRES_EXPLICIT_ENABLE');
@@ -160,6 +164,24 @@ if (verification.tokenBalance !== e4Grant.e0Operation.tokensOwned) {
 if (getAddress(verification.curve) !== getAddress(e4Grant.e0Operation.curve)) {
   throw new Error('PONS_E4_E2_RECOVERY_CURVE_MISMATCH');
 }
+const [oldCurveAllowance, allowanceBlock] = await Promise.all([
+  client.readContract({
+    address: token,
+    abi: ponsE0TokenAbi,
+    functionName: 'allowance',
+    args: [executor.walletAddress, getAddress(e4Grant.e0Operation.curve)],
+    blockNumber: verification.blockNumber
+  }),
+  client.getBlock({ blockNumber: verification.blockNumber })
+]);
+if (!allowanceBlock.hash) {
+  throw new Error('PONS_E4_E2_OLD_CURVE_BLOCK_HASH_MISSING');
+}
+assertPonsE4V4OldCurveAuthorityCleared({
+  oldCurveAllowance,
+  verificationBlockHash: verification.blockHash,
+  allowanceBlockHash: allowanceBlock.hash
+});
 const intents = buildPonsE2RecoveryIntents({
   plan: verification.plan,
   poolId: verification.poolId
