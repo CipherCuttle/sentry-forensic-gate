@@ -10,6 +10,7 @@ import {
 import {
   ViemPonsE3BCurveCleanupExecutor
 } from './viemPonsE3BCurveCleanupExecutor.js';
+import { assertPonsE4RecoveryGrant } from './ponsE4OneShotGrant.js';
 
 if (process.env.PONS_E3B_ENABLED !== 'true') {
   throw new Error('PONS_E3B_REQUIRES_EXPLICIT_ENABLE');
@@ -61,6 +62,16 @@ if (getAddress(existing.wallet) !== executor.walletAddress) {
 const token = getAddress(existing.token);
 const curve = getAddress(existing.curve);
 const expectedTokenAmount = BigInt(existing.tokenAmount);
+const e4GrantPath = process.env.PONS_E4_GRANT_PATH;
+if (!e4GrantPath) {
+  throw new Error('PONS_E4_GRANT_PATH_REQUIRED_FOR_E3B_CLEANUP');
+}
+const e4Grant = assertPonsE4RecoveryGrant({
+  grantPath: e4GrantPath,
+  expectedToken: token,
+  expectedWallet: executor.walletAddress,
+  requiredPermission: 'E3B_CURVE_REVOKE'
+});
 
 const [tokenBalanceBefore, allowanceBefore] = await Promise.all([
   executor.getTokenBalance(token),
@@ -145,6 +156,7 @@ console.log(JSON.stringify({
   allowanceAfter: allowanceAfter.toString(),
   tokenBalanceAfter: tokenBalanceAfter.toString(),
   nextAction: 'START_FRESH_E3B_PROOF_CYCLE_WITH_NEW_STATE_PATH',
+  e4GrantId: e4Grant.grant.grantId,
   autoContinueToV4: false
 }, null, 2));
 
