@@ -1,0 +1,81 @@
+name: pons-e4a-grant-issuer-readiness
+
+concurrency:
+  group: pons-e4a-grant-issuer-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - agent/pons-e4a-grant-issuer-v1
+  pull_request:
+    paths:
+      - 'scripts/pons-e4-issue-grant.mjs'
+      - 'scripts/pons-e4-grant-issuer-check.mjs'
+      - '.github/workflows/pons-e4a-grant-issuer-readiness.yml'
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PONS_E4_ISSUE_ENABLED: ''
+      PONS_E4_TOKEN: ''
+      PONS_E4_GRANT_OUTPUT: ''
+      PONS_E4_E0_STATE_PATH: ''
+      PONS_E4_MAX_QUOTE_IN_WEI: ''
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E2_PRIVATE_KEY: ''
+      PONS_E3B_PRIVATE_KEY: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: corepack enable
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build reviewed execution surface
+        run: pnpm build
+
+      - name: Verify E4A issuer offline
+        run: node scripts/pons-e4-grant-issuer-check.mjs
+
+      - name: Emit reviewed E4 execution surface digest
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { computePonsE4ExecutionSurfaceDigest } from './dist/canary/ponsE4OneShotGrant.js';
+          console.log('PONS_E4_EXECUTION_SURFACE_DIGEST=' + computePonsE4ExecutionSurfaceDigest());
+          NODE
+
+      - name: Preserve research-only boundaries
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+
+      - name: Assert issuer has no signing or broadcast surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq 'privateKeyToAccount|createWalletClient|signTransaction|sendRawTransaction|broadcastExact' scripts/pons-e4-issue-grant.mjs scripts/pons-e4-grant-issuer-check.mjs; then
+            echo "E4A issuer must not contain signing/broadcast capability"
+            exit 1
+          fi
+          grep -q "PONS_E4_GRANT_ISSUER_REQUIRES_EXPLICIT_ENABLE" scripts/pons-e4-issue-grant.mjs
+          grep -q "PONS_E4_GRANT_OUTPUT" scripts/pons-e4-issue-grant.mjs
+          grep -q "PONS_E4_E0_STATE_PATH" scripts/pons-e4-issue-grant.mjs
+          grep -q "MUST_BE_OUTSIDE_REPOSITORY" scripts/pons-e4-issue-grant.mjs
+          grep -q "f607a0a33d695ddd5a6ec872cce87e4efebd92a3" scripts/pons-e4-issue-grant.mjs
+          test -z "${PONS_E4_ISSUE_ENABLED}"
+          test -z "${PONS_E4_TOKEN}"
+          test -z "${PONS_E4_GRANT_OUTPUT}"
+          test -z "${PONS_E4_E0_STATE_PATH}"
+          test -z "${PONS_E4_MAX_QUOTE_IN_WEI}"
+          test -z "${PONS_E0_PRIVATE_KEY}"
+          test -z "${PONS_E2_PRIVATE_KEY}"
+          test -z "${PONS_E3B_PRIVATE_KEY}"
+          echo "PONS_E4A_NO_LIVE_AUTHORITY=PASS"
