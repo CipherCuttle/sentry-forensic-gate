@@ -224,6 +224,8 @@ writeState(statePath, {
   tokensOwned: tokensOwned.toString()
 });
 
+await assertCurveStillActiveOrRequireE3B(client, plan.marketCurve, statePath);
+
 const exitPlan = await buildFreshExitPlan({
   client,
   launch,
@@ -274,6 +276,8 @@ writeState(statePath, {
   buyTransactionHash: buyHash,
   tokensOwned: tokensOwned.toString()
 });
+
+await assertCurveStillActiveOrRequireE3B(client, exitPlan.curve, statePath);
 
 const refreshedExit = await buildFreshExitPlan({
   client,
@@ -352,6 +356,39 @@ console.log(JSON.stringify({
   notionalUsdMicros: PONS_E0_NOTIONAL_USD_MICROS.toString(),
   stoppedAfterOneRoundTrip: true
 }, null, 2));
+
+async function assertCurveStillActiveOrRequireE3B(
+  client: PublicClient,
+  curve: Address,
+  persistedStatePath: string
+): Promise<void> {
+  const blockNumber = await client.getBlockNumber();
+  const { ponsE0CurveTradeAbi } = await import('./ponsE0Contracts.js');
+  const [graduated, readyToGraduate] = await Promise.all([
+    client.readContract({
+      address: curve,
+      abi: ponsE0CurveTradeAbi,
+      functionName: 'graduated',
+      blockNumber
+    }),
+    client.readContract({
+      address: curve,
+      abi: ponsE0CurveTradeAbi,
+      functionName: 'readyToGraduate',
+      blockNumber
+    })
+  ]);
+  if (graduated) {
+    throw new Error(
+      `PONS_E0_E3B_FAILOVER_REQUIRED:${persistedStatePath}:${blockNumber}`
+    );
+  }
+  if (readyToGraduate) {
+    throw new Error(
+      `PONS_E0_E3B_GRADUATION_PENDING:${persistedStatePath}:${blockNumber}`
+    );
+  }
+}
 
 async function buildFreshEntryPlan(params: {
   client: PublicClient;
