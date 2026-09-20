@@ -70,7 +70,9 @@ const e4Grant = assertPonsE4RecoveryGrant({
   grantPath: e4GrantPath,
   expectedToken: token,
   expectedWallet: executor.walletAddress,
-  requiredPermission: 'E3B_CURVE_REVOKE'
+  requiredPermission: 'E3B_CURVE_REVOKE',
+  expectedTokenAmount,
+  expectedBuyTransactionHash: existing.e0BuyTransactionHash
 });
 
 const [tokenBalanceBefore, allowanceBefore] = await Promise.all([
