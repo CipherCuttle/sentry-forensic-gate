@@ -12,6 +12,10 @@ import {
 const TOKEN = '0x1111111111111111111111111111111111111111';
 const WALLET = '0x2222222222222222222222222222222222222222';
 const OTHER_TOKEN = '0x3333333333333333333333333333333333333333';
+const CURVE = '0x4444444444444444444444444444444444444444';
+const BUY_HASH =
+  '0x5555555555555555555555555555555555555555555555555555555555555555';
+const TOKEN_AMOUNT = 123_456_789n;
 const CODE_HEAD = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const IDENTITY = { codeHead: CODE_HEAD, treeClean: true };
 const NOW = 2_000_000_100;
@@ -73,6 +77,24 @@ assert.equal(
 );
 assert.equal(fs.existsSync(consumed.consumedReceiptPath), true);
 
+const handoffState = {
+  version: 'PONS_E0_LIVE_CANARY_R0',
+  status: 'APPROVAL_INCLUDED',
+  token: TOKEN,
+  curve: CURVE,
+  wallet: WALLET,
+  transactionHash:
+    '0x6666666666666666666666666666666666666666666666666666666666666666',
+  buyTransactionHash: BUY_HASH,
+  tokensOwned: TOKEN_AMOUNT.toString(),
+  e4GrantId: primary.grant.grantId
+};
+fs.writeFileSync(
+  primary.grant.e0StatePath,
+  `${JSON.stringify(handoffState, null, 2)}\n`,
+  { mode: 0o600 }
+);
+
 assert.throws(
   () =>
     consumePonsE4EntryGrant({
@@ -94,6 +116,8 @@ const recovery = assertPonsE4RecoveryGrant({
   expectedToken: TOKEN,
   expectedWallet: WALLET,
   requiredPermission: 'E3B_CURVE_REVOKE',
+  expectedTokenAmount: TOKEN_AMOUNT,
+  expectedBuyTransactionHash: BUY_HASH,
   currentEpochS: 2_000_001_000,
   runtimeIdentity: IDENTITY
 });
@@ -104,10 +128,49 @@ const v4Recovery = assertPonsE4RecoveryGrant({
   expectedToken: TOKEN,
   expectedWallet: WALLET,
   requiredPermission: 'E2_V4_RECOVERY',
+  expectedTokenAmount: TOKEN_AMOUNT,
+  expectedBuyTransactionHash: BUY_HASH,
   currentEpochS: 2_000_001_000,
   runtimeIdentity: IDENTITY
 });
 assert.equal(v4Recovery.grant.token.toLowerCase(), TOKEN.toLowerCase());
+assert.equal(v4Recovery.e0Operation.tokensOwned, TOKEN_AMOUNT);
+assert.equal(v4Recovery.e0Operation.buyTransactionHash, BUY_HASH);
+
+assert.throws(
+  () =>
+    assertPonsE4RecoveryGrant({
+      grantPath: primary.file,
+      expectedToken: TOKEN,
+      expectedWallet: WALLET,
+      requiredPermission: 'E2_V4_RECOVERY',
+      expectedTokenAmount: TOKEN_AMOUNT + 1n,
+      currentEpochS: 2_000_001_000,
+      runtimeIdentity: IDENTITY
+    }),
+  /PONS_E4_RECOVERY_TOKEN_AMOUNT_MISMATCH/
+);
+
+fs.writeFileSync(
+  primary.grant.e0StatePath,
+  `${JSON.stringify({ ...handoffState, status: 'COMPLETED' }, null, 2)}\n`
+);
+assert.throws(
+  () =>
+    assertPonsE4RecoveryGrant({
+      grantPath: primary.file,
+      expectedToken: TOKEN,
+      expectedWallet: WALLET,
+      requiredPermission: 'E2_V4_RECOVERY',
+      currentEpochS: 2_000_001_000,
+      runtimeIdentity: IDENTITY
+    }),
+  /PONS_E4_RECOVERY_E0_STATE_NOT_HANDOFFABLE:COMPLETED/
+);
+fs.writeFileSync(
+  primary.grant.e0StatePath,
+  `${JSON.stringify(handoffState, null, 2)}\n`
+);
 
 const wrongToken = writeGrant('wrong-token');
 assert.throws(
@@ -256,6 +319,8 @@ console.log(JSON.stringify({
   grantConsumedAtomicallyBeforeSigning: true,
   repeatEntryBlocked: true,
   recoveryRequiresConsumedGrant: true,
+  recoveryBoundToOriginalE0Operation: true,
+  completedE0OperationRevokesRecoveryAuthority: true,
   postConsumptionTamperDetected: true,
   liveMoneyAuthority: false,
   signingAuthority: false,
