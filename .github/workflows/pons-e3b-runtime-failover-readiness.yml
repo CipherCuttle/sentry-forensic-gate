@@ -1,0 +1,104 @@
+name: pons-e3b-runtime-failover-readiness
+
+on:
+  push:
+    branches:
+      - agent/pons-e3b-runtime-failover-wiring-v1
+  pull_request:
+    paths:
+      - 'src/canary/ponsE3BRuntimeFailover.ts'
+      - 'src/canary/ponsE3BRuntimeFailoverCli.ts'
+      - 'src/canary/ponsE3BRuntimeState.ts'
+      - 'scripts/pons-e3b-runtime-failover-check.mjs'
+      - '.github/workflows/pons-e3b-runtime-failover-readiness.yml'
+      - 'package.json'
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PONS_E0_LIVE: ''
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E2_LIVE: ''
+      PONS_E2_PRIVATE_KEY: ''
+      PONS_E2_BROADCAST_AUTHORITY: ''
+      PONS_E3_LIVE: ''
+      PONS_E3_PRIVATE_KEY: ''
+      PONS_E3_BROADCAST_AUTHORITY: ''
+      PONS_E3B_LIVE: ''
+      PONS_E3B_PRIVATE_KEY: ''
+      PONS_E3B_BROADCAST_AUTHORITY: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies without native postinstall
+        run: npm install --package-lock=false --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify E3B runtime failover offline
+        run: npm run ponse3bruntimecheck
+
+      - name: Create current graduated-token E0 handoff fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { createPublicClient, http, parseAbi } from 'viem';
+
+          const rpc = 'https://rpc.mainnet.chain.robinhood.com';
+          const token = '0x8ECD7b553E36248164616c271B4B3C171bC8226b';
+          const wallet = '0xE152cd6ab035c0a8b7D8147373dd201579873a41';
+          const curve = '0x90fB03B62593cf132433Bf3A9a57c2e93545bBD0';
+          const client = createPublicClient({ transport: http(rpc) });
+          const balance = await client.readContract({
+            address: token,
+            abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
+            functionName: 'balanceOf',
+            args: [wallet]
+          });
+          if (balance <= 0n) throw new Error('E3B_REAL_FIXTURE_BALANCE_ZERO');
+          fs.writeFileSync('/tmp/pons-e3b-e0-state.json', JSON.stringify({
+            version: 'PONS_E0_LIVE_CANARY_R0',
+            status: 'APPROVAL_INCLUDED',
+            token,
+            curve,
+            wallet,
+            transactionHash:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+            tokensOwned: balance.toString()
+          }, null, 2));
+          NODE
+
+      - name: Verify current graduated Pons handoff without signer
+        env:
+          PONS_E3B_ENABLED: 'true'
+          PONS_E3B_E0_STATE_PATH: '/tmp/pons-e3b-e0-state.json'
+          PONS_E3B_STATE_PATH: '/tmp/pons-e3b-runtime-state.json'
+          PONS_E3B_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
+          PONS_E3B_SLIPPAGE_BPS: '500'
+        run: npm run start:pons-e3b-runtime
+
+      - name: Assert E3B has no live authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${PONS_E0_LIVE}" || -n "${PONS_E0_PRIVATE_KEY}" || -n "${PONS_E2_LIVE}" || -n "${PONS_E2_PRIVATE_KEY}" || -n "${PONS_E2_BROADCAST_AUTHORITY}" || -n "${PONS_E3_LIVE}" || -n "${PONS_E3_PRIVATE_KEY}" || -n "${PONS_E3_BROADCAST_AUTHORITY}" || -n "${PONS_E3B_LIVE}" || -n "${PONS_E3B_PRIVATE_KEY}" || -n "${PONS_E3B_BROADCAST_AUTHORITY}" ]]; then
+            echo "E3B readiness CI must not receive live/signing/broadcast authority"
+            exit 1
+          fi
+          if grep -Eq 'createWalletClient|privateKeyToAccount|sendRawTransaction|signTransaction' src/canary/ponsE3BRuntimeFailover.ts src/canary/ponsE3BRuntimeFailoverCli.ts src/canary/ponsE3BRuntimeState.ts; then
+            echo "E3B runtime layer must remain read-only / no signer"
+            exit 1
+          fi
+          grep -q "PONS_E3B_DRY_MODE_LIVE_AUTHORITY_FORBIDDEN" src/canary/ponsE3BRuntimeFailoverCli.ts
+          grep -q "REVERIFY_FROM_CHAIN_AFTER_REVOKE" src/canary/ponsE3BRuntimeFailover.ts
+          grep -q "PONS_E3B_EXISTING_STATE_REQUIRES_MANUAL_RECONCILIATION" src/canary/ponsE3BRuntimeState.ts
+          echo "PONS_E3B_NO_LIVE_AUTHORITY_BOUNDARY_PASS"
