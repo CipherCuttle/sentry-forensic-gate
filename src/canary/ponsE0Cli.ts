@@ -220,6 +220,7 @@ writeState(statePath, {
   curve: plan.marketCurve,
   wallet,
   transactionHash: buyHash,
+  buyTransactionHash: buyHash,
   tokensOwned: tokensOwned.toString()
 });
 
@@ -270,6 +271,7 @@ writeState(statePath, {
   curve: exitPlan.curve,
   wallet,
   transactionHash: approvalHash,
+  buyTransactionHash: buyHash,
   tokensOwned: tokensOwned.toString()
 });
 
