@@ -88,11 +88,20 @@ if (status === 'CURVE_INACTIVE' || status === 'NOT_EXECUTABLE') {
     args: [owner, verification.curve],
     blockNumber: verification.blockNumber
   });
+  const allowanceBlock = await client.getBlock({
+    blockNumber: verification.blockNumber
+  });
+  if (!allowanceBlock.hash) {
+    throw new Error('PONS_E3_CURVE_ALLOWANCE_BLOCK_HASH_MISSING');
+  }
   v4Recovery = {
     verdict: verification.verdict,
     token: verification.token,
     owner: verification.owner,
     tokenBalance: verification.tokenBalance,
+    blockNumber: verification.blockNumber,
+    blockHash: verification.blockHash,
+    curveAllowanceBlockHash: allowanceBlock.hash,
     poolId: verification.poolId,
     currentTokenAllowanceToPermit2: verification.currentTokenAllowanceToPermit2,
     currentPermit2AllowanceToRouter: verification.currentPermit2AllowanceToRouter,
