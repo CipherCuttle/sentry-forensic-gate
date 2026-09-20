@@ -166,6 +166,31 @@ for (const forbidden of [
   }
 }
 
+const ponsE3BCheck = fs.readFileSync(
+  path.normalize('scripts/pons-e3b-runtime-failover-check.mjs'),
+  'utf8'
+);
+for (const required of [
+  '0000000000000000000000000000000000000000000000000000000000000001',
+  'signedCleanupIdentityFence: true',
+  'zeroPriorityFeeNormalization: true',
+  'broadcastPerformed: false',
+  'liveMoneyAuthority: false'
+]) {
+  if (!ponsE3BCheck.includes(required)) {
+    findings.push(`pons-e3b-check-missing-boundary-proof:${required}`);
+  }
+}
+for (const forbidden of [
+  '.broadcastExact(',
+  'PONS_E3B_BROADCAST_AUTHORITY=true',
+  'PONS_E3B_LIVE=true'
+]) {
+  if (ponsE3BCheck.includes(forbidden)) {
+    findings.push(`pons-e3b-check-live-behavior-forbidden:${forbidden}`);
+  }
+}
+
 if (findings.length) throw new Error(`CANARY_BOUNDARY_VIOLATION\n${findings.join('\n')}`);
 console.log('canary-boundary-check: PASS');
 
