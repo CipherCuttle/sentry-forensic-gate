@@ -4,7 +4,8 @@ import path from 'node:path';
 const allowedWalletAuthorityFiles = new Set([
   path.normalize('src/canary/viemCanaryExecutor.ts'),
   path.normalize('src/canary/viemPonsE0CanaryExecutor.ts'),
-  path.normalize('src/canary/viemPonsE2V4RecoveryExecutor.ts')
+  path.normalize('src/canary/viemPonsE2V4RecoveryExecutor.ts'),
+  path.normalize('src/canary/viemPonsE3BCurveCleanupExecutor.ts')
 ]);
 const allowedIdentifiers = new Set(['createWalletClient', 'privateKeyToAccount', 'sendRawTransaction', 'signTransaction']);
 const forbiddenIdentifiers = new Set([
@@ -111,6 +112,33 @@ for (const required of [
 ]) {
   if (!ponsE2Executor.includes(required)) {
     findings.push(`missing-pons-e2-fail-closed-guard:${required}`);
+  }
+}
+
+const ponsE3BExecutor = fs.readFileSync(
+  path.normalize('src/canary/viemPonsE3BCurveCleanupExecutor.ts'),
+  'utf8'
+);
+for (const required of [
+  'readonly walletAddress: Address',
+  'private readonly account: LocalAccount',
+  'PONS_E3B_PRIVATE_KEY_FORMAT_INVALID',
+  'PONS_E3B_BROADCAST_AUTHORITY_DISABLED',
+  'PONS_E3B_INTENT_OWNER_MUST_EQUAL_WALLET',
+  'PONS_E3B_FACTORY_RUNTIME_DRIFT',
+  'PONS_E3B_CURVE_FACTORY_MISMATCH',
+  'PONS_E3B_CURVE_TOKEN_MISMATCH',
+  'PONS_E3B_CURVE_PAIR_TOKEN_MISMATCH',
+  'PONS_E3B_CURVE_REVOKE_REQUIRES_GRADUATED_CURVE',
+  'PONS_E3B_CURVE_REVOKE_NOT_REQUIRED',
+  'PONS_E3B_BROADCAST_SIGNED_AUTHORITY_UNKNOWN',
+  'PONS_E3B_SIGNED_SIGNER_MISMATCH',
+  'PONS_E3B_SIGNED_CHAIN_ID_MISMATCH',
+  'PONS_E3B_SIGNED_TARGET_MISMATCH',
+  'PONS_E3B_SIGNED_CALLDATA_MISMATCH'
+]) {
+  if (!ponsE3BExecutor.includes(required)) {
+    findings.push(`missing-pons-e3b-fail-closed-guard:${required}`);
   }
 }
 
