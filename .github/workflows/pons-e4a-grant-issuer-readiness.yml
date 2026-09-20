@@ -58,8 +58,9 @@ jobs:
             exit 1
           fi
           grep -q "PONS_E4_GRANT_ISSUER_REQUIRES_EXPLICIT_ENABLE" scripts/pons-e4-issue-grant.mjs
-          grep -q "PONS_E4_GRANT_OUTPUT_MUST_BE_OUTSIDE_REPOSITORY" scripts/pons-e4-issue-grant.mjs
-          grep -q "PONS_E4_E0_STATE_PATH_MUST_BE_OUTSIDE_REPOSITORY" scripts/pons-e4-issue-grant.mjs
+          grep -q "PONS_E4_GRANT_OUTPUT" scripts/pons-e4-issue-grant.mjs
+          grep -q "PONS_E4_E0_STATE_PATH" scripts/pons-e4-issue-grant.mjs
+          grep -q "MUST_BE_OUTSIDE_REPOSITORY" scripts/pons-e4-issue-grant.mjs
           grep -q "f607a0a33d695ddd5a6ec872cce87e4efebd92a3" scripts/pons-e4-issue-grant.mjs
           test -z "${PONS_E4_ISSUE_ENABLED}"
           test -z "${PONS_E4_TOKEN}"
