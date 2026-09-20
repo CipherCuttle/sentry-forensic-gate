@@ -12,6 +12,8 @@ const OWNER = '0x2222222222222222222222222222222222222222';
 const CURVE = '0x3333333333333333333333333333333333333333';
 const POOL_ID =
   '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const BLOCK_HASH =
+  '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const TOKEN_AMOUNT = 123_456_789n;
 
 const plan = buildPonsE1V4RecoveryPlan({
@@ -36,6 +38,9 @@ const cleanV4Proof = {
   token: TOKEN,
   owner: OWNER,
   tokenBalance: TOKEN_AMOUNT,
+  blockNumber: 123n,
+  blockHash: BLOCK_HASH,
+  curveAllowanceBlockHash: BLOCK_HASH,
   poolId: POOL_ID,
   currentTokenAllowanceToPermit2: 0n,
   currentPermit2AllowanceToRouter: 0n,
@@ -103,6 +108,24 @@ const arbitraryError = decidePonsE3PostBuyExit({
 });
 assert.equal(arbitraryError.route, 'STOP');
 assert.match(arbitraryError.reason, /PONS_E3_CURVE_EXIT_ERROR_FAIL_CLOSED/);
+
+const reorgDrift = decidePonsE3PostBuyExit({
+  token: TOKEN,
+  owner: OWNER,
+  postBuyTokenBalance: TOKEN_AMOUNT,
+  e0CurveAllowance: 0n,
+  curveExit: {
+    status: 'CURVE_INACTIVE',
+    reason: 'graduated'
+  },
+  v4Recovery: {
+    ...cleanV4Proof,
+    curveAllowanceBlockHash:
+      '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+  }
+});
+assert.equal(reorgDrift.route, 'STOP');
+assert.equal(reorgDrift.reason, 'PONS_E3_V4_RECOVERY_BLOCK_HASH_DRIFT');
 
 const balanceDrift = decidePonsE3PostBuyExit({
   token: TOKEN,
@@ -190,6 +213,7 @@ console.log(JSON.stringify({
   curveExitPreferredWhenExecutable: true,
   v4RequiresExactE1Proof: true,
   v4RequiresExactPostBuyBalance: true,
+  v4ProofAndCurveAllowanceShareBlockHash: true,
   v4RequiresCleanRecoveryAuthority: true,
   residualE0CurveAllowanceBlocksV4: true,
   arbitraryCurveErrorsFailClosed: true,
