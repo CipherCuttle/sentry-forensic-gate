@@ -1,0 +1,110 @@
+{
+  "schema": "sentry.pons-e3b-runtime-failover-wiring-closure/1.0",
+  "stage": "PONS_E3B_RUNTIME_FAILOVER_WIRING_V1",
+  "status": "CLOSED_PASS_LIVE_DISABLED_ENGINEERING",
+  "closureDate": "2026-09-20",
+  "baseHead": "8a794d1f02f5254a9fbcdda9d5846cf1d6eabc67",
+  "implementationHead": "f227756ae6f37418b00700d2a4c2c2c54bf77ed1",
+  "closureDocHead": "0849e2e8bd2c6e432aeac658684b140177541000",
+  "authority": {
+    "liveMoneyAuthority": false,
+    "signingAuthority": false,
+    "broadcastAuthority": false,
+    "privateKeyUsedInClosure": false,
+    "realTransactionSignedInClosure": false,
+    "realTransactionBroadcastInClosure": false
+  },
+  "runtimeLaw": {
+    "handoffStates": ["BUY_INCLUDED", "APPROVAL_INCLUDED"],
+    "activeCurve": "CURVE_PATH_ACTIVE",
+    "graduationPending": "STOP",
+    "graduatedDirtyCurveAllowance": "TOKEN_REVOKE_CURVE_ONLY",
+    "postCleanup": "FRESH_E3B_PROOF_CYCLE_REQUIRED",
+    "graduatedCleanCurveAllowance": "EXACT_E1_TO_E2_HANDOFF_ONLY"
+  },
+  "e0Binding": {
+    "persistsBuyTransactionHash": true,
+    "requiresSuccessfulBuyReceipt": true,
+    "requiresExactBuySender": true,
+    "requiresExactBuyCurveTarget": true,
+    "requiresDecodedBuyCall": true,
+    "requiresExactRecipient": true,
+    "requiresQuoteInEqualsTransactionValue": true,
+    "requiresExactlyOneMatchingCurveBuyEvent": true,
+    "requiresPositiveTokensOut": true,
+    "requiresCurrentBalanceEqualsPersistedTokensOwned": true
+  },
+  "cleanup": {
+    "intent": "approve(oldCurve,0)",
+    "separateExecutor": true,
+    "broadcastDisabledByDefault": true,
+    "liveCliRequiresEnabled": true,
+    "liveCliRequiresLiveMode": true,
+    "liveCliRequiresBroadcastAuthority": true,
+    "liveCliRequiresLocalPrivateKey": true,
+    "stateTransitions": [
+      "CURVE_REVOKE_REQUIRED",
+      "CURVE_REVOKE_SIGNED",
+      "CURVE_REVOKE_SUBMITTED",
+      "CURVE_REVOKE_INCLUDED"
+    ],
+    "postInclusionTokenBalanceMustBeUnchanged": true,
+    "postInclusionCurveAllowanceMustBeZero": true,
+    "autoContinueToV4": false
+  },
+  "archiveReplay": {
+    "publicRpcHistoricalStateAvailableForPriorE0Block": false,
+    "explicitArchiveRpcRequired": true,
+    "failureCodeWithoutArchiveRpc": "PONS_E3B_HISTORICAL_REPLAY_REQUIRES_ARCHIVE_RPC"
+  },
+  "verificationRuns": {
+    "e3bReadiness": {
+      "runId": 35530629300,
+      "conclusion": "success"
+    },
+    "normalCi": {
+      "runId": 35530629259,
+      "conclusion": "success"
+    },
+    "e0Readiness": {
+      "runId": 35530629291,
+      "conclusion": "success"
+    },
+    "e1Readiness": {
+      "runId": 35530629293,
+      "conclusion": "success"
+    },
+    "e2Readiness": {
+      "runId": 35530629255,
+      "conclusion": "success"
+    },
+    "e3Readiness": {
+      "runId": 35530629258,
+      "conclusion": "success"
+    },
+    "canaryBoundary": {
+      "runId": 35530629279,
+      "conclusion": "success"
+    }
+  },
+  "hostileReview": {
+    "criticalFindings": 0,
+    "highFindings": 1,
+    "finding": "The exact old-curve cleanup signer existed but was not driven through crash-safe SIGNED/SUBMITTED/INCLUDED runtime progression.",
+    "repair": "Added a dedicated live-gated E3B curve cleanup CLI bound to persisted state, exact wallet/token balance, crash-safe transitions, zero-allowance verification, unchanged-token-balance verification, and mandatory stop before any V4 continuation.",
+    "targetedRereview": "PASS",
+    "remainingCriticalOrHigh": 0
+  },
+  "nextBoundary": {
+    "stage": "PONS_E4_ONE_SHOT_FAILOVER_CANARY",
+    "requiresFreshExplicitOwnerAuthority": true,
+    "defaultNotionalUsdMicros": "1000000",
+    "oneExplicitTokenOnly": true,
+    "oneOperationOnly": true,
+    "automaticRetryAfterAmbiguousBroadcast": false,
+    "requiredFinalTokenBalance": "0",
+    "requiredFinalOldCurveAllowance": "0",
+    "requiredFinalErc20ToPermit2Allowance": "0",
+    "requiredFinalPermit2ToRouterAmount": "0"
+  }
+}
