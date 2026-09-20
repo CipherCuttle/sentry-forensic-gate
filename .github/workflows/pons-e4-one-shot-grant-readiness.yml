@@ -70,7 +70,8 @@ jobs:
           grep -q "requiredPermission: 'E3B_CURVE_REVOKE'" src/canary/ponsE3BCurveCleanupCli.ts
           grep -q "PONS_E4_GRANT_PATH_REQUIRED_FOR_E2_LIVE" src/canary/ponsE2V4RecoveryCli.ts
           grep -q "requiredPermission: 'E2_V4_RECOVERY'" src/canary/ponsE2V4RecoveryCli.ts
-          grep -q "PONS_E4_RUNTIME_WORKTREE_NOT_CLEAN" src/canary/ponsE4OneShotGrant.ts
+          grep -q "PONS_E4_RUNTIME_EXECUTION_SURFACE_DIGEST_MISMATCH" src/canary/ponsE4OneShotGrant.ts
+          grep -q "PONS_E4_EXECUTION_SURFACE_FILES" src/canary/ponsE4OneShotGrant.ts
           grep -q "PONS_E4_GRANT_ALREADY_CONSUMED" src/canary/ponsE4OneShotGrant.ts
           grep -q "PONS_E4_RECOVERY_E0_STATE_NOT_HANDOFFABLE" src/canary/ponsE4OneShotGrant.ts
           grep -q "PONS_E4_E2_OLD_CURVE_ALLOWANCE_NOT_ZERO" src/canary/ponsE4OneShotGrant.ts
