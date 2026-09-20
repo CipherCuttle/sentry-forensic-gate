@@ -46,6 +46,7 @@ const curve = decidePonsE3PostBuyExit({
   token: TOKEN,
   owner: OWNER,
   postBuyTokenBalance: TOKEN_AMOUNT,
+  e0CurveAllowance: 0n,
   curveExit: {
     status: 'EXECUTABLE',
     curve: CURVE,
@@ -63,6 +64,7 @@ const v4 = decidePonsE3PostBuyExit({
   token: TOKEN,
   owner: OWNER,
   postBuyTokenBalance: TOKEN_AMOUNT,
+  e0CurveAllowance: 0n,
   curveExit: {
     status: 'CURVE_INACTIVE',
     reason: 'graduated after BUY'
@@ -79,6 +81,7 @@ const missingProof = decidePonsE3PostBuyExit({
   token: TOKEN,
   owner: OWNER,
   postBuyTokenBalance: TOKEN_AMOUNT,
+  e0CurveAllowance: 0n,
   curveExit: {
     status: 'NOT_EXECUTABLE',
     reason: 'reverse quote unavailable'
@@ -91,6 +94,7 @@ const arbitraryError = decidePonsE3PostBuyExit({
   token: TOKEN,
   owner: OWNER,
   postBuyTokenBalance: TOKEN_AMOUNT,
+  e0CurveAllowance: 0n,
   curveExit: {
     status: 'ERROR',
     reason: 'rpc timeout'
@@ -104,6 +108,7 @@ const balanceDrift = decidePonsE3PostBuyExit({
   token: TOKEN,
   owner: OWNER,
   postBuyTokenBalance: TOKEN_AMOUNT + 1n,
+  e0CurveAllowance: 0n,
   curveExit: {
     status: 'CURVE_INACTIVE',
     reason: 'graduated'
@@ -113,10 +118,28 @@ const balanceDrift = decidePonsE3PostBuyExit({
 assert.equal(balanceDrift.route, 'STOP');
 assert.equal(balanceDrift.reason, 'PONS_E3_V4_RECOVERY_BALANCE_DRIFT');
 
+const residualCurveAllowance = decidePonsE3PostBuyExit({
+  token: TOKEN,
+  owner: OWNER,
+  postBuyTokenBalance: TOKEN_AMOUNT,
+  e0CurveAllowance: TOKEN_AMOUNT,
+  curveExit: {
+    status: 'CURVE_INACTIVE',
+    reason: 'graduated after curve approval'
+  },
+  v4Recovery: cleanV4Proof
+});
+assert.equal(residualCurveAllowance.route, 'STOP');
+assert.equal(
+  residualCurveAllowance.reason,
+  'PONS_E3_RESIDUAL_CURVE_ALLOWANCE_REQUIRES_CLEANUP'
+);
+
 const dirtyAuthority = decidePonsE3PostBuyExit({
   token: TOKEN,
   owner: OWNER,
   postBuyTokenBalance: TOKEN_AMOUNT,
+  e0CurveAllowance: 0n,
   curveExit: {
     status: 'CURVE_INACTIVE',
     reason: 'graduated'
@@ -136,6 +159,7 @@ const partialCurve = decidePonsE3PostBuyExit({
   token: TOKEN,
   owner: OWNER,
   postBuyTokenBalance: TOKEN_AMOUNT,
+  e0CurveAllowance: 0n,
   curveExit: {
     status: 'EXECUTABLE',
     curve: CURVE,
@@ -151,6 +175,7 @@ const zeroBalance = decidePonsE3PostBuyExit({
   token: TOKEN,
   owner: OWNER,
   postBuyTokenBalance: 0n,
+  e0CurveAllowance: 0n,
   curveExit: {
     status: 'CURVE_INACTIVE',
     reason: 'graduated'
@@ -166,6 +191,7 @@ console.log(JSON.stringify({
   v4RequiresExactE1Proof: true,
   v4RequiresExactPostBuyBalance: true,
   v4RequiresCleanRecoveryAuthority: true,
+  residualE0CurveAllowanceBlocksV4: true,
   arbitraryCurveErrorsFailClosed: true,
   partialCurveExitForbidden: true,
   liveMoneyAuthority: false,
