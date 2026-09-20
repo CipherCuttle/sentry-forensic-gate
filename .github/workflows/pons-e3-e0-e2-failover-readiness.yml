@@ -1,0 +1,72 @@
+name: pons-e3-e0-e2-failover-readiness
+
+on:
+  push:
+    branches:
+      - agent/pons-e3-e0-e2-failover-v1
+  pull_request:
+    paths:
+      - 'src/canary/ponsE3Failover.ts'
+      - 'src/canary/ponsE3FailoverCli.ts'
+      - 'scripts/pons-e3-failover-check.mjs'
+      - 'docs/PONS_E3_E0_TO_E2_FAILOVER_V1.md'
+      - 'docs/evidence/PONS_E3_E0_TO_E2_FAILOVER_DRY_CLOSURE_2026-09-20.json'
+      - '.github/workflows/pons-e3-e0-e2-failover-readiness.yml'
+      - 'package.json'
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PONS_E0_LIVE: ''
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E2_LIVE: ''
+      PONS_E2_PRIVATE_KEY: ''
+      PONS_E2_BROADCAST_AUTHORITY: ''
+      PONS_E3_LIVE: ''
+      PONS_E3_PRIVATE_KEY: ''
+      PONS_E3_BROADCAST_AUTHORITY: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies without native postinstall
+        run: npm install --package-lock=false --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify E3 failover authority offline
+        run: npm run ponse3failovercheck
+
+      - name: Verify real graduated Pons V4 failover path without signer
+        env:
+          PONS_E3_ENABLED: 'true'
+          PONS_E3_TOKEN: '0x8ECD7b553E36248164616c271B4B3C171bC8226b'
+          PONS_E3_OWNER: '0xE152cd6ab035c0a8b7D8147373dd201579873a41'
+          PONS_E3_POST_BUY_TOKEN_BALANCE: '3975359897761331367429707'
+          PONS_E3_CURVE_EXIT_STATUS: 'CURVE_INACTIVE'
+          PONS_E3_CURVE_EXIT_REASON: 'graduated'
+          PONS_E3_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
+          PONS_E3_SLIPPAGE_BPS: '500'
+        run: npm run start:pons-e3-failover
+
+      - name: Assert E3 has no live authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${PONS_E0_LIVE}" || -n "${PONS_E0_PRIVATE_KEY}" || -n "${PONS_E2_LIVE}" || -n "${PONS_E2_PRIVATE_KEY}" || -n "${PONS_E2_BROADCAST_AUTHORITY}" || -n "${PONS_E3_LIVE}" || -n "${PONS_E3_PRIVATE_KEY}" || -n "${PONS_E3_BROADCAST_AUTHORITY}" ]]; then
+            echo "E3 readiness CI must not receive live/signing/broadcast authority"
+            exit 1
+          fi
+          if grep -Eq 'createWalletClient|privateKeyToAccount|sendRawTransaction|signTransaction' src/canary/ponsE3Failover.ts src/canary/ponsE3FailoverCli.ts; then
+            echo "E3 failover layer must remain read-only / no signer"
+            exit 1
+          fi
+          grep -q "PONS_E3_DRY_MODE_LIVE_AUTHORITY_FORBIDDEN" src/canary/ponsE3FailoverCli.ts
+          grep -q "PONS_E3_V4_RECOVERY_DIRTY_PREEXISTING_AUTHORITY" src/canary/ponsE3Failover.ts
+          echo "PONS_E3_NO_LIVE_AUTHORITY_BOUNDARY_PASS"
