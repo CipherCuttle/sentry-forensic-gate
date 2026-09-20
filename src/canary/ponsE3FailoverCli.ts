@@ -1,5 +1,15 @@
-import { getAddress, type Address } from 'viem';
-import { DEFAULT_ROBINHOOD_RPC_URL } from '../adapters/robinhood/ponsV2/contracts.js';
+import {
+  createPublicClient,
+  defineChain,
+  getAddress,
+  http,
+  type Address
+} from 'viem';
+import {
+  DEFAULT_ROBINHOOD_RPC_URL,
+  ROBINHOOD_CHAIN_ID,
+  ROBINHOOD_EXPLORER_URL
+} from '../adapters/robinhood/ponsV2/contracts.js';
 import { decidePonsE3PostBuyExit, type PonsE3CurveExitObservation } from './ponsE3Failover.js';
 import { verifyPonsE1V4Recovery } from './viemPonsE1V4RecoveryVerifier.js';
 
@@ -29,6 +39,20 @@ if (!ownerRaw) throw new Error('PONS_E3_OWNER_REQUIRED');
 
 const token = getAddress(tokenRaw);
 const owner = getAddress(ownerRaw);
+const rpcUrl = process.env.PONS_E3_RPC_URL ?? DEFAULT_ROBINHOOD_RPC_URL;
+const robinhood = defineChain({
+  id: ROBINHOOD_CHAIN_ID,
+  name: 'Robinhood Chain',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: [rpcUrl] } },
+  blockExplorers: {
+    default: { name: 'Robinhood Chain Explorer', url: ROBINHOOD_EXPLORER_URL }
+  }
+});
+const client = createPublicClient({
+  chain: robinhood,
+  transport: http(rpcUrl, { retryCount: 2, retryDelay: 1_000 })
+});
 const postBuyTokenBalance = envBigInt('PONS_E3_POST_BUY_TOKEN_BALANCE');
 if (postBuyTokenBalance <= 0n) {
   throw new Error('PONS_E3_POST_BUY_TOKEN_BALANCE_NOT_POSITIVE');
@@ -38,12 +62,20 @@ const status = process.env.PONS_E3_CURVE_EXIT_STATUS;
 const curveExit = parseCurveExit(status, postBuyTokenBalance);
 
 let v4Recovery;
+let e0CurveAllowance = 0n;
 if (status === 'CURVE_INACTIVE' || status === 'NOT_EXECUTABLE') {
   const verification = await verifyPonsE1V4Recovery({
     token,
     owner,
     slippageBps: envInt('PONS_E3_SLIPPAGE_BPS', 500),
-    rpcUrl: process.env.PONS_E3_RPC_URL ?? DEFAULT_ROBINHOOD_RPC_URL
+    client
+  });
+  e0CurveAllowance = await client.readContract({
+    address: token,
+    abi: erc20AllowanceAbi,
+    functionName: 'allowance',
+    args: [owner, verification.curve],
+    blockNumber: verification.blockNumber
   });
   v4Recovery = {
     verdict: verification.verdict,
@@ -57,10 +89,20 @@ if (status === 'CURVE_INACTIVE' || status === 'NOT_EXECUTABLE') {
   } as const;
 }
 
+if (curveExit.status === 'EXECUTABLE') {
+  e0CurveAllowance = await client.readContract({
+    address: token,
+    abi: erc20AllowanceAbi,
+    functionName: 'allowance',
+    args: [owner, curveExit.curve]
+  });
+}
+
 const decision = decidePonsE3PostBuyExit({
   token,
   owner,
   postBuyTokenBalance,
+  e0CurveAllowance,
   curveExit,
   v4Recovery
 });
@@ -79,6 +121,17 @@ console.log(JSON.stringify(jsonSafe({
 if (decision.route === 'STOP') {
   process.exitCode = 2;
 }
+
+const erc20AllowanceAbi = [{
+  type: 'function',
+  name: 'allowance',
+  stateMutability: 'view',
+  inputs: [
+    { name: 'owner', type: 'address' },
+    { name: 'spender', type: 'address' }
+  ],
+  outputs: [{ name: '', type: 'uint256' }]
+}] as const;
 
 function parseCurveExit(
   status: string | undefined,
