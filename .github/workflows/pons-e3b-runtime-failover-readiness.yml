@@ -1,0 +1,182 @@
+name: pons-e3b-runtime-failover-readiness
+
+concurrency:
+  group: pons-e3b-runtime-failover-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - agent/pons-e3b-runtime-failover-wiring-v1
+  pull_request:
+    paths:
+      - 'src/canary/ponsE3BRuntimeFailover.ts'
+      - 'src/canary/ponsE3BRuntimeFailoverCli.ts'
+      - 'src/canary/ponsE3BRuntimeState.ts'
+      - 'src/canary/ponsE3BCurveCleanupCli.ts'
+      - 'src/canary/viemPonsE3BCurveCleanupExecutor.ts'
+      - 'scripts/pons-e3b-runtime-failover-check.mjs'
+      - '.github/workflows/pons-e3b-runtime-failover-readiness.yml'
+      - 'package.json'
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PONS_E0_LIVE: ''
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E2_LIVE: ''
+      PONS_E2_PRIVATE_KEY: ''
+      PONS_E2_BROADCAST_AUTHORITY: ''
+      PONS_E3_LIVE: ''
+      PONS_E3_PRIVATE_KEY: ''
+      PONS_E3_BROADCAST_AUTHORITY: ''
+      PONS_E3B_LIVE: ''
+      PONS_E3B_PRIVATE_KEY: ''
+      PONS_E3B_BROADCAST_AUTHORITY: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies without native postinstall
+        run: npm install --package-lock=false --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify E3B runtime failover offline
+        run: npm run ponse3bruntimecheck
+
+      - name: Verify E0-E3 regression chain offline
+        run: |
+          npm run ponse0check
+          npm run ponse1v4recoverycheck
+          npm run ponse2v4recoverycheck
+          npm run ponse3failovercheck
+
+      - name: Enforce narrow canary signer boundary
+        run: node scripts/canary-boundary-check.mjs
+
+      - name: Verify actual E0 BUY receipt and handoff identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {
+            createPublicClient,
+            decodeEventLog,
+            decodeFunctionData,
+            getAddress,
+            http,
+            parseAbi
+          } from 'viem';
+
+          const rpc = 'https://rpc.mainnet.chain.robinhood.com';
+          const buyHash =
+            '0x7bbf92280bbb96368c8b67de4d00f6d87e00f718428c9c526a2f46ac1ab02b85';
+          const token = getAddress('0x891324B8953B77aC22f764b0e63A336a6C259d62');
+          const wallet = getAddress('0x9343835Fe138FFfF68293B361b3C69FEbd83C031');
+          const curve = getAddress('0x32c5ad4Ae02b6f16Df43C0b4bE44b69B42ff9D87');
+          const abi = parseAbi([
+            'function buy(uint256 quoteIn, uint256 minTokensOut, address recipient) payable returns (uint256 tokensOut)',
+            'event CurveBuy(address indexed buyer, address indexed recipient, uint256 quoteIn, uint256 tokensOut, uint256 fee, uint256 tax)'
+          ]);
+
+          const client = createPublicClient({ transport: http(rpc) });
+          const [tx, receipt] = await Promise.all([
+            client.getTransaction({ hash: buyHash }),
+            client.getTransactionReceipt({ hash: buyHash })
+          ]);
+
+          if (receipt.status !== 'success') {
+            throw new Error('E3B_REAL_E0_BUY_RECEIPT_NOT_SUCCESS');
+          }
+          if (
+            getAddress(tx.from) !== wallet ||
+            !tx.to ||
+            getAddress(tx.to) !== curve
+          ) {
+            throw new Error('E3B_REAL_E0_BUY_TRANSACTION_IDENTITY_MISMATCH');
+          }
+
+          const decoded = decodeFunctionData({ abi, data: tx.input });
+          if (
+            decoded.functionName !== 'buy' ||
+            decoded.args[0] !== tx.value ||
+            getAddress(decoded.args[2]) !== wallet
+          ) {
+            throw new Error('E3B_REAL_E0_BUY_CALLDATA_MISMATCH');
+          }
+
+          let matches = 0;
+          let tokensOut = 0n;
+          for (const log of receipt.logs) {
+            if (getAddress(log.address) !== curve) continue;
+            try {
+              const event = decodeEventLog({
+                abi,
+                eventName: 'CurveBuy',
+                data: log.data,
+                topics: log.topics
+              });
+              if (
+                getAddress(event.args.buyer) === wallet &&
+                getAddress(event.args.recipient) === wallet &&
+                event.args.quoteIn === tx.value
+              ) {
+                matches += 1;
+                tokensOut = event.args.tokensOut;
+              }
+            } catch {}
+          }
+          if (matches !== 1 || tokensOut <= 0n) {
+            throw new Error(`E3B_REAL_E0_BUY_EVENT_CARDINALITY:${matches}`);
+          }
+
+          console.log(JSON.stringify({
+            verdict: 'PONS_E3B_REAL_E0_BUY_HANDOFF_IDENTITY_PASS',
+            token,
+            wallet,
+            curve,
+            buyHash,
+            blockNumber: receipt.blockNumber.toString(),
+            quoteInWei: tx.value.toString(),
+            tokensOut: tokensOut.toString(),
+            liveMoneyAuthority: false,
+            signingAuthority: false,
+            broadcastAuthority: false
+          }, null, 2));
+          NODE
+
+      - name: Assert historical replay requires explicit archive RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "PONS_E3B_HISTORICAL_REPLAY_REQUIRES_ARCHIVE_RPC" src/canary/ponsE3BRuntimeFailoverCli.ts
+          echo "PONS_E3B_ARCHIVE_REPLAY_FAIL_CLOSED=PASS"
+
+      - name: Assert E3B has no live authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${PONS_E0_LIVE}" || -n "${PONS_E0_PRIVATE_KEY}" || -n "${PONS_E2_LIVE}" || -n "${PONS_E2_PRIVATE_KEY}" || -n "${PONS_E2_BROADCAST_AUTHORITY}" || -n "${PONS_E3_LIVE}" || -n "${PONS_E3_PRIVATE_KEY}" || -n "${PONS_E3_BROADCAST_AUTHORITY}" || -n "${PONS_E3B_LIVE}" || -n "${PONS_E3B_PRIVATE_KEY}" || -n "${PONS_E3B_BROADCAST_AUTHORITY}" ]]; then
+            echo "E3B readiness CI must not receive live/signing/broadcast authority"
+            exit 1
+          fi
+          if grep -Eq 'createWalletClient|privateKeyToAccount|sendRawTransaction|signTransaction' src/canary/ponsE3BRuntimeFailover.ts src/canary/ponsE3BRuntimeFailoverCli.ts src/canary/ponsE3BRuntimeState.ts; then
+            echo "E3B runtime layer must remain read-only / no signer"
+            exit 1
+          fi
+          grep -q "PONS_E3B_DRY_MODE_LIVE_AUTHORITY_FORBIDDEN" src/canary/ponsE3BRuntimeFailoverCli.ts
+          grep -q "PONS_E3B_BROADCAST_AUTHORITY_DISABLED" src/canary/viemPonsE3BCurveCleanupExecutor.ts
+          grep -q "PONS_E3B_CURVE_CLEANUP_REQUIRES_LIVE_MODE" src/canary/ponsE3BCurveCleanupCli.ts
+          grep -q "PONS_E3B_CURVE_CLEANUP_REQUIRES_BROADCAST_AUTHORITY" src/canary/ponsE3BCurveCleanupCli.ts
+          grep -q "START_FRESH_E3B_PROOF_CYCLE_WITH_NEW_STATE_PATH" src/canary/ponsE3BCurveCleanupCli.ts
+          grep -q "autoContinueToV4: false" src/canary/ponsE3BCurveCleanupCli.ts
+          grep -q "REVERIFY_FROM_CHAIN_AFTER_REVOKE" src/canary/ponsE3BRuntimeFailover.ts
+          grep -q "PONS_E3B_EXISTING_STATE_REQUIRES_MANUAL_RECONCILIATION" src/canary/ponsE3BRuntimeState.ts
+          echo "PONS_E3B_NO_LIVE_AUTHORITY_BOUNDARY_PASS"
