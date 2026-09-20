@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   createPublicClient,
+  decodeFunctionResult,
   defineChain,
   getAddress,
   http,
@@ -155,6 +156,34 @@ if (!graduated) {
     curveReadyToGraduate: readyToGraduate,
     currentCurveAllowance: curveAllowance
   });
+  if (decision.route !== 'CURVE_REVOKE_REQUIRED') {
+    throw new Error('PONS_E3B_CURVE_REVOKE_DECISION_EXPECTED');
+  }
+  const simulated = await client.call({
+    account: e0.wallet,
+    to: decision.cleanup.target,
+    data: decision.cleanup.calldata,
+    value: 0n,
+    blockNumber: head
+  });
+  if (!simulated.data || simulated.data === '0x') {
+    throw new Error('PONS_E3B_CURVE_REVOKE_SIMULATION_RESULT_MISSING');
+  }
+  const approved = decodeFunctionResult({
+    abi: ponsE0TokenAbi,
+    functionName: 'approve',
+    data: simulated.data
+  });
+  if (approved !== true) {
+    throw new Error('PONS_E3B_CURVE_REVOKE_SIMULATION_FALSE');
+  }
+  const blockAfterSimulation = await client.getBlock({ blockNumber: head });
+  if (
+    !blockAfterSimulation.hash ||
+    blockAfterSimulation.hash.toLowerCase() !== block.hash.toLowerCase()
+  ) {
+    throw new Error('PONS_E3B_CURVE_REVOKE_REORG_DURING_SIMULATION');
+  }
 } else {
   const verification = await verifyPonsE1V4Recovery({
     token: e0.token,
