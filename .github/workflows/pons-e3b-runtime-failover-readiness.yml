@@ -45,6 +45,9 @@ jobs:
       - name: Verify E3B runtime failover offline
         run: npm run ponse3bruntimecheck
 
+      - name: Enforce narrow canary signer boundary
+        run: node scripts/canary-boundary-check.mjs
+
       - name: Reconstruct actual E0 BUY handoff fixture
         shell: bash
         run: |
@@ -126,6 +129,7 @@ jobs:
             exit 1
           fi
           grep -q "PONS_E3B_DRY_MODE_LIVE_AUTHORITY_FORBIDDEN" src/canary/ponsE3BRuntimeFailoverCli.ts
+          grep -q "PONS_E3B_BROADCAST_AUTHORITY_DISABLED" src/canary/viemPonsE3BCurveCleanupExecutor.ts
           grep -q "REVERIFY_FROM_CHAIN_AFTER_REVOKE" src/canary/ponsE3BRuntimeFailover.ts
           grep -q "PONS_E3B_EXISTING_STATE_REQUIRES_MANUAL_RECONCILIATION" src/canary/ponsE3BRuntimeState.ts
           echo "PONS_E3B_NO_LIVE_AUTHORITY_BOUNDARY_PASS"
