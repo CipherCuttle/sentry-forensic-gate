@@ -131,6 +131,7 @@ export function decidePonsE3BRuntimeFailover(params: {
   curveReadyToGraduate: boolean;
   currentCurveAllowance: bigint;
   allowanceBlockHash?: Hex;
+  v4RecoveryCurve?: Address;
   v4Recovery?: PonsE3V4RecoveryProof;
 }): PonsE3BRuntimeDecision {
   const token = getAddress(params.token);
@@ -180,13 +181,23 @@ export function decidePonsE3BRuntimeFailover(params: {
     };
   }
 
-  if (!params.v4Recovery || !params.allowanceBlockHash) {
+  if (!params.v4Recovery || !params.allowanceBlockHash || !params.v4RecoveryCurve) {
     return stop(
       token,
       owner,
       curve,
       tokenAmount,
       'PONS_E3B_V4_PROOF_REQUIRED_AFTER_CLEAN_CURVE_AUTHORITY'
+    );
+  }
+
+  if (getAddress(params.v4RecoveryCurve) !== curve) {
+    return stop(
+      token,
+      owner,
+      curve,
+      tokenAmount,
+      'PONS_E3B_V4_RECOVERY_CURVE_MISMATCH'
     );
   }
 
