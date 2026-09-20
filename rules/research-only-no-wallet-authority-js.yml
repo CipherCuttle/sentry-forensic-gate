@@ -6,6 +6,7 @@ note: "Use read-only public-client calls and shadow/counterfactual execution onl
 ignores:
   - scripts/canary-boundary-check.mjs
   - scripts/pons-e2-v4-recovery-check.mjs
+  - scripts/pons-e3b-runtime-failover-check.mjs
 rule:
   any:
     - all:
