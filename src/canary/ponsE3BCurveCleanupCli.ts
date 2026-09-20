@@ -37,7 +37,9 @@ if (existing.status !== 'CURVE_REVOKE_REQUIRED') {
 const privateKey = requirePrivateKey(process.env.PONS_E3B_PRIVATE_KEY);
 const executor = new ViemPonsE3BCurveCleanupExecutor({
   privateKey,
-  rpcUrl: process.env.PONS_E3B_RPC_URL,
+  ...(process.env.PONS_E3B_RPC_URL
+    ? { rpcUrl: process.env.PONS_E3B_RPC_URL }
+    : {}),
   broadcastEnabled: true,
   caps: {
     maxGas: envBigInt('PONS_E3B_MAX_GAS', 150_000n),
