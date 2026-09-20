@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   createPublicClient,
+  decodeEventLog,
+  decodeFunctionData,
   decodeFunctionResult,
   defineChain,
   getAddress,
@@ -80,13 +82,16 @@ if (await client.getChainId() !== ROBINHOOD_CHAIN_ID) {
   throw new Error('PONS_E3B_CHAIN_ID_MISMATCH');
 }
 
+await verifyE0BuyReceipt(client, e0);
+
 let runtimeState = reservePonsE3BRuntimeState(statePath, {
   token: e0.token,
   wallet: e0.wallet,
   curve: e0.curve,
   tokenAmount: e0.tokensOwned.toString(),
   e0Status: e0.status,
-  e0TransactionHash: e0.transactionHash
+  e0TransactionHash: e0.transactionHash,
+  e0BuyTransactionHash: e0.buyTransactionHash
 });
 
 const head = await client.getBlockNumber();
@@ -346,6 +351,7 @@ function readE0PostBuyState(file: string): {
   curve: Address;
   tokensOwned: bigint;
   transactionHash: Hex;
+  buyTransactionHash: Hex;
 } {
   if (!fs.existsSync(file)) {
     throw new Error('PONS_E3B_E0_STATE_MISSING');
@@ -365,7 +371,9 @@ function readE0PostBuyState(file: string): {
     !/^[0-9]+$/.test(state.tokensOwned) ||
     BigInt(state.tokensOwned) <= 0n ||
     typeof state.transactionHash !== 'string' ||
-    !/^0x[0-9a-fA-F]{64}$/.test(state.transactionHash)
+    !/^0x[0-9a-fA-F]{64}$/.test(state.transactionHash) ||
+    typeof state.buyTransactionHash !== 'string' ||
+    !/^0x[0-9a-fA-F]{64}$/.test(state.buyTransactionHash)
   ) {
     throw new Error('PONS_E3B_E0_STATE_SHAPE_INVALID');
   }
@@ -375,8 +383,71 @@ function readE0PostBuyState(file: string): {
     wallet: getAddress(state.wallet),
     curve: getAddress(state.curve),
     tokensOwned: BigInt(state.tokensOwned),
-    transactionHash: state.transactionHash as Hex
+    transactionHash: state.transactionHash as Hex,
+    buyTransactionHash: state.buyTransactionHash as Hex
   };
+}
+
+async function verifyE0BuyReceipt(
+  publicClient: typeof client,
+  e0: {
+    token: Address;
+    wallet: Address;
+    curve: Address;
+    tokensOwned: bigint;
+    buyTransactionHash: Hex;
+  }
+): Promise<void> {
+  const [tx, receipt] = await Promise.all([
+    publicClient.getTransaction({ hash: e0.buyTransactionHash }),
+    publicClient.getTransactionReceipt({ hash: e0.buyTransactionHash })
+  ]);
+  if (receipt.status !== 'success') {
+    throw new Error('PONS_E3B_E0_BUY_RECEIPT_NOT_SUCCESS');
+  }
+  if (
+    getAddress(tx.from) !== e0.wallet ||
+    !tx.to ||
+    getAddress(tx.to) !== e0.curve
+  ) {
+    throw new Error('PONS_E3B_E0_BUY_TRANSACTION_IDENTITY_MISMATCH');
+  }
+  const decoded = decodeFunctionData({
+    abi: ponsE0CurveTradeAbi,
+    data: tx.input
+  });
+  if (
+    decoded.functionName !== 'buy' ||
+    decoded.args[0] !== tx.value ||
+    getAddress(decoded.args[2]) !== e0.wallet
+  ) {
+    throw new Error('PONS_E3B_E0_BUY_CALLDATA_MISMATCH');
+  }
+
+  let matches = 0;
+  for (const log of receipt.logs) {
+    if (getAddress(log.address) !== e0.curve) continue;
+    try {
+      const event = decodeEventLog({
+        abi: ponsE0CurveTradeAbi,
+        eventName: 'CurveBuy',
+        data: log.data,
+        topics: log.topics
+      });
+      if (
+        getAddress(event.args.buyer) === e0.wallet &&
+        getAddress(event.args.recipient) === e0.wallet &&
+        event.args.tokensOut === e0.tokensOwned
+      ) {
+        matches += 1;
+      }
+    } catch {
+      // Non-CurveBuy logs from the curve are irrelevant to this binding.
+    }
+  }
+  if (matches !== 1) {
+    throw new Error(`PONS_E3B_E0_BUY_EVENT_CARDINALITY:${matches}`);
+  }
 }
 
 function printAndExit(payload: Record<string, unknown>, code: number): never {
