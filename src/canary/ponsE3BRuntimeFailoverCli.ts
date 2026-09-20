@@ -61,6 +61,7 @@ const statePath = path.resolve(
   process.env.PONS_E3B_STATE_PATH ?? './data/pons-e3b-runtime.json'
 );
 const rpcUrl = process.env.PONS_E3B_RPC_URL ?? DEFAULT_ROBINHOOD_RPC_URL;
+const archiveRpcUrl = process.env.PONS_E3B_ARCHIVE_RPC_URL ?? null;
 const e0 = readE0PostBuyState(e0StatePath);
 
 assertPonsE3BStateMayStart(readPonsE3BRuntimeState(statePath));
@@ -78,6 +79,15 @@ const client = createPublicClient({
   chain: robinhood,
   transport: http(rpcUrl, { retryCount: 2, retryDelay: 1_000 })
 });
+const archiveClient = archiveRpcUrl
+  ? createPublicClient({
+      chain: defineChain({
+        ...robinhood,
+        rpcUrls: { default: { http: [archiveRpcUrl] } }
+      }),
+      transport: http(archiveRpcUrl, { retryCount: 4, retryDelay: 1_500 })
+    })
+  : null;
 if (await client.getChainId() !== ROBINHOOD_CHAIN_ID) {
   throw new Error('PONS_E3B_CHAIN_ID_MISMATCH');
 }
@@ -96,13 +106,17 @@ let runtimeState = reservePonsE3BRuntimeState(statePath, {
 
 const currentHead = await client.getBlockNumber();
 const replayBlock = envOptionalBigInt('PONS_E3B_OBSERVATION_BLOCK');
+if (replayBlock !== null && !archiveClient) {
+  throw new Error('PONS_E3B_HISTORICAL_REPLAY_REQUIRES_ARCHIVE_RPC');
+}
 if (replayBlock !== null && replayBlock > currentHead) {
   throw new Error(
     `PONS_E3B_OBSERVATION_BLOCK_IN_FUTURE:${replayBlock}:${currentHead}`
   );
 }
 const head = replayBlock ?? currentHead;
-const block = await client.getBlock({ blockNumber: head });
+const observationClient = replayBlock !== null ? archiveClient! : client;
+const block = await observationClient.getBlock({ blockNumber: head });
 if (!block.hash) throw new Error('PONS_E3B_BLOCK_HASH_MISSING');
 
 const [
@@ -115,51 +129,51 @@ const [
   curvePairToken,
   factoryCode
 ] = await Promise.all([
-  client.readContract({
+  observationClient.readContract({
     address: e0.token,
     abi: ponsE0TokenAbi,
     functionName: 'balanceOf',
     args: [e0.wallet],
     blockNumber: head
   }),
-  client.readContract({
+  observationClient.readContract({
     address: e0.curve,
     abi: ponsE0CurveTradeAbi,
     functionName: 'graduated',
     blockNumber: head
   }),
-  client.readContract({
+  observationClient.readContract({
     address: e0.curve,
     abi: ponsE0CurveTradeAbi,
     functionName: 'readyToGraduate',
     blockNumber: head
   }),
-  client.readContract({
+  observationClient.readContract({
     address: e0.token,
     abi: ponsE0TokenAbi,
     functionName: 'allowance',
     args: [e0.wallet, e0.curve],
     blockNumber: head
   }),
-  client.readContract({
+  observationClient.readContract({
     address: e0.curve,
     abi: ponsE0CurveTradeAbi,
     functionName: 'factory',
     blockNumber: head
   }),
-  client.readContract({
+  observationClient.readContract({
     address: e0.curve,
     abi: ponsE0CurveTradeAbi,
     functionName: 'token',
     blockNumber: head
   }),
-  client.readContract({
+  observationClient.readContract({
     address: e0.curve,
     abi: ponsE0CurveTradeAbi,
     functionName: 'pairToken',
     blockNumber: head
   }),
-  client.getBytecode({
+  observationClient.getBytecode({
     address: CURRENT_PONS_V2_AUTHORITY.factory as Address,
     blockNumber: head
   })
@@ -253,20 +267,20 @@ if (!graduated) {
     token: e0.token,
     owner: e0.wallet,
     slippageBps: envInt('PONS_E3B_SLIPPAGE_BPS', 500),
-    client
+    client: observationClient
   });
   if (getAddress(verification.curve) !== e0.curve) {
     throw new Error('PONS_E3B_E1_CURVE_MISMATCH');
   }
 
-  const allowanceAtVerification = await client.readContract({
+  const allowanceAtVerification = await observationClient.readContract({
     address: e0.token,
     abi: ponsE0TokenAbi,
     functionName: 'allowance',
     args: [e0.wallet, e0.curve],
     blockNumber: verification.blockNumber
   });
-  const blockAfterAllowance = await client.getBlock({
+  const blockAfterAllowance = await observationClient.getBlock({
     blockNumber: verification.blockNumber
   });
   if (!blockAfterAllowance.hash) {
