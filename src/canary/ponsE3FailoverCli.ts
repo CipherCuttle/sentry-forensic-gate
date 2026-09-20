@@ -124,7 +124,7 @@ const decision = decidePonsE3PostBuyExit({
   postBuyTokenBalance,
   e0CurveAllowance,
   curveExit,
-  v4Recovery
+  ...(v4Recovery ? { v4Recovery } : {})
 });
 
 console.log(JSON.stringify(jsonSafe({
