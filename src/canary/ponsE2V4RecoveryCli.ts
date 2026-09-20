@@ -29,6 +29,7 @@ import {
   ViemPonsE2V4RecoveryExecutor,
   hasActivePonsE2Permit2Allowance
 } from './viemPonsE2V4RecoveryExecutor.js';
+import { assertPonsE4RecoveryGrant } from './ponsE4OneShotGrant.js';
 
 if (process.env.PONS_E2_ENABLED !== 'true') {
   throw new Error('PONS_E2_REQUIRES_EXPLICIT_ENABLE');
@@ -132,6 +133,16 @@ if (
 ) {
   throw new Error('PONS_E2_OWNER_MUST_EQUAL_SIGNER');
 }
+const e4GrantPath = process.env.PONS_E4_GRANT_PATH;
+if (!e4GrantPath) {
+  throw new Error('PONS_E4_GRANT_PATH_REQUIRED_FOR_E2_LIVE');
+}
+const e4Grant = assertPonsE4RecoveryGrant({
+  grantPath: e4GrantPath,
+  expectedToken: token,
+  expectedWallet: executor.walletAddress,
+  requiredPermission: 'E2_V4_RECOVERY'
+});
 
 assertPonsE2StateMayStart(readPonsE2RecoveryState(statePath));
 
@@ -257,6 +268,7 @@ console.log(JSON.stringify(jsonSafe({
   finalTokenAllowanceToPermit2: tokenAllowanceFinal,
   finalPermit2AllowanceToRouter: permit2Final.amount,
   finalPermit2Expiration: permit2Final.expiration,
+  e4GrantId: e4Grant.grant.grantId,
   stoppedAfterRecovery: true
 }), null, 2));
 
