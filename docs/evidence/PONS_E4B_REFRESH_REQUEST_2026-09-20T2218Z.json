@@ -1,0 +1,8 @@
+{
+  "schema": "sentry.pons-e4b-current-candidate-refresh-request/1.0",
+  "requestedAt": "2026-09-20T22:18:00Z",
+  "reason": "Refresh candidate after prior candidate aged outside frozen E0 30000-block freshness window",
+  "liveMoneyAuthority": false,
+  "signingAuthority": false,
+  "broadcastAuthority": false
+}
