@@ -1,5 +1,9 @@
 name: pons-e3b-runtime-failover-readiness
 
+concurrency:
+  group: pons-e3b-runtime-failover-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -44,6 +48,13 @@ jobs:
 
       - name: Verify E3B runtime failover offline
         run: npm run ponse3bruntimecheck
+
+      - name: Verify E0-E3 regression chain offline
+        run: |
+          npm run ponse0check
+          npm run ponse1v4recoverycheck
+          npm run ponse2v4recoverycheck
+          npm run ponse3failovercheck
 
       - name: Enforce narrow canary signer boundary
         run: node scripts/canary-boundary-check.mjs
