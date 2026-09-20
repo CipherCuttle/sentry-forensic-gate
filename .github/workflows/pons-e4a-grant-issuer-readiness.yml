@@ -46,6 +46,14 @@ jobs:
       - name: Verify E4A issuer offline
         run: node scripts/pons-e4-grant-issuer-check.mjs
 
+      - name: Emit reviewed E4 execution surface digest
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { computePonsE4ExecutionSurfaceDigest } from './dist/canary/ponsE4OneShotGrant.js';
+          console.log('PONS_E4_EXECUTION_SURFACE_DIGEST=' + computePonsE4ExecutionSurfaceDigest());
+          NODE
+
       - name: Preserve research-only boundaries
         run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
 
