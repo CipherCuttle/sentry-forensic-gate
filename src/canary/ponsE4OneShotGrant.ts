@@ -139,6 +139,7 @@ export function consumePonsE4EntryGrant(params: {
   try {
     fd = fs.openSync(consumedReceiptPath, 'wx', 0o600);
     fs.writeFileSync(fd, `${JSON.stringify(receipt, null, 2)}\n`);
+    fs.fsyncSync(fd);
   } catch (error) {
     if (
       error &&
@@ -151,6 +152,12 @@ export function consumePonsE4EntryGrant(params: {
     throw error;
   } finally {
     if (fd !== null) fs.closeSync(fd);
+  }
+  const dirFd = fs.openSync(path.dirname(consumedReceiptPath), 'r');
+  try {
+    fs.fsyncSync(dirFd);
+  } finally {
+    fs.closeSync(dirFd);
   }
 
   return { grant: loaded.grant, receipt, consumedReceiptPath };
@@ -253,6 +260,30 @@ export function assertPonsE4RecoveryGrant(params: {
 export function getPonsE4ConsumedReceiptPath(grantPath: string): string {
   return consumedPath(grantPath);
 }
+export function assertPonsE4V4OldCurveAuthorityCleared(params: {
+  oldCurveAllowance: bigint;
+  verificationBlockHash: string;
+  allowanceBlockHash: string;
+}): void {
+  if (
+    !/^0x[0-9a-fA-F]{64}$/.test(params.verificationBlockHash) ||
+    !/^0x[0-9a-fA-F]{64}$/.test(params.allowanceBlockHash)
+  ) {
+    throw new Error('PONS_E4_E2_OLD_CURVE_BLOCK_HASH_INVALID');
+  }
+  if (
+    params.verificationBlockHash.toLowerCase() !==
+    params.allowanceBlockHash.toLowerCase()
+  ) {
+    throw new Error('PONS_E4_E2_OLD_CURVE_BLOCK_HASH_DRIFT');
+  }
+  if (params.oldCurveAllowance !== 0n) {
+    throw new Error(
+      `PONS_E4_E2_OLD_CURVE_ALLOWANCE_NOT_ZERO:${params.oldCurveAllowance}`
+    );
+  }
+}
+
 
 function loadGrant(file: string): {
   grant: PonsE4Grant;
