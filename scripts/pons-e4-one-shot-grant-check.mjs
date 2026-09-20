@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import {
   assertPonsE4RecoveryGrant,
+  assertPonsE4V4OldCurveAuthorityCleared,
   consumePonsE4EntryGrant,
   getPonsE4ConsumedReceiptPath
 } from '../dist/canary/ponsE4OneShotGrant.js';
@@ -172,6 +173,35 @@ fs.writeFileSync(
   `${JSON.stringify(handoffState, null, 2)}\n`
 );
 
+const BLOCK_HASH =
+  '0x7777777777777777777777777777777777777777777777777777777777777777';
+assert.doesNotThrow(() =>
+  assertPonsE4V4OldCurveAuthorityCleared({
+    oldCurveAllowance: 0n,
+    verificationBlockHash: BLOCK_HASH,
+    allowanceBlockHash: BLOCK_HASH
+  })
+);
+assert.throws(
+  () =>
+    assertPonsE4V4OldCurveAuthorityCleared({
+      oldCurveAllowance: 1n,
+      verificationBlockHash: BLOCK_HASH,
+      allowanceBlockHash: BLOCK_HASH
+    }),
+  /PONS_E4_E2_OLD_CURVE_ALLOWANCE_NOT_ZERO/
+);
+assert.throws(
+  () =>
+    assertPonsE4V4OldCurveAuthorityCleared({
+      oldCurveAllowance: 0n,
+      verificationBlockHash: BLOCK_HASH,
+      allowanceBlockHash:
+        '0x8888888888888888888888888888888888888888888888888888888888888888'
+    }),
+  /PONS_E4_E2_OLD_CURVE_BLOCK_HASH_DRIFT/
+);
+
 const wrongToken = writeGrant('wrong-token');
 assert.throws(
   () =>
@@ -321,6 +351,9 @@ console.log(JSON.stringify({
   recoveryRequiresConsumedGrant: true,
   recoveryBoundToOriginalE0Operation: true,
   completedE0OperationRevokesRecoveryAuthority: true,
+  v4RequiresZeroOldCurveAllowance: true,
+  v4OldCurveReadSharesVerificationBlockHash: true,
+  grantConsumptionFsyncDurable: true,
   postConsumptionTamperDetected: true,
   liveMoneyAuthority: false,
   signingAuthority: false,
