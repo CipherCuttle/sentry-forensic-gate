@@ -1,0 +1,62 @@
+name: pons-e4b-current-candidate-readiness
+
+concurrency:
+  group: pons-e4b-current-candidate-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - agent/pons-e4b-read-only-candidate-v1
+  pull_request:
+    paths:
+      - 'scripts/pons-e4b-current-candidate-scan.mjs'
+      - '.github/workflows/pons-e4b-current-candidate-readiness.yml'
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E2_PRIVATE_KEY: ''
+      PONS_E3B_PRIVATE_KEY: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: corepack enable
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Preserve research-only boundaries
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+
+      - name: Scan current Pons V2 launches read-only
+        env:
+          PONS_E4B_SCAN_BLOCKS: '5000'
+          PONS_E4B_MAX_LAUNCHES: '20'
+          PONS_E4B_SLIPPAGE_BPS: '500'
+          PONS_E4B_WALLET: '0x9343835Fe138FFfF68293B361b3C69FEbd83C031'
+        run: node scripts/pons-e4b-current-candidate-scan.mjs
+
+      - name: Assert no live authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq 'privateKeyToAccount|createWalletClient|signTransaction|sendRawTransaction|broadcastExact' scripts/pons-e4b-current-candidate-scan.mjs; then
+            echo "E4B candidate scan must remain read-only"
+            exit 1
+          fi
+          test -z "${PONS_E0_PRIVATE_KEY}"
+          test -z "${PONS_E2_PRIVATE_KEY}"
+          test -z "${PONS_E3B_PRIVATE_KEY}"
+          echo "PONS_E4B_READ_ONLY_BOUNDARY=PASS"

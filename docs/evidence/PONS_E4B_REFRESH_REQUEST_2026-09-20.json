@@ -1,0 +1,8 @@
+{
+  "schema": "sentry.pons-e4b-current-candidate-refresh-request/1.0",
+  "requestedAt": "2026-09-20T21:21:02Z",
+  "reason": "Fresh read-only candidate proof required immediately before E4 grant issuance",
+  "liveMoneyAuthority": false,
+  "signingAuthority": false,
+  "broadcastAuthority": false
+}
