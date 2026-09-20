@@ -29,6 +29,11 @@ import {
   ViemPonsE2V4RecoveryExecutor,
   hasActivePonsE2Permit2Allowance
 } from './viemPonsE2V4RecoveryExecutor.js';
+import {
+  assertPonsE4RecoveryGrant,
+  assertPonsE4V4OldCurveAuthorityCleared
+} from './ponsE4OneShotGrant.js';
+import { ponsE0TokenAbi } from './ponsE0Contracts.js';
 
 if (process.env.PONS_E2_ENABLED !== 'true') {
   throw new Error('PONS_E2_REQUIRES_EXPLICIT_ENABLE');
@@ -132,6 +137,16 @@ if (
 ) {
   throw new Error('PONS_E2_OWNER_MUST_EQUAL_SIGNER');
 }
+const e4GrantPath = process.env.PONS_E4_GRANT_PATH;
+if (!e4GrantPath) {
+  throw new Error('PONS_E4_GRANT_PATH_REQUIRED_FOR_E2_LIVE');
+}
+const e4Grant = assertPonsE4RecoveryGrant({
+  grantPath: e4GrantPath,
+  expectedToken: token,
+  expectedWallet: executor.walletAddress,
+  requiredPermission: 'E2_V4_RECOVERY'
+});
 
 assertPonsE2StateMayStart(readPonsE2RecoveryState(statePath));
 
@@ -140,6 +155,32 @@ const verification = await verifyPonsE1V4Recovery({
   owner: executor.walletAddress,
   slippageBps,
   client
+});
+if (verification.tokenBalance !== e4Grant.e0Operation.tokensOwned) {
+  throw new Error(
+    `PONS_E4_E2_RECOVERY_TOKEN_AMOUNT_MISMATCH:${verification.tokenBalance}:${e4Grant.e0Operation.tokensOwned}`
+  );
+}
+if (getAddress(verification.curve) !== getAddress(e4Grant.e0Operation.curve)) {
+  throw new Error('PONS_E4_E2_RECOVERY_CURVE_MISMATCH');
+}
+const [oldCurveAllowance, allowanceBlock] = await Promise.all([
+  client.readContract({
+    address: token,
+    abi: ponsE0TokenAbi,
+    functionName: 'allowance',
+    args: [executor.walletAddress, getAddress(e4Grant.e0Operation.curve)],
+    blockNumber: verification.blockNumber
+  }),
+  client.getBlock({ blockNumber: verification.blockNumber })
+]);
+if (!allowanceBlock.hash) {
+  throw new Error('PONS_E4_E2_OLD_CURVE_BLOCK_HASH_MISSING');
+}
+assertPonsE4V4OldCurveAuthorityCleared({
+  oldCurveAllowance,
+  verificationBlockHash: verification.blockHash,
+  allowanceBlockHash: allowanceBlock.hash
 });
 const intents = buildPonsE2RecoveryIntents({
   plan: verification.plan,
@@ -257,6 +298,7 @@ console.log(JSON.stringify(jsonSafe({
   finalTokenAllowanceToPermit2: tokenAllowanceFinal,
   finalPermit2AllowanceToRouter: permit2Final.amount,
   finalPermit2Expiration: permit2Final.expiration,
+  e4GrantId: e4Grant.grant.grantId,
   stoppedAfterRecovery: true
 }), null, 2));
 

@@ -1,0 +1,144 @@
+{
+  "schema": "sentry.pons-e4-one-shot-failover-canary-engineering-closure/1.0",
+  "stage": "PONS_E4_ONE_SHOT_FAILOVER_CANARY_V1",
+  "status": "CLOSED_PASS_GRANT_MACHINERY_READY_NO_LIVE_GRANT",
+  "closureDate": "2026-09-20",
+  "baseHead": "cf6a14b7c39887368a1bc0a421d1fe6d64ee4432",
+  "implementationHead": "f607a0a33d695ddd5a6ec872cce87e4efebd92a3",
+  "closureDocHead": "d11beba5f2c8d04247c0544a8cf76596dbe7d52b",
+  "authority": {
+    "liveMoneyAuthority": false,
+    "signingAuthority": false,
+    "broadcastAuthority": false,
+    "realGrantIssued": false,
+    "privateKeyUsed": false,
+    "realTransactionSigned": false,
+    "realTransactionBroadcast": false
+  },
+  "grantLaw": {
+    "chainId": 4663,
+    "wallet": "0x9343835Fe138FFfF68293B361b3C69FEbd83C031",
+    "notionalUsdMicros": "1000000",
+    "oneExactToken": true,
+    "oneExactE0StatePath": true,
+    "maximumEntryWindowSeconds": 1800,
+    "maximumRecoveryWindowSeconds": 86400,
+    "absoluteMaxQuoteInWei": "10000000000000000",
+    "atomicOneShotConsumption": true,
+    "receiptFsyncDurable": true,
+    "repeatEntryBlocked": true,
+    "executionSurfaceDigestRequired": true,
+    "codeHeadRecordedAsProvenance": true
+  },
+  "permissions": [
+    "E0_BUY",
+    "E0_CURVE_EXIT",
+    "E3B_CURVE_REVOKE",
+    "E2_V4_RECOVERY"
+  ],
+  "operationBinding": {
+    "recoveryRequiresConsumedGrant": true,
+    "recoveryRequiresE0StateStatus": [
+      "BUY_INCLUDED",
+      "APPROVAL_INCLUDED"
+    ],
+    "bindsGrantId": true,
+    "bindsToken": true,
+    "bindsWallet": true,
+    "bindsCurve": true,
+    "bindsOriginalBuyTransactionHash": true,
+    "bindsOriginalTokensOwned": true,
+    "completedE0StateRevokesRecoveryAuthority": true
+  },
+  "v4Boundary": {
+    "requiresExactE1Proof": true,
+    "requiresCurrentBalanceEqualsOriginalE0TokensOwned": true,
+    "requiresCurrentCurveEqualsOriginalE0Curve": true,
+    "requiresOldCurveAllowanceZero": true,
+    "oldCurveAllowanceReadAtE1VerificationBlock": true,
+    "allowanceBlockHashMustEqualE1VerificationBlockHash": true
+  },
+  "compiledExecutionSurface": {
+    "binding": "sha256",
+    "runtimeShellEscapeUsed": false,
+    "researchGuardrailExceptionAdded": false,
+    "includesLiveE0": true,
+    "includesLiveE3B": true,
+    "includesLiveE2": true,
+    "includesE1Verifier": true,
+    "includesReviewedPonsAuthority": true,
+    "includesPackageManifest": true
+  },
+  "verificationRuns": {
+    "e4Readiness": {
+      "runId": 35534086777,
+      "conclusion": "success"
+    },
+    "e3bReadiness": {
+      "runId": 35534086752,
+      "conclusion": "success"
+    },
+    "e3Readiness": {
+      "runId": 35534086751,
+      "conclusion": "success"
+    },
+    "e2Readiness": {
+      "runId": 35534086766,
+      "conclusion": "success"
+    },
+    "e1Readiness": {
+      "runId": 35534086770,
+      "conclusion": "success"
+    },
+    "e0Readiness": {
+      "runId": 35534086779,
+      "conclusion": "success"
+    },
+    "canaryBoundary": {
+      "runId": 35534086771,
+      "conclusion": "success"
+    },
+    "normalCi": {
+      "runId": 35534086773,
+      "conclusion": "success"
+    },
+    "executableInfraDiscovery": {
+      "runId": 35534086776,
+      "conclusion": "success"
+    }
+  },
+  "realChainDryEvidence": {
+    "e3CurrentGraduatedV4Path": "PASS_NO_SIGNER",
+    "e3RunId": 35534086751,
+    "liveMoneyAuthority": false
+  },
+  "hostileReview": {
+    "criticalFindings": 0,
+    "highFindings": 3,
+    "findings": [
+      {
+        "finding": "Consumed recovery grant could be reused for a later same-token position.",
+        "repair": "Bound recovery to the exact original E0 state path, grant ID, BUY hash, curve and tokensOwned; COMPLETED E0 state blocks recovery."
+      },
+      {
+        "finding": "Direct E2 invocation could bypass stale old-curve allowance cleanup.",
+        "repair": "E2 independently requires old-curve allowance zero at the E1 verification block and rebinds the block hash."
+      },
+      {
+        "finding": "Initial runtime identity check used node:child_process to call git, violating the research-only escape-hatch boundary.",
+        "repair": "Removed child_process and replaced it with SHA-256 binding of the compiled execution surface; no guardrail whitelist was added."
+      }
+    ],
+    "remainingCriticalOrHigh": 0,
+    "closureVerification": "PASS"
+  },
+  "nextBoundary": {
+    "action": "ISSUE_CONCRETE_E4_GRANT_OUTSIDE_GIT",
+    "requiresFreshExplicitOwnerAuthority": true,
+    "requiresExactToken": true,
+    "requiresFreshQuoteCap": true,
+    "requiresEntryAndRecoveryExpiry": true,
+    "requiresExecutionSurfaceDigest": true,
+    "requiresImplementationProvenanceHead": "f607a0a33d695ddd5a6ec872cce87e4efebd92a3"
+  }
+}

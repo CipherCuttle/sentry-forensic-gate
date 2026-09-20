@@ -44,6 +44,7 @@ import {
   ViemPonsE0CanaryExecutor,
   type SignedPonsE0Transaction
 } from './viemPonsE0CanaryExecutor.js';
+import { consumePonsE4EntryGrant } from './ponsE4OneShotGrant.js';
 
 if (process.env.PONS_E0_CANARY_ENABLED !== 'true') {
   throw new Error('PONS_E0_CANARY_REQUIRES_EXPLICIT_ENABLE');
@@ -164,12 +165,25 @@ if (!live) {
 }
 
 if (!executor) throw new Error('PONS_E0_LIVE_EXECUTOR_MISSING');
+const e4GrantPath = process.env.PONS_E4_GRANT_PATH;
+if (!e4GrantPath) throw new Error('PONS_E4_GRANT_PATH_REQUIRED_FOR_E0_LIVE');
+const e4Grant = consumePonsE4EntryGrant({
+  grantPath: e4GrantPath,
+  expectedToken: token,
+  expectedWallet: executor.walletAddress,
+  expectedNotionalUsdMicros: PONS_E0_NOTIONAL_USD_MICROS,
+  expectedSlippageBps: slippageBps,
+  actualQuoteInWei: plan.buy.quoteIn,
+  expectedE0StatePath: statePath
+});
+const e4GrantId = e4Grant.grant.grantId;
 reserveLiveState(statePath, {
   version: 'PONS_E0_LIVE_CANARY_R0',
   status: 'ARMED',
   token,
   curve: plan.marketCurve,
-  wallet
+  wallet,
+  e4GrantId
 });
 const tokenBefore = await executor.getTokenBalance(token);
 if (tokenBefore !== 0n) {
@@ -221,7 +235,8 @@ writeState(statePath, {
   wallet,
   transactionHash: buyHash,
   buyTransactionHash: buyHash,
-  tokensOwned: tokensOwned.toString()
+  tokensOwned: tokensOwned.toString(),
+  e4GrantId
 });
 
 await assertCurveStillActiveOrRequireE3B(client, plan.marketCurve, statePath);
@@ -274,7 +289,8 @@ writeState(statePath, {
   wallet,
   transactionHash: approvalHash,
   buyTransactionHash: buyHash,
-  tokensOwned: tokensOwned.toString()
+  tokensOwned: tokensOwned.toString(),
+  e4GrantId
 });
 
 await assertCurveStillActiveOrRequireE3B(client, exitPlan.curve, statePath);
@@ -342,7 +358,8 @@ writeState(statePath, {
   buyTransactionHash: buyHash,
   approvalTransactionHash: approvalHash,
   sellTransactionHash: sellHash,
-  tokensOwned: tokensOwned.toString()
+  tokensOwned: tokensOwned.toString(),
+  e4GrantId
 });
 
 console.log(JSON.stringify({
@@ -354,6 +371,7 @@ console.log(JSON.stringify({
   approvalTransactionHash: approvalHash,
   sellTransactionHash: sellHash,
   notionalUsdMicros: PONS_E0_NOTIONAL_USD_MICROS.toString(),
+  e4GrantId,
   stoppedAfterOneRoundTrip: true
 }, null, 2));
 

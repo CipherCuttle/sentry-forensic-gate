@@ -54,7 +54,8 @@
     "start:pons-e3-failover": "node dist/canary/ponsE3FailoverCli.js",
     "ponse3bruntimecheck": "node scripts/pons-e3b-runtime-failover-check.mjs",
     "start:pons-e3b-runtime": "node dist/canary/ponsE3BRuntimeFailoverCli.js",
-    "start:pons-e3b-curve-cleanup": "node dist/canary/ponsE3BCurveCleanupCli.js"
+    "start:pons-e3b-curve-cleanup": "node dist/canary/ponsE3BCurveCleanupCli.js",
+    "ponse4grantcheck": "node scripts/pons-e4-one-shot-grant-check.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",

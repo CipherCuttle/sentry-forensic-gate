@@ -1,0 +1,95 @@
+name: pons-e4-one-shot-grant-readiness
+
+concurrency:
+  group: pons-e4-one-shot-grant-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - agent/pons-e4-one-shot-failover-canary-v1
+  pull_request:
+    paths:
+      - 'src/canary/ponsE4OneShotGrant.ts'
+      - 'src/canary/ponsE0Cli.ts'
+      - 'src/canary/ponsE2V4RecoveryCli.ts'
+      - 'src/canary/ponsE3BCurveCleanupCli.ts'
+      - 'scripts/pons-e4-one-shot-grant-check.mjs'
+      - '.github/workflows/pons-e4-one-shot-grant-readiness.yml'
+      - 'package.json'
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PONS_E0_LIVE: ''
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E2_LIVE: ''
+      PONS_E2_PRIVATE_KEY: ''
+      PONS_E2_BROADCAST_AUTHORITY: ''
+      PONS_E3B_LIVE: ''
+      PONS_E3B_PRIVATE_KEY: ''
+      PONS_E3B_BROADCAST_AUTHORITY: ''
+      PONS_E4_GRANT_PATH: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies without native postinstall
+        run: npm install --package-lock=false --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify E4 one-shot grant offline
+        run: npm run ponse4grantcheck
+
+      - name: Verify E0-E3B regression chain
+        run: |
+          npm run ponse0check
+          npm run ponse1v4recoverycheck
+          npm run ponse2v4recoverycheck
+          npm run ponse3failovercheck
+          npm run ponse3bruntimecheck
+
+      - name: Enforce narrow canary signer boundary
+        run: node scripts/canary-boundary-check.mjs
+
+      - name: Assert all live surfaces require E4 grant
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "PONS_E4_GRANT_PATH_REQUIRED_FOR_E0_LIVE" src/canary/ponsE0Cli.ts
+          grep -q "consumePonsE4EntryGrant" src/canary/ponsE0Cli.ts
+          grep -q "PONS_E4_GRANT_PATH_REQUIRED_FOR_E3B_CLEANUP" src/canary/ponsE3BCurveCleanupCli.ts
+          grep -q "requiredPermission: 'E3B_CURVE_REVOKE'" src/canary/ponsE3BCurveCleanupCli.ts
+          grep -q "PONS_E4_GRANT_PATH_REQUIRED_FOR_E2_LIVE" src/canary/ponsE2V4RecoveryCli.ts
+          grep -q "requiredPermission: 'E2_V4_RECOVERY'" src/canary/ponsE2V4RecoveryCli.ts
+          grep -q "PONS_E4_RUNTIME_EXECUTION_SURFACE_DIGEST_MISMATCH" src/canary/ponsE4OneShotGrant.ts
+          grep -q "PONS_E4_EXECUTION_SURFACE_FILES" src/canary/ponsE4OneShotGrant.ts
+          grep -q "PONS_E4_GRANT_ALREADY_CONSUMED" src/canary/ponsE4OneShotGrant.ts
+          grep -q "PONS_E4_RECOVERY_E0_STATE_NOT_HANDOFFABLE" src/canary/ponsE4OneShotGrant.ts
+          grep -q "PONS_E4_E2_OLD_CURVE_ALLOWANCE_NOT_ZERO" src/canary/ponsE4OneShotGrant.ts
+          grep -q "fs.fsyncSync" src/canary/ponsE4OneShotGrant.ts
+          grep -q "assertPonsE4V4OldCurveAuthorityCleared" src/canary/ponsE2V4RecoveryCli.ts
+          echo "PONS_E4_LIVE_SURFACE_GRANT_GATES=PASS"
+
+      - name: Assert CI has no live authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${PONS_E0_LIVE}"
+          test -z "${PONS_E0_PRIVATE_KEY}"
+          test -z "${PONS_E2_LIVE}"
+          test -z "${PONS_E2_PRIVATE_KEY}"
+          test -z "${PONS_E2_BROADCAST_AUTHORITY}"
+          test -z "${PONS_E3B_LIVE}"
+          test -z "${PONS_E3B_PRIVATE_KEY}"
+          test -z "${PONS_E3B_BROADCAST_AUTHORITY}"
+          test -z "${PONS_E4_GRANT_PATH}"
+          echo "PONS_E4_CI_NO_LIVE_AUTHORITY=PASS"
