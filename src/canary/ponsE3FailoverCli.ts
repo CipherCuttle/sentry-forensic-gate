@@ -13,6 +13,17 @@ import {
 import { decidePonsE3PostBuyExit, type PonsE3CurveExitObservation } from './ponsE3Failover.js';
 import { verifyPonsE1V4Recovery } from './viemPonsE1V4RecoveryVerifier.js';
 
+const erc20AllowanceAbi = [{
+  type: 'function',
+  name: 'allowance',
+  stateMutability: 'view',
+  inputs: [
+    { name: 'owner', type: 'address' },
+    { name: 'spender', type: 'address' }
+  ],
+  outputs: [{ name: '', type: 'uint256' }]
+}] as const;
+
 if (process.env.PONS_E3_ENABLED !== 'true') {
   throw new Error('PONS_E3_REQUIRES_EXPLICIT_ENABLE');
 }
@@ -121,17 +132,6 @@ console.log(JSON.stringify(jsonSafe({
 if (decision.route === 'STOP') {
   process.exitCode = 2;
 }
-
-const erc20AllowanceAbi = [{
-  type: 'function',
-  name: 'allowance',
-  stateMutability: 'view',
-  inputs: [
-    { name: 'owner', type: 'address' },
-    { name: 'spender', type: 'address' }
-  ],
-  outputs: [{ name: '', type: 'uint256' }]
-}] as const;
 
 function parseCurveExit(
   status: string | undefined,
