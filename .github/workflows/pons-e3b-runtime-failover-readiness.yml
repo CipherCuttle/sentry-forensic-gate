@@ -45,39 +45,66 @@ jobs:
       - name: Verify E3B runtime failover offline
         run: npm run ponse3bruntimecheck
 
-      - name: Create current graduated-token E0 handoff fixture
+      - name: Reconstruct actual E0 BUY handoff fixture
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          import { createPublicClient, http, parseAbi } from 'viem';
+          import { createPublicClient, decodeEventLog, getAddress, http, parseAbi } from 'viem';
 
           const rpc = 'https://rpc.mainnet.chain.robinhood.com';
-          const token = '0x8ECD7b553E36248164616c271B4B3C171bC8226b';
-          const wallet = '0xE152cd6ab035c0a8b7D8147373dd201579873a41';
-          const curve = '0x90fB03B62593cf132433Bf3A9a57c2e93545bBD0';
+          const buyHash =
+            '0x7bbf92280bbb96368c8b67de4d00f6d87e00f718428c9c526a2f46ac1ab02b85';
+          const token = getAddress('0x891324B8953B77aC22f764b0e63A336a6C259d62');
+          const wallet = getAddress('0x9343835Fe138FFfF68293B361b3C69FEbd83C031');
+          const curve = getAddress('0x32c5ad4Ae02b6f16Df43C0b4bE44b69B42ff9D87');
+          const abi = parseAbi([
+            'event CurveBuy(address indexed buyer, address indexed recipient, uint256 quoteIn, uint256 tokensOut, uint256 fee, uint256 tax)'
+          ]);
           const client = createPublicClient({ transport: http(rpc) });
-          const balance = await client.readContract({
-            address: token,
-            abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
-            functionName: 'balanceOf',
-            args: [wallet]
-          });
-          if (balance <= 0n) throw new Error('E3B_REAL_FIXTURE_BALANCE_ZERO');
+          const receipt = await client.getTransactionReceipt({ hash: buyHash });
+          if (receipt.status !== 'success') throw new Error('E3B_E0_BUY_RECEIPT_NOT_SUCCESS');
+
+          const matches = [];
+          for (const log of receipt.logs) {
+            if (getAddress(log.address) !== curve) continue;
+            try {
+              const event = decodeEventLog({
+                abi,
+                eventName: 'CurveBuy',
+                data: log.data,
+                topics: log.topics
+              });
+              if (
+                getAddress(event.args.buyer) === wallet &&
+                getAddress(event.args.recipient) === wallet
+              ) {
+                matches.push(event.args.tokensOut);
+              }
+            } catch {}
+          }
+          if (matches.length !== 1 || matches[0] <= 0n) {
+            throw new Error(`E3B_E0_BUY_EVENT_CARDINALITY:${matches.length}`);
+          }
+
           fs.writeFileSync('/tmp/pons-e3b-e0-state.json', JSON.stringify({
             version: 'PONS_E0_LIVE_CANARY_R0',
-            status: 'APPROVAL_INCLUDED',
+            status: 'BUY_INCLUDED',
             token,
             curve,
             wallet,
-            transactionHash:
-              '0x1111111111111111111111111111111111111111111111111111111111111111',
-            tokensOwned: balance.toString()
+            transactionHash: buyHash,
+            buyTransactionHash: buyHash,
+            tokensOwned: matches[0].toString()
           }, null, 2));
+          fs.appendFileSync(
+            process.env.GITHUB_ENV,
+            `PONS_E3B_OBSERVATION_BLOCK=${receipt.blockNumber.toString()}\n`
+          );
           NODE
 
-      - name: Verify current graduated Pons handoff without signer
+      - name: Replay actual E0 post-BUY handoff without signer
         env:
           PONS_E3B_ENABLED: 'true'
           PONS_E3B_E0_STATE_PATH: '/tmp/pons-e3b-e0-state.json'
