@@ -161,7 +161,8 @@ let state = reservePonsE3BRuntimeState(statePath, {
   curve: CURVE,
   tokenAmount: TOKEN_AMOUNT.toString(),
   e0Status: 'APPROVAL_INCLUDED',
-  e0TransactionHash: TX_HASH
+  e0TransactionHash: TX_HASH,
+  e0BuyTransactionHash: TX_HASH
 });
 assert.equal(state.status, 'POST_BUY_CAPTURED');
 assert.throws(
@@ -171,7 +172,8 @@ assert.throws(
     curve: CURVE,
     tokenAmount: TOKEN_AMOUNT.toString(),
     e0Status: 'APPROVAL_INCLUDED',
-    e0TransactionHash: TX_HASH
+    e0TransactionHash: TX_HASH,
+    e0BuyTransactionHash: TX_HASH
   }),
   /PONS_E3B_STATE_RESERVATION_EXISTS/
 );
