@@ -126,6 +126,10 @@ assert.ok(cliSource.includes('PONS_E0_ENTRY_SPEND_NOT_EXACT_CALIBRATED_DOLLAR'))
 assert.ok(cliSource.includes('PONS_E0_RECENT_LAUNCH_CARDINALITY'));
 assert.ok(cliSource.includes('PONS_E0_LAUNCH_BLOCK_HINT_MISMATCH'));
 assert.ok(
+  cliSource.includes('await readRange(launchBlockHint, launchBlockHint)'),
+  'exact launch block hint must query only that block instead of scanning the recent window'
+);
+assert.ok(
   cliSource.includes('client,\n  client,\n  historicalLaunchAdapter'),
   'recent-launch log uniqueness must use the current RPC while historical materialization uses archive RPC'
 );
@@ -157,5 +161,6 @@ console.log(JSON.stringify({
   maxSlippageBps: 1000,
   maxSellableShareBps: 100,
   exactSellApproval: true,
+  exactLaunchHintSingleBlockLookup: true,
   noBroadcast: true
 }, null, 2));
