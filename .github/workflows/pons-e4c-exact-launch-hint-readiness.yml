@@ -42,14 +42,22 @@ jobs:
       - name: Verify bounded E0 regression
         run: pnpm ponse0check
 
+      - name: Emit E4C execution surface digest
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { computePonsE4ExecutionSurfaceDigest } from './dist/canary/ponsE4OneShotGrant.js';
+          console.log('PONS_E4C_EXECUTION_SURFACE_DIGEST=' + computePonsE4ExecutionSurfaceDigest());
+          NODE
+
       - name: Verify exact hinted launch dry plan
         env:
           PONS_E0_CANARY_ENABLED: 'true'
-          PONS_E0_TOKEN: '0x6e11f24A73165a7DdCE9Fc9191cBA30f5a8cAB06'
+          PONS_E0_TOKEN: '0x8f436A8959678b0f3F7E471E2B7BEe8d57Dd07A2'
           PONS_E0_WALLET: '0x9343835Fe138FFfF68293B361b3C69FEbd83C031'
-          PONS_E0_LAUNCH_BLOCK: '68257837'
+          PONS_E0_LAUNCH_BLOCK: '68293321'
           PONS_E0_SLIPPAGE_BPS: '500'
-          PONS_E0_MAX_NATIVE_VALUE_WEI: '420165312153815'
+          PONS_E0_MAX_NATIVE_VALUE_WEI: '417570938694147'
         run: node dist/canary/ponsE0Cli.js
 
       - name: Assert exact-hint optimization and no live authority
