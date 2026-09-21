@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: pons-s0-real-cohort-materialization-v1
+  cancel-in-progress: true
+
 jobs:
   materialize:
     runs-on: ubuntu-latest
