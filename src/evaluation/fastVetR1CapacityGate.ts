@@ -8,6 +8,8 @@ import {
 } from '../multichain/fastVetBridge.js';
 
 export const FAST_VET_R1_CAPACITY_GATE = 'FAST_VET_R1_CAPACITY_GATE' as const;
+export const FAST_VET_R1_CAPACITY_SEMANTICS =
+  'INDEPENDENT_PROBE_CAPACITY_NOT_SEQUENTIAL' as const;
 export const FAST_VET_R1_MINIMUM_PROBE_USD_MICROS =
   DEFAULT_BASELINE_NOTIONALS_USD_MICROS[0]!;
 
@@ -20,6 +22,7 @@ export const FAST_VET_R1_CAPACITY_GATE_CONFIGURATION = Object.freeze({
   requireMinimumExecutableEntry: true,
   requireMinimumExecutableReverse: true,
   capacityRule: 'LARGEST_CONTIGUOUS_BIDIRECTIONALLY_EXECUTABLE_PREFIX',
+  capacitySemantics: FAST_VET_R1_CAPACITY_SEMANTICS,
   recoveryThresholdBps: null,
   mode: 'SHADOW_ONLY',
   liveMoneyAuthority: false,
@@ -42,7 +45,9 @@ export type FastVetR1Uncertainty =
 
 export interface FastVetR1EvidenceSummary {
   baselineStatus: PortableFastVetBaselineEvidence['status'] | 'MISSING';
+  /** Diagnostic same-state probe capacity only; never a live position-size authority. */
   capacityUsdMicros: bigint | null;
+  capacitySemantics: typeof FAST_VET_R1_CAPACITY_SEMANTICS;
   executablePrefixUsdMicros: readonly bigint[];
   creatorCoverage:
     | CreatorOutcomeFeatureReceipt['coverage']
@@ -67,7 +72,9 @@ export interface BuyEveryExecutableControlResult {
   decision: FastVetR1Decision;
   hypotheticalAction: FastVetR1HypotheticalAction;
   reasons: readonly Exclude<FastVetR1Reason, 'KNOWN_PRIOR_ADVERSE_CREATOR'>[];
+  /** Diagnostic same-state probe capacity only; never a live position-size authority. */
   capacityUsdMicros: bigint | null;
+  capacitySemantics: typeof FAST_VET_R1_CAPACITY_SEMANTICS;
   mode: 'SHADOW_ONLY';
   liveMoneyAuthority: false;
 }
@@ -86,6 +93,7 @@ export function evaluateFastVetR1CapacityGate(
     return result('NO_DECISION', ['BASELINE_MISSING'], [], {
       baselineStatus: 'MISSING',
       capacityUsdMicros: null,
+      capacitySemantics: FAST_VET_R1_CAPACITY_SEMANTICS,
       executablePrefixUsdMicros: [],
       creatorCoverage: input.creatorFeature?.coverage ?? 'MISSING',
       creatorPriorLaunchCount: input.creatorFeature?.priorLaunchCount ?? null,
@@ -326,6 +334,7 @@ function evidenceFrom(
   return {
     baselineStatus: baseline.status,
     capacityUsdMicros,
+    capacitySemantics: FAST_VET_R1_CAPACITY_SEMANTICS,
     executablePrefixUsdMicros,
     creatorCoverage: feature?.coverage ?? 'MISSING',
     creatorPriorLaunchCount: feature?.priorLaunchCount ?? null,
@@ -362,6 +371,7 @@ function controlResult(
     hypotheticalAction: decision === 'ELIGIBLE' ? 'WOULD_TRADE' : 'WOULD_SKIP',
     reasons,
     capacityUsdMicros,
+    capacitySemantics: FAST_VET_R1_CAPACITY_SEMANTICS,
     mode: 'SHADOW_ONLY',
     liveMoneyAuthority: false
   };
