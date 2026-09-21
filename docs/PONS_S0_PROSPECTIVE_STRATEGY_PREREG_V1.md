@@ -613,23 +613,114 @@ A favorable backtest alone can never promote S0 to live.
 
 ---
 
-## 14. Immediate implementation order
+## 14. Compressed implementation plan — three PRs, not thirteen
 
-1. Add a versioned `StrategyTrialReceipt` / trial ledger contract.
-2. Add canonical SENTRY feature-packet + frozen-strategy-artifact schemas so
-   QntyLab can research without becoming part of SENTRY runtime authority.
-3. Add `ExecutionPersona` binding to portable baseline/strategy evidence.
-4. Add latency evidence + frozen latency-envelope semantics.
-5. Add a separately versioned net-cost projection (gas + execution costs).
-6. Clarify R1 capacity semantics so no live consumer can mistake it for
-   sequential capacity.
-7. Add diagnostic entity-linkage receipt without changing existing gates.
-8. Build point-in-time feature registry receipts.
-9. Add finite-capital occupancy / concurrency diagnostics.
-10. Run S0A model development in QntyLab with time-aware null/ablation tests.
-11. Freeze a content-addressed S0B strategy artifact and stopping rule.
-12. Start untouched S0C prospective witness in SENTRY.
-13. Only after S0C closure consider a new exact-small live strategy canary.
+The numbered concerns above are **not** intended to become one PR each.
+Infrastructure is not research output; the implementation must minimize
+coordination cost.
+
+### PR-A — SENTRY research export + parity hardening
+
+One bounded SENTRY PR owns all evidence-side seams required before modeling:
+
+- emit one canonical, content-addressed **pre-outcome feature packet** per launch;
+- emit outcomes separately so a feature consumer cannot accidentally see future
+  labels;
+- bind `ExecutionPersona` / address-dependent treatment;
+- record feature/decision/quote latency fields;
+- add a separately versioned net-cost projection;
+- clarify R1 `capacityUsdMicros` as
+  `INDEPENDENT_PROBE_CAPACITY_NOT_SEQUENTIAL`;
+- expose diagnostic entity-linkage inputs/edges without promoting them to a
+  strategy veto;
+- include finite-capital occupancy/concurrency fields needed later.
+
+Do **not** add an ML framework, feature store, experiment database, notebook
+service, or model dependency to SENTRY.
+
+Output is immutable JSON/JSONL with canonical digests. Analytical columnar
+materializations may be derived downstream; they are never the evidence
+authority.
+
+### PR-B — QntyLab S0 research adapter + bounded model family
+
+One QntyLab PR consumes PR-A packets and reuses the existing QntyLab research
+ledger instead of creating a new `StrategyTrialReceipt` subsystem.
+
+Reuse directly:
+
+- `qntylab/research_ledger.py` append-only candidates / decisions / trials;
+- deterministic `variant_id` and `trial_id`;
+- existing receipt/source/input SHA-256 bindings;
+- registered-screen denominator fields;
+- the existing `EXPLORE -> FORMULATE -> FREEZE -> TEST` research philosophy.
+
+Borrow methodology, but do not create a runtime dependency, from Qnty:
+
+- chronological / walk-forward evaluation discipline;
+- trial-count-aware inference;
+- experiment indexing / promotion-gate concepts;
+- content-addressed artifact discipline.
+
+Initial model denominator is deliberately tiny and frozen:
+
+1. regularized logistic regression;
+2. histogram gradient boosting;
+3. mechanical control;
+4. existing FAST_VET deterministic comparator.
+
+No AutoML search. No unregistered hyperparameter sweep.
+
+PR-B emits:
+
+- append-only trial events;
+- null/ablation results;
+- calibration diagnostics;
+- chronological holdout results;
+- one content-addressed candidate strategy artifact only if earned.
+
+### PR-C — SENTRY prospective witness adapter
+
+Created **only if PR-B earns it**.
+
+One small SENTRY PR:
+
+- consumes exactly one frozen, content-addressed strategy artifact;
+- performs inference only; never trains;
+- emits immutable prediction/decision receipts before outcome availability;
+- runs zero-capital alongside C0/C1;
+- collects outcomes for accepts and rejects;
+- implements the preregistered stopping rule.
+
+PR-C grants no live-money authority.
+
+Only after S0C closes may a separately authorized live strategy canary be
+discussed.
+
+### Explicitly rejected infrastructure for S0 V1
+
+Do not add these merely because they are popular:
+
+- MLflow / Weights & Biases — QntyLab already has an append-only research ledger;
+- Optuna / AutoML — expands the hidden search denominator before we need it;
+- Feast or another feature store — canonical SENTRY packets already define the
+  point-in-time handoff;
+- DVC — existing Git/content-addressed evidence is sufficient for this bounded
+  dataset;
+- Ray / Spark — no demonstrated scale problem;
+- PyTorch / GNN stack — entity linkage starts as deterministic graph features;
+- a shared cross-repo database — violates the immutable-artifact boundary.
+
+### Reuse hierarchy
+
+Prefer in order:
+
+1. existing QntyLab primitive;
+2. existing SENTRY primitive;
+3. small standard/open-source library;
+4. tiny new adapter;
+5. new framework only after profiling or a blocked scientific question proves
+   it necessary.
 
 ---
 
