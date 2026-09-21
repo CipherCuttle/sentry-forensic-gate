@@ -148,7 +148,9 @@ export interface PonsS0FeaturePacket {
   } | null;
   executionPersona: PonsS0ExecutionPersona | null;
   timing: {
-    clockSemantics: 'LOCAL_CAPTURE_WALL_CLOCK_NOT_CHAIN_TIMESTAMP';
+    clockSemantics:
+      | 'LOCAL_CAPTURE_WALL_CLOCK_NOT_CHAIN_TIMESTAMP'
+      | 'CANONICAL_BLOCK_TIMESTAMP_REPLAY';
     launchObservedAtMs: number;
     baselineObservedAtMs: number;
     firstQuoteObservedAtMs: number | null;
@@ -270,6 +272,9 @@ export async function buildPonsS0FeaturePacket(input: {
   baseline: PortableBaselineBatch;
   creatorFeature: CreatorOutcomeFeatureReceipt | null;
   provenanceEdges?: readonly ProvenanceEdge[];
+  timingClockSemantics?:
+    | 'LOCAL_CAPTURE_WALL_CLOCK_NOT_CHAIN_TIMESTAMP'
+    | 'CANONICAL_BLOCK_TIMESTAMP_REPLAY';
 }): Promise<PonsS0FeaturePacket> {
   assertPonsIdentity(input.launch, input.baseline);
   assertBaselinePointInTime(input.launch, input.baseline);
@@ -346,7 +351,9 @@ export async function buildPonsS0FeaturePacket(input: {
       : null,
     executionPersona,
     timing: {
-      clockSemantics: 'LOCAL_CAPTURE_WALL_CLOCK_NOT_CHAIN_TIMESTAMP' as const,
+      clockSemantics:
+        input.timingClockSemantics ??
+        ('LOCAL_CAPTURE_WALL_CLOCK_NOT_CHAIN_TIMESTAMP' as const),
       launchObservedAtMs: input.launch.observedAtMs,
       baselineObservedAtMs: input.baseline.observedAtMs,
       firstQuoteObservedAtMs: quoteTimes.length > 0 ? Math.min(...quoteTimes) : null,

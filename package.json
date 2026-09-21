@@ -22,7 +22,7 @@
     "multichaincheck": "node scripts/multichain-m1-check.mjs",
     "ponsv2check": "node scripts/pons-v2-launch-adapter-check.mjs",
     "fastvetr1check": "node scripts/fast-vet-r1-capacity-gate-check.mjs",
-    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck && pnpm historicalbaselinepolicycheck && pnpm multichaincheck && pnpm ponsv2check && pnpm ponsv2marketcheck && pnpm ponsv2quotingcheck && pnpm ponsv2usdcheck && pnpm ponsv2baselinecheck && pnpm ponsv2creatorcheck && pnpm fastvetr1check && pnpm portableoutcomecheck && pnpm ponsv2forwardcheck && pnpm ponss0exportcheck",
+    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck && pnpm historicalbaselinepolicycheck && pnpm multichaincheck && pnpm ponsv2check && pnpm ponsv2marketcheck && pnpm ponsv2quotingcheck && pnpm ponsv2usdcheck && pnpm ponsv2baselinecheck && pnpm ponsv2creatorcheck && pnpm fastvetr1check && pnpm portableoutcomecheck && pnpm ponsv2forwardcheck && pnpm ponss0exportcheck && pnpm ponss0cohortcheck",
     "start:truth": "node dist/cli.js",
     "start:baseline": "node dist/baselineCli.js",
     "start:creator-outcome": "node dist/creatorOutcomeCli.js",
@@ -56,7 +56,8 @@
     "start:pons-e3b-runtime": "node dist/canary/ponsE3BRuntimeFailoverCli.js",
     "start:pons-e3b-curve-cleanup": "node dist/canary/ponsE3BCurveCleanupCli.js",
     "ponse4grantcheck": "node scripts/pons-e4-one-shot-grant-check.mjs",
-    "ponss0exportcheck": "node scripts/pons-s0-research-export-check.mjs"
+    "ponss0exportcheck": "node scripts/pons-s0-research-export-check.mjs",
+    "ponss0cohortcheck": "node scripts/pons-s0-historical-cohort-check.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",
