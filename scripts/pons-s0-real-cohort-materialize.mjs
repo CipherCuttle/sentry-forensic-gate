@@ -491,13 +491,13 @@ const originCore = {
       process.env.PONS_S0_HARNESS_COMMIT ?? null,
     rpcTransportClass:
       'BLOCKSCOUT_INDEXED_LOGS_PLUS_NODEFLARE_ARCHIVE_STATE_VIA_LOCAL_PROXY',
-    launchDiscovery: 'ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1',
+    launchDiscovery: 'ROBINHOOD_RPC_PONS_S0_LAUNCH_INDEX_V1',
     launchDiscoveryTransport:
-      'BLOCKSCOUT_NATIVE_REST_CURSOR_ADDRESS_LOGS',
+      'ROBINHOOD_OFFICIAL_PUBLIC_RPC_TOPIC_FILTERED_LOGS',
     launchIndexSha256: launchIndex.sha256,
-    blockscoutIndexedHeadBlock:
-      launchIndex.blockscoutIndexedHeadBlock.toString(),
-    blockscoutAcquisitionThroughBlock:
+    launchDiscoveryHeadBlock:
+      launchIndex.observedHeadBlock.toString(),
+    launchDiscoveryThroughBlock:
       launchIndex.scannedThroughBlock.toString(),
     logScanChunkBlocks: logChunkBlocks.toString(),
     minRpcIntervalMs
@@ -531,8 +531,8 @@ const summary = {
   matureUniverseLaunchCount: rawLaunchLogs.length,
   matureLaunchUniverseEvidenceDigest,
   launchIndexSha256: launchIndex.sha256,
-  blockscoutIndexedHeadBlock:
-    launchIndex.blockscoutIndexedHeadBlock.toString(),
+  launchDiscoveryHeadBlock:
+    launchIndex.observedHeadBlock.toString(),
   cohortTargetCount,
   selectedLaunchCount: selectedLaunches.length,
   cohortSelection:
@@ -632,30 +632,30 @@ async function loadIndexedLaunchLogs(input) {
   }
   assert.equal(
     parsed.schema,
-    'ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1',
-    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_SCHEMA_MISMATCH'
+    'ROBINHOOD_RPC_PONS_S0_LAUNCH_INDEX_V1',
+    'PONS_S0_LAUNCH_INDEX_SCHEMA_MISMATCH'
   );
   assert.equal(
     String(parsed.factory).toLowerCase(),
     CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase(),
-    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_FACTORY_MISMATCH'
+    'PONS_S0_LAUNCH_INDEX_FACTORY_MISMATCH'
   );
   assert.equal(
     BigInt(parsed.scannedFromBlock),
     input.authorityFromBlock,
-    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_START_MISMATCH'
+    'PONS_S0_LAUNCH_INDEX_START_MISMATCH'
   );
   const scannedThroughBlock = BigInt(parsed.scannedThroughBlock);
-  const blockscoutIndexedHeadBlock = BigInt(
-    parsed.blockscoutIndexedHeadBlock
+  const observedHeadBlock = BigInt(
+    parsed.observedHeadBlock
   );
   assert.ok(
     scannedThroughBlock >= input.matureThroughBlock,
     'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_RANGE_TOO_SHORT'
   );
   assert.ok(
-    blockscoutIndexedHeadBlock >= input.matureThroughBlock,
-    'PONS_S0_BLOCKSCOUT_INDEX_BEHIND_MATURITY_BOUNDARY'
+    observedHeadBlock >= input.matureThroughBlock,
+    'PONS_S0_LAUNCH_INDEX_BEHIND_MATURITY_BOUNDARY'
   );
   assert.ok(
     Array.isArray(parsed.logs),
@@ -666,33 +666,33 @@ async function loadIndexedLaunchLogs(input) {
     .map((item) => {
       assert.ok(
         item && typeof item === 'object' && !Array.isArray(item),
-        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_LOG_INVALID'
+        'PONS_S0_LAUNCH_INDEX_LOG_INVALID'
       );
       const blockNumber = BigInt(item.blockNumber);
       const logIndex = Number(item.logIndex);
       assert.ok(
         Number.isSafeInteger(logIndex) && logIndex >= 0,
-        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_LOG_INDEX_INVALID'
+        'PONS_S0_LAUNCH_INDEX_LOG_INDEX_INVALID'
       );
       assert.match(
         String(item.blockHash),
         /^0x[0-9a-fA-F]{64}$/,
-        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_BLOCK_HASH_INVALID'
+        'PONS_S0_LAUNCH_INDEX_BLOCK_HASH_INVALID'
       );
       assert.match(
         String(item.transactionHash),
         /^0x[0-9a-fA-F]{64}$/,
-        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_TX_INVALID'
+        'PONS_S0_LAUNCH_INDEX_TX_INVALID'
       );
       assert.match(
         String(item.token),
         /^0x[0-9a-fA-F]{40}$/,
-        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_TOKEN_INVALID'
+        'PONS_S0_LAUNCH_INDEX_TOKEN_INVALID'
       );
       assert.match(
         String(item.deployer),
         /^0x[0-9a-fA-F]{40}$/,
-        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_DEPLOYER_INVALID'
+        'PONS_S0_LAUNCH_INDEX_DEPLOYER_INVALID'
       );
       return {
         blockNumber,
@@ -714,7 +714,7 @@ async function loadIndexedLaunchLogs(input) {
   return {
     sha256,
     scannedThroughBlock,
-    blockscoutIndexedHeadBlock,
+    observedHeadBlock,
     logs
   };
 }
