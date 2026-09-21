@@ -330,6 +330,28 @@ await assert.rejects(
   () => buildPonsS0FeaturePacket({
     launch,
     baseline: baseline(),
+    creatorFeature: { ...creatorFeature, decisionBlock: decisionBlock + 1n },
+    provenanceEdges
+  }),
+  /PONS_S0_CREATOR_POINT_IN_TIME_MISMATCH/
+);
+
+const badQuoteBaseline = baseline();
+badQuoteBaseline.legs[0].entry.blockNumber = decisionBlock + 1n;
+await assert.rejects(
+  () => buildPonsS0FeaturePacket({
+    launch,
+    baseline: badQuoteBaseline,
+    creatorFeature,
+    provenanceEdges
+  }),
+  /PONS_S0_ENTRY_POINT_IN_TIME_MISMATCH/
+);
+
+await assert.rejects(
+  () => buildPonsS0FeaturePacket({
+    launch,
+    baseline: baseline(),
     creatorFeature,
     provenanceEdges: [
       ...provenanceEdges,
@@ -366,7 +388,6 @@ function outcome(horizonMs, overrides = {}) {
     baseAmountOut: 1_200_000n,
     executableValueUsdMicros: 1_200_000n,
     executableReturnBps: 12_000n,
-    gasCostUsdMicros: 50_000n,
     slippageBps: 25n,
     classification: 'NORMAL_WIN',
     liquidity: {
@@ -387,10 +408,17 @@ function outcome(horizonMs, overrides = {}) {
 const oneMinute = await buildPonsS0OutcomePacket({
   launch,
   baseline: baseline(),
-  outcome: outcome(60_000)
+  outcome: outcome(60_000),
+  executionCost: {
+    totalUsdMicros: 50_000n,
+    evidenceDigest: 'full-policy-path-cost-1',
+    semantics: 'FULL_POLICY_PATH_COST_USD_MICROS'
+  }
 });
 assert.equal(oneMinute.schemaVersion, PONS_S0_OUTCOME_PACKET_V1);
 assert.equal(oneMinute.costProjection.status, 'COMPLETE');
+assert.equal(oneMinute.costProjection.executionCostUsdMicros, 50_000n);
+assert.equal(oneMinute.costProjection.executionCostEvidenceDigest, 'full-policy-path-cost-1');
 assert.equal(oneMinute.costProjection.netExecutableValueUsdMicros, 1_150_000n);
 assert.equal(oneMinute.costProjection.netExecutableReturnBps, 11_500n);
 assert.equal(oneMinute.boundaries.forbiddenAsFeatureInput, true);
@@ -399,9 +427,9 @@ assert.equal(oneMinute.boundaries.liveMoneyAuthority, false);
 const fiveMinute = await buildPonsS0OutcomePacket({
   launch,
   baseline: baseline(),
-  outcome: outcome(300_000, { gasCostUsdMicros: undefined })
+  outcome: outcome(300_000)
 });
-assert.equal(fiveMinute.costProjection.status, 'UNVERIFIED_GAS_COST');
+assert.equal(fiveMinute.costProjection.status, 'UNVERIFIED_EXECUTION_COST');
 assert.equal(fiveMinute.costProjection.netExecutableValueUsdMicros, null);
 
 await assert.rejects(
