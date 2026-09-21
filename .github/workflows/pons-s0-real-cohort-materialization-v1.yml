@@ -66,219 +66,241 @@ jobs:
           PONS_S0_LAUNCH_INDEX_PATH: ${{ github.workspace }}/blockscout-launch-index.json
         run: |
           set -euo pipefail
+
           cat > "${RUNNER_TEMP}/pons-s0-blockscout-index.py" <<'PY'
           #!/usr/bin/env python3
           import argparse
           import json
           import subprocess
           import time
+          import urllib.parse
 
-          MAX_RESULTS = 1000
-
-          def curl_json(args, attempts=8):
+          def curl_json(url, attempts=8):
+              delay = 5
               last = None
               for attempt in range(attempts):
                   proc = subprocess.run(
                       [
                           "curl",
-                          "--fail",
                           "--silent",
                           "--show-error",
                           "--location",
                           "--connect-timeout", "10",
                           "--max-time", "90",
-                          "--retry", "3",
-                          "--retry-delay", "2",
-                          "--retry-all-errors",
                           "--user-agent",
                           "Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)",
                           "--header", "Accept: application/json",
-                          *args,
+                          "--output", "-",
+                          "--write-out", "\n%{http_code}",
+                          url,
                       ],
                       check=False,
                       text=True,
                       capture_output=True,
                   )
-                  if proc.returncode == 0:
+                  raw = proc.stdout or ""
+                  if "\n" in raw:
+                      body, status_text = raw.rsplit("\n", 1)
+                  else:
+                      body, status_text = raw, ""
+                  status = int(status_text) if status_text.isdigit() else 0
+
+                  if proc.returncode == 0 and 200 <= status < 300:
                       try:
-                          value = json.loads(proc.stdout)
+                          return json.loads(body)
                       except Exception as exc:
-                          last = RuntimeError("BLOCKSCOUT_NON_JSON:" + str(exc))
-                      else:
-                          return value
+                          last = RuntimeError(
+                              "BLOCKSCOUT_NON_JSON:" + str(exc)
+                          )
+                  elif status == 429:
+                      last = RuntimeError("BLOCKSCOUT_RATE_LIMITED")
                   else:
                       last = RuntimeError(
-                          "BLOCKSCOUT_CURL_FAILURE:"
+                          "BLOCKSCOUT_HTTP_FAILURE:"
                           + str(proc.returncode)
+                          + ":"
+                          + str(status)
                           + ":"
                           + (proc.stderr or "")[:512]
                       )
-                  time.sleep(min(15, 2 + attempt * 2))
+
+                  if attempt + 1 < attempts:
+                      time.sleep(delay)
+                      delay = min(120, delay * 2)
+
               raise last or RuntimeError("BLOCKSCOUT_REQUEST_FAILED")
 
-          def rpc_head(upstream):
-              value = curl_json([
-                  "--header", "content-type: application/json",
-                  "--data-binary",
-                  '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}',
-                  upstream,
-              ])
-              result = value.get("result") if isinstance(value, dict) else None
-              if not isinstance(result, str) or not result.startswith("0x"):
-                  raise RuntimeError("NODEFLARE_HEAD_INVALID")
-              return int(result, 16)
-
           def blockscout_head(base):
-              value = curl_json([base + "/api/v2/blocks?type=block"])
+              value = curl_json(base + "/api/v2/blocks?type=block")
               items = value.get("items") if isinstance(value, dict) else None
               if not isinstance(items, list) or not items:
                   raise RuntimeError("BLOCKSCOUT_HEAD_MISSING")
-              first = items[0]
-              if not isinstance(first, dict):
-                  raise RuntimeError("BLOCKSCOUT_HEAD_INVALID")
-              height = first.get("height")
+              height = items[0].get("height")
               if isinstance(height, int):
                   return height
               if isinstance(height, str) and height.isdigit():
                   return int(height)
               raise RuntimeError("BLOCKSCOUT_HEAD_HEIGHT_INVALID")
 
-          def query_logs(base, factory, topic0, start, end, counter):
-              # Blockscout's public API rate-limits sustained recursive scans.
-              # Use the same conservative cadence that previously proved
-              # creator-history acquisition on this explorer.
-              time.sleep(15)
-              counter[0] += 1
-              value = curl_json([
-                  "--get",
-                  base + "/api",
-                  "--data-urlencode", "module=logs",
-                  "--data-urlencode", "action=getLogs",
-                  "--data-urlencode", "fromBlock=" + str(start),
-                  "--data-urlencode", "toBlock=" + str(end),
-                  "--data-urlencode", "address=" + factory,
-                  "--data-urlencode", "topic0=" + topic0,
-                  "--data-urlencode", "page=1",
-                  "--data-urlencode", "offset=" + str(MAX_RESULTS),
-              ])
-              if not isinstance(value, dict):
-                  raise RuntimeError("BLOCKSCOUT_LOG_RESPONSE_INVALID")
-              result = value.get("result")
-              if isinstance(result, list):
-                  items = result
-              elif (
-                  str(value.get("status")) == "0"
-                  and isinstance(result, str)
-                  and (
-                      "no" in result.lower()
-                      or "not found" in result.lower()
-                  )
-              ):
-                  items = []
-              else:
-                  raise RuntimeError(
-                      "BLOCKSCOUT_LOG_API_FAILURE:"
-                      + json.dumps(value, sort_keys=True)[:1024]
-                  )
-
-              if len(items) >= MAX_RESULTS:
-                  if start == end:
-                      raise RuntimeError(
-                          "BLOCKSCOUT_SINGLE_BLOCK_LOG_OVERFLOW:" + str(start)
-                      )
-                  mid = start + (end - start) // 2
-                  return (
-                      query_logs(base, factory, topic0, start, mid, counter)
-                      + query_logs(base, factory, topic0, mid + 1, end, counter)
-                  )
-              return items
-
-          def quantity(value, label):
-              if isinstance(value, int):
-                  return value
-              if not isinstance(value, str):
-                  raise RuntimeError(label + "_INVALID")
-              if value.startswith("0x"):
-                  return int(value, 16)
-              return int(value, 10)
-
           def topic_address(topic, label):
-              if not isinstance(topic, str) or len(topic) != 66 or not topic.startswith("0x"):
+              if (
+                  not isinstance(topic, str)
+                  or len(topic) != 66
+                  or not topic.startswith("0x")
+              ):
                   raise RuntimeError(label + "_INVALID")
               return "0x" + topic[-40:].lower()
 
-          def normalize(item, factory, topic0):
+          def normalize_launch(item, factory, topic0):
               if not isinstance(item, dict):
-                  raise RuntimeError("BLOCKSCOUT_LOG_ITEM_INVALID")
-              address = str(item.get("address", "")).lower()
-              if address != factory.lower():
-                  raise RuntimeError("BLOCKSCOUT_LOG_FACTORY_MISMATCH")
+                  raise RuntimeError("BLOCKSCOUT_REST_LOG_ITEM_INVALID")
+              address = item.get("address")
+              if isinstance(address, dict):
+                  address_hash = str(address.get("hash", "")).lower()
+              else:
+                  address_hash = str(address or "").lower()
+              if address_hash != factory.lower():
+                  raise RuntimeError("BLOCKSCOUT_REST_FACTORY_MISMATCH")
+
               topics = item.get("topics")
               if not isinstance(topics, list) or len(topics) < 4:
-                  raise RuntimeError("BLOCKSCOUT_LOG_TOPICS_INVALID")
-              if str(topics[0]).lower() != topic0.lower():
-                  raise RuntimeError("BLOCKSCOUT_LOG_TOPIC0_MISMATCH")
-              tx_hash = str(item.get("transactionHash", ""))
+                  raise RuntimeError("BLOCKSCOUT_REST_TOPICS_INVALID")
+              topics = [str(topic).lower() for topic in topics]
+              if topics[0] != topic0.lower():
+                  return None
+
+              block_number = item.get("block_number")
+              if not isinstance(block_number, int):
+                  raise RuntimeError("BLOCKSCOUT_REST_BLOCK_NUMBER_INVALID")
+              block_hash = str(item.get("block_hash", "")).lower()
+              if (
+                  len(block_hash) != 66
+                  or not block_hash.startswith("0x")
+              ):
+                  raise RuntimeError("BLOCKSCOUT_REST_BLOCK_HASH_INVALID")
+              tx_hash = str(item.get("transaction_hash", "")).lower()
               if len(tx_hash) != 66 or not tx_hash.startswith("0x"):
-                  raise RuntimeError("BLOCKSCOUT_LOG_TX_INVALID")
-              data = str(item.get("data", ""))
+                  raise RuntimeError("BLOCKSCOUT_REST_TX_HASH_INVALID")
+              log_index = item.get("index")
+              if (
+                  not isinstance(log_index, int)
+                  or isinstance(log_index, bool)
+                  or log_index < 0
+              ):
+                  raise RuntimeError("BLOCKSCOUT_REST_LOG_INDEX_INVALID")
+              data = str(item.get("data", "")).lower()
               if not data.startswith("0x"):
-                  raise RuntimeError("BLOCKSCOUT_LOG_DATA_INVALID")
-              block_number = quantity(item.get("blockNumber"), "BLOCK_NUMBER")
-              log_index = quantity(item.get("logIndex"), "LOG_INDEX")
-              tx_index = quantity(item.get("transactionIndex", "0x0"), "TX_INDEX")
+                  raise RuntimeError("BLOCKSCOUT_REST_DATA_INVALID")
+
               return {
                   "blockNumber": str(block_number),
-                  "transactionHash": tx_hash.lower(),
-                  "transactionIndex": tx_index,
+                  "blockHash": block_hash,
+                  "transactionHash": tx_hash,
                   "logIndex": log_index,
-                  "address": address,
-                  "topics": [str(topic).lower() for topic in topics],
-                  "data": data.lower(),
+                  "address": address_hash,
+                  "topics": topics,
+                  "data": data,
                   "token": topic_address(topics[1], "TOKEN_TOPIC"),
                   "deployer": topic_address(topics[3], "DEPLOYER_TOPIC"),
               }
 
+          def next_url(base_url, cursor):
+              if cursor is None:
+                  return base_url
+              required = ("block_number", "index", "items_count")
+              if any(key not in cursor for key in required):
+                  raise RuntimeError("BLOCKSCOUT_REST_CURSOR_INVALID")
+              query = urllib.parse.urlencode({
+                  "block_number": cursor["block_number"],
+                  "index": cursor["index"],
+                  "items_count": cursor["items_count"],
+              })
+              return base_url + "?" + query
+
           def main():
               parser = argparse.ArgumentParser()
               parser.add_argument("--base", required=True)
-              parser.add_argument("--upstream", required=True)
               parser.add_argument("--factory", required=True)
               parser.add_argument("--topic0", required=True)
               parser.add_argument("--from-block", type=int, required=True)
-              parser.add_argument("--chunk-blocks", type=int, default=1_000_000)
               parser.add_argument("--output", required=True)
               args = parser.parse_args()
 
-              upstream_head = rpc_head(args.upstream)
               indexed_head = blockscout_head(args.base)
-              through = min(upstream_head, indexed_head)
-              if through < args.from_block:
-                  raise RuntimeError("BLOCKSCOUT_INDEX_BEFORE_AUTHORITY_EPOCH")
+              logs_url = (
+                  args.base
+                  + "/api/v2/addresses/"
+                  + args.factory
+                  + "/logs"
+              )
 
-              raw = []
-              counter = [0]
-              start = args.from_block
-              while start <= through:
-                  end = min(through, start + args.chunk_blocks - 1)
-                  raw.extend(
-                      query_logs(
-                          args.base,
+              raw_launches = []
+              cursor = None
+              seen_cursors = set()
+              query_count = 0
+              oldest_seen = None
+
+              while True:
+                  url = next_url(logs_url, cursor)
+                  page = curl_json(url)
+                  query_count += 1
+                  if not isinstance(page, dict):
+                      raise RuntimeError("BLOCKSCOUT_REST_PAGE_INVALID")
+                  items = page.get("items")
+                  if not isinstance(items, list):
+                      raise RuntimeError("BLOCKSCOUT_REST_ITEMS_MISSING")
+                  if not items:
+                      break
+
+                  page_blocks = []
+                  for item in items:
+                      block_number = item.get("block_number")
+                      if not isinstance(block_number, int):
+                          raise RuntimeError(
+                              "BLOCKSCOUT_REST_PAGE_BLOCK_INVALID"
+                          )
+                      page_blocks.append(block_number)
+                      if block_number < args.from_block:
+                          continue
+                      launch = normalize_launch(
+                          item,
                           args.factory,
                           args.topic0,
-                          start,
-                          end,
-                          counter,
                       )
+                      if launch is not None:
+                          raw_launches.append(launch)
+
+                  page_oldest = min(page_blocks)
+                  oldest_seen = (
+                      page_oldest
+                      if oldest_seen is None
+                      else min(oldest_seen, page_oldest)
                   )
-                  start = end + 1
+                  if page_oldest < args.from_block:
+                      break
+
+                  cursor = page.get("next_page_params")
+                  if cursor is None:
+                      break
+                  cursor_key = json.dumps(
+                      cursor,
+                      sort_keys=True,
+                      separators=(",", ":"),
+                  )
+                  if cursor_key in seen_cursors:
+                      raise RuntimeError(
+                          "BLOCKSCOUT_REST_CURSOR_REPEATED"
+                      )
+                  seen_cursors.add(cursor_key)
                   time.sleep(1)
 
-              normalized = [
-                  normalize(item, args.factory, args.topic0)
-                  for item in raw
-              ]
-              normalized.sort(
+              if oldest_seen is None or oldest_seen > args.from_block:
+                  raise RuntimeError(
+                      "BLOCKSCOUT_REST_DID_NOT_COVER_AUTHORITY_START:"
+                      + str(oldest_seen)
+                  )
+
+              raw_launches.sort(
                   key=lambda row: (
                       int(row["blockNumber"]),
                       row["logIndex"],
@@ -286,7 +308,7 @@ jobs:
                   )
               )
               seen = set()
-              for row in normalized:
+              for row in raw_launches:
                   key = (
                       row["blockNumber"],
                       row["transactionHash"],
@@ -299,18 +321,18 @@ jobs:
                   seen.add(key)
 
               receipt = {
-                  "schema": "ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1",
+                  "schema":
+                      "ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1",
+                  "acquisition":
+                      "BLOCKSCOUT_NATIVE_REST_CURSOR_ADDRESS_LOGS",
                   "factory": args.factory.lower(),
                   "eventTopic": args.topic0.lower(),
                   "scannedFromBlock": str(args.from_block),
-                  "scannedThroughBlock": str(through),
+                  "scannedThroughBlock": str(indexed_head),
                   "blockscoutIndexedHeadBlock": str(indexed_head),
-                  "upstreamObservedHeadBlock": str(upstream_head),
-                  "queryCount": counter[0],
-                  "adaptiveOverflowSplit": True,
-                  "maxResultsPerQuery": MAX_RESULTS,
-                  "launchCount": len(normalized),
-                  "logs": normalized,
+                  "queryCount": query_count,
+                  "launchCount": len(raw_launches),
+                  "logs": raw_launches,
               }
               with open(args.output, "w", encoding="utf-8") as fh:
                   json.dump(
@@ -320,12 +342,12 @@ jobs:
                       separators=(",", ":"),
                   )
                   fh.write("\n")
+
               print(json.dumps({
-                  "launchCount": len(normalized),
-                  "queryCount": counter[0],
-                  "scannedThroughBlock": through,
+                  "launchCount": len(raw_launches),
+                  "queryCount": query_count,
+                  "scannedThroughBlock": indexed_head,
                   "blockscoutIndexedHeadBlock": indexed_head,
-                  "upstreamObservedHeadBlock": upstream_head,
               }, sort_keys=True))
 
           if __name__ == "__main__":
@@ -333,14 +355,14 @@ jobs:
           PY
           chmod 700 "${RUNNER_TEMP}/pons-s0-blockscout-index.py"
 
-          python3 "${RUNNER_TEMP}/pons-s0-blockscout-index.py"             --base "${PONS_S0_BLOCKSCOUT_BASE}"             --upstream "${PONS_S0_UPSTREAM_RPC_URL}"             --factory "${PONS_S0_FACTORY}"             --topic0 "${PONS_S0_EVENT_TOPIC}"             --from-block "${PONS_S0_AUTHORITY_FROM_BLOCK}"             --chunk-blocks "${PONS_S0_LOG_CHUNK_BLOCKS}"             --output "${PONS_S0_LAUNCH_INDEX_PATH}"             | tee "${GITHUB_WORKSPACE}/blockscout-launch-index-summary.json"
+          python3 "${RUNNER_TEMP}/pons-s0-blockscout-index.py"             --base "${PONS_S0_BLOCKSCOUT_BASE}"             --factory "${PONS_S0_FACTORY}"             --topic0 "${PONS_S0_EVENT_TOPIC}"             --from-block "${PONS_S0_AUTHORITY_FROM_BLOCK}"             --output "${PONS_S0_LAUNCH_INDEX_PATH}"             | tee "${GITHUB_WORKSPACE}/blockscout-launch-index-summary.json"
 
           test -s "${PONS_S0_LAUNCH_INDEX_PATH}"
           jq -e '
             .schema == "ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1" and
+            .acquisition == "BLOCKSCOUT_NATIVE_REST_CURSOR_ADDRESS_LOGS" and
             .launchCount > 0 and
-            (.logs | length) == .launchCount and
-            .adaptiveOverflowSplit == true
+            (.logs | length) == .launchCount
           ' "${PONS_S0_LAUNCH_INDEX_PATH}" >/dev/null
 
       - uses: actions/setup-node@v4
@@ -543,9 +565,8 @@ jobs:
                           "blockNumber": hex_quantity(block_number),
                           "transactionHash":
                               str(item["transactionHash"]).lower(),
-                          "transactionIndex":
-                              hex_quantity(item["transactionIndex"]),
-                          "blockHash": self.block_hash(block_number),
+                          "transactionIndex": None,
+                          "blockHash": str(item["blockHash"]).lower(),
                           "logIndex": hex_quantity(item["logIndex"]),
                           "removed": False,
                       })
@@ -586,7 +607,6 @@ jobs:
                       body = json.dumps({
                           "ok": True,
                           "indexedLaunchLogs": len(state.logs),
-                          "blockHashCache": len(state.block_hash_cache),
                       }, separators=(",", ":")).encode()
                       self.send_response(200)
                       self.send_header("content-type", "application/json")
@@ -670,6 +690,7 @@ jobs:
             .materialization.harnessCommit == $harness and
             .frozenAuthority.targetPerformanceInspectedForSelection == false and
             .materialization.launchDiscovery == "ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1" and
+            .materialization.launchDiscoveryTransport == "BLOCKSCOUT_NATIVE_REST_CURSOR_ADDRESS_LOGS" and
             (.materialization.launchIndexSha256 | length) == 64 and
             .frozenAuthority.cohortTargetCount == 96 and
             .frozenAuthority.selectedLaunchCount == .artifacts.featurePacketCount and
