@@ -86,6 +86,12 @@ jobs:
           if (manifest.featurePacketCount !== output.featurePacketCount) throw new Error('feature count mismatch');
           if (manifest.outcomePacketCount !== output.outcomePacketCount) throw new Error('outcome count mismatch');
           if (manifest.featurePacketCount !== output.selectedCount) throw new Error('selected launches must all remain visible as feature packets');
+          const featureRows = fs.readFileSync(`${dir}/features.jsonl`, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+          if (featureRows.length !== manifest.featurePacketCount) throw new Error('feature JSONL count mismatch');
+          for (const row of featureRows) {
+            if (row.timing?.clockSemantics !== 'CANONICAL_BLOCK_TIMESTAMP_REPLAY') throw new Error('historical timing semantics mismatch');
+            if (row.creatorHistory !== null) throw new Error('V1 creator history must remain explicit null');
+          }
           if (sha(`${dir}/features.jsonl`) !== manifest.featureStreamSha256) throw new Error('feature stream hash mismatch');
           if (sha(`${dir}/outcomes.jsonl`) !== manifest.outcomeStreamSha256) throw new Error('outcome stream hash mismatch');
 
