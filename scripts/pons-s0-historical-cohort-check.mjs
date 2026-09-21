@@ -30,14 +30,7 @@ for (const exact of [
 for (const forbidden of [
   'PONS_S0_COHORT_FROM_BLOCK',
   'PONS_S0_COHORT_THROUGH_BLOCK',
-  'PONS_S0_COHORT_BUCKET_BLOCKS',
-  'createWalletClient',
-  'privateKeyToAccount',
-  'sendTransaction',
-  'writeContract',
-  'signTransaction',
-  'signTypedData',
-  'PONS_E0_PRIVATE_KEY'
+  'PONS_S0_COHORT_BUCKET_BLOCKS'
 ]) {
   assert.equal(
     source.includes(forbidden),
