@@ -113,14 +113,25 @@ PR-A does not infer complete costs from gas estimates.
 A net projection becomes `COMPLETE` only when the caller supplies separately
 evidenced:
 
-`FULL_POLICY_PATH_COST_USD_MICROS`
+`PONS_S0_FULL_EXECUTION_COST_V1`, whose canonical evidence binds:
+
+- launch id;
+- baseline id;
+- outcome horizon;
+- entry transaction cost;
+- approval transaction costs;
+- exit transaction cost;
+- recovery transaction costs;
+- other execution costs;
+- derived total and SHA-256 evidence digest.
 
 The projection semantics are:
 
 `gross executable value - verified full execution-path cost`
 
-Without that evidence, the packet reports
-`UNVERIFIED_EXECUTION_COST`.
+Without that bound evidence, the packet reports
+`UNVERIFIED_EXECUTION_COST`. A cost receipt for another launch, baseline or
+horizon is rejected rather than reused.
 
 This prevents an exit-only gas estimate or partial fee estimate from silently
 becoming strategy net P&L.
