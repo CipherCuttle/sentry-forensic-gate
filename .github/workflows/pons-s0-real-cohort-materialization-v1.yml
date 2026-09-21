@@ -28,7 +28,7 @@ jobs:
       PONS_S0_CONFIRMATIONS: '12'
       PONS_S0_LOG_CHUNK_BLOCKS: '400000'
       PONS_S0_COHORT_TARGET_COUNT: '96'
-      PONS_S0_BLOCKSCOUT_BASE: 'https://robinhoodchain.blockscout.com'
+      PONS_S0_DISCOVERY_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
       PONS_S0_FACTORY: '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e'
       PONS_S0_EVENT_TOPIC: '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607'
       PONS_S0_AUTHORITY_FROM_BLOCK: '26841846'
@@ -60,23 +60,26 @@ jobs:
           archive_response="$(rpc_call '{"jsonrpc":"2.0","id":2,"method":"eth_getCode","params":["0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e","0x3ded702"]}')"
           jq -e '.result | type == "string" and startswith("0x") and length > 2' <<<"${archive_response}" >/dev/null
 
-      - name: Acquire complete indexed Pons launch chronology
+      - name: Acquire complete topic-filtered Pons launch chronology
         shell: bash
         env:
-          PONS_S0_LAUNCH_INDEX_PATH: ${{ github.workspace }}/blockscout-launch-index.json
+          PONS_S0_LAUNCH_INDEX_PATH: ${{ github.workspace }}/pons-launch-index.json
         run: |
           set -euo pipefail
 
-          cat > "${RUNNER_TEMP}/pons-s0-blockscout-index.py" <<'PY'
+          cat > "${RUNNER_TEMP}/pons-s0-rpc-launch-index.py" <<'PY'
           #!/usr/bin/env python3
           import argparse
           import json
           import subprocess
           import time
-          import urllib.parse
 
-          def curl_json(url, attempts=8):
-              delay = 5
+          def rpc(url, method, params, attempts=8):
+              payload = json.dumps(
+                  {"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                  separators=(",", ":"),
+              )
+              delay = 2
               last = None
               for attempt in range(attempts):
                   proc = subprocess.run(
@@ -88,219 +91,147 @@ jobs:
                           "--connect-timeout", "10",
                           "--max-time", "90",
                           "--user-agent",
-                          "Mozilla/5.0 (compatible; SentryForensicGate/0.7; +https://github.com/CipherCuttle/sentry-forensic-gate)",
-                          "--header", "Accept: application/json",
-                          "--output", "-",
-                          "--write-out", "\n%{http_code}",
+                          "sentry-forensic-gate-pons-s0-discovery/1",
+                          "--header", "content-type: application/json",
+                          "--data-binary", payload,
                           url,
                       ],
                       check=False,
                       text=True,
                       capture_output=True,
                   )
-                  raw = proc.stdout or ""
-                  if "\n" in raw:
-                      body, status_text = raw.rsplit("\n", 1)
-                  else:
-                      body, status_text = raw, ""
-                  status = int(status_text) if status_text.isdigit() else 0
-
-                  if proc.returncode == 0 and 200 <= status < 300:
+                  if proc.returncode == 0:
                       try:
-                          return json.loads(body)
+                          value = json.loads(proc.stdout)
                       except Exception as exc:
-                          last = RuntimeError(
-                              "BLOCKSCOUT_NON_JSON:" + str(exc)
-                          )
-                  elif status == 429:
-                      last = RuntimeError("BLOCKSCOUT_RATE_LIMITED")
+                          last = RuntimeError("DISCOVERY_RPC_NON_JSON:" + str(exc))
+                      else:
+                          if isinstance(value, dict) and "result" in value:
+                              return value["result"]
+                          if isinstance(value, dict) and "error" in value:
+                              last = RuntimeError(
+                                  "DISCOVERY_RPC_JSON_ERROR:"
+                                  + json.dumps(value["error"], sort_keys=True)
+                              )
+                          else:
+                              last = RuntimeError("DISCOVERY_RPC_RESPONSE_INVALID")
                   else:
                       last = RuntimeError(
-                          "BLOCKSCOUT_HTTP_FAILURE:"
+                          "DISCOVERY_RPC_CURL_FAILURE:"
                           + str(proc.returncode)
-                          + ":"
-                          + str(status)
                           + ":"
                           + (proc.stderr or "")[:512]
                       )
-
                   if attempt + 1 < attempts:
                       time.sleep(delay)
-                      delay = min(120, delay * 2)
+                      delay = min(30, delay * 2)
+              raise last or RuntimeError("DISCOVERY_RPC_FAILED")
 
-              raise last or RuntimeError("BLOCKSCOUT_REQUEST_FAILED")
+          def get_logs_adaptive(url, factory, topic0, start, end, counter):
+              counter[0] += 1
+              try:
+                  result = rpc(
+                      url,
+                      "eth_getLogs",
+                      [{
+                          "fromBlock": hex(start),
+                          "toBlock": hex(end),
+                          "address": factory,
+                          "topics": [topic0],
+                      }],
+                      attempts=3,
+                  )
+              except Exception:
+                  if start == end:
+                      raise
+                  mid = start + (end - start) // 2
+                  return (
+                      get_logs_adaptive(url, factory, topic0, start, mid, counter)
+                      + get_logs_adaptive(url, factory, topic0, mid + 1, end, counter)
+                  )
+              if not isinstance(result, list):
+                  raise RuntimeError("DISCOVERY_RPC_LOG_RESULT_NOT_ARRAY")
+              return result
 
-          def blockscout_head(base):
-              value = curl_json(base + "/api/v2/blocks?type=block")
-              items = value.get("items") if isinstance(value, dict) else None
-              if not isinstance(items, list) or not items:
-                  raise RuntimeError("BLOCKSCOUT_HEAD_MISSING")
-              height = items[0].get("height")
-              if isinstance(height, int):
-                  return height
-              if isinstance(height, str) and height.isdigit():
-                  return int(height)
-              raise RuntimeError("BLOCKSCOUT_HEAD_HEIGHT_INVALID")
+          def quantity(value, label):
+              if not isinstance(value, str) or not value.startswith("0x"):
+                  raise RuntimeError(label + "_INVALID")
+              return int(value, 16)
 
           def topic_address(topic, label):
-              if (
-                  not isinstance(topic, str)
-                  or len(topic) != 66
-                  or not topic.startswith("0x")
-              ):
+              if not isinstance(topic, str) or len(topic) != 66 or not topic.startswith("0x"):
                   raise RuntimeError(label + "_INVALID")
               return "0x" + topic[-40:].lower()
 
-          def normalize_launch(item, factory, topic0):
+          def normalize(item, factory, topic0):
               if not isinstance(item, dict):
-                  raise RuntimeError("BLOCKSCOUT_REST_LOG_ITEM_INVALID")
-              address = item.get("address")
-              if isinstance(address, dict):
-                  address_hash = str(address.get("hash", "")).lower()
-              else:
-                  address_hash = str(address or "").lower()
-              if address_hash != factory.lower():
-                  raise RuntimeError("BLOCKSCOUT_REST_FACTORY_MISMATCH")
-
+                  raise RuntimeError("DISCOVERY_LOG_ITEM_INVALID")
+              if str(item.get("address", "")).lower() != factory.lower():
+                  raise RuntimeError("DISCOVERY_LOG_FACTORY_MISMATCH")
               topics = item.get("topics")
               if not isinstance(topics, list) or len(topics) < 4:
-                  raise RuntimeError("BLOCKSCOUT_REST_TOPICS_INVALID")
+                  raise RuntimeError("DISCOVERY_LOG_TOPICS_INVALID")
               topics = [str(topic).lower() for topic in topics]
               if topics[0] != topic0.lower():
-                  return None
-
-              block_number = item.get("block_number")
-              if not isinstance(block_number, int):
-                  raise RuntimeError("BLOCKSCOUT_REST_BLOCK_NUMBER_INVALID")
-              block_hash = str(item.get("block_hash", "")).lower()
-              if (
-                  len(block_hash) != 66
-                  or not block_hash.startswith("0x")
-              ):
-                  raise RuntimeError("BLOCKSCOUT_REST_BLOCK_HASH_INVALID")
-              tx_hash = str(item.get("transaction_hash", "")).lower()
+                  raise RuntimeError("DISCOVERY_LOG_TOPIC0_MISMATCH")
+              block_hash = str(item.get("blockHash", "")).lower()
+              tx_hash = str(item.get("transactionHash", "")).lower()
+              if len(block_hash) != 66 or not block_hash.startswith("0x"):
+                  raise RuntimeError("DISCOVERY_LOG_BLOCK_HASH_INVALID")
               if len(tx_hash) != 66 or not tx_hash.startswith("0x"):
-                  raise RuntimeError("BLOCKSCOUT_REST_TX_HASH_INVALID")
-              log_index = item.get("index")
-              if (
-                  not isinstance(log_index, int)
-                  or isinstance(log_index, bool)
-                  or log_index < 0
-              ):
-                  raise RuntimeError("BLOCKSCOUT_REST_LOG_INDEX_INVALID")
-              data = str(item.get("data", "")).lower()
-              if not data.startswith("0x"):
-                  raise RuntimeError("BLOCKSCOUT_REST_DATA_INVALID")
-
+                  raise RuntimeError("DISCOVERY_LOG_TX_HASH_INVALID")
               return {
-                  "blockNumber": str(block_number),
+                  "blockNumber": str(quantity(item.get("blockNumber"), "BLOCK_NUMBER")),
                   "blockHash": block_hash,
                   "transactionHash": tx_hash,
-                  "logIndex": log_index,
-                  "address": address_hash,
+                  "transactionIndex": quantity(
+                      item.get("transactionIndex"), "TRANSACTION_INDEX"
+                  ),
+                  "logIndex": quantity(item.get("logIndex"), "LOG_INDEX"),
+                  "address": str(item["address"]).lower(),
                   "topics": topics,
-                  "data": data,
+                  "data": str(item.get("data", "0x")).lower(),
                   "token": topic_address(topics[1], "TOKEN_TOPIC"),
                   "deployer": topic_address(topics[3], "DEPLOYER_TOPIC"),
               }
 
-          def next_url(base_url, cursor):
-              if cursor is None:
-                  return base_url
-              required = ("block_number", "index", "items_count")
-              if any(key not in cursor for key in required):
-                  raise RuntimeError("BLOCKSCOUT_REST_CURSOR_INVALID")
-              query = urllib.parse.urlencode({
-                  "block_number": cursor["block_number"],
-                  "index": cursor["index"],
-                  "items_count": cursor["items_count"],
-              })
-              return base_url + "?" + query
-
           def main():
               parser = argparse.ArgumentParser()
-              parser.add_argument("--base", required=True)
+              parser.add_argument("--rpc", required=True)
               parser.add_argument("--factory", required=True)
               parser.add_argument("--topic0", required=True)
               parser.add_argument("--from-block", type=int, required=True)
+              parser.add_argument("--chunk-blocks", type=int, default=1_000_000)
               parser.add_argument("--output", required=True)
               args = parser.parse_args()
 
-              indexed_head = blockscout_head(args.base)
-              logs_url = (
-                  args.base
-                  + "/api/v2/addresses/"
-                  + args.factory
-                  + "/logs"
-              )
+              chain_id = rpc(args.rpc, "eth_chainId", [])
+              if chain_id != "0x1237":
+                  raise RuntimeError("DISCOVERY_RPC_CHAIN_ID_MISMATCH:" + str(chain_id))
+              observed_head = int(rpc(args.rpc, "eth_blockNumber", []), 16)
+              if observed_head < args.from_block:
+                  raise RuntimeError("DISCOVERY_HEAD_BEFORE_AUTHORITY_START")
 
-              raw_launches = []
-              cursor = None
-              seen_cursors = set()
-              query_count = 0
-              oldest_seen = None
-
-              while True:
-                  url = next_url(logs_url, cursor)
-                  page = curl_json(url)
-                  query_count += 1
-                  if not isinstance(page, dict):
-                      raise RuntimeError("BLOCKSCOUT_REST_PAGE_INVALID")
-                  items = page.get("items")
-                  if not isinstance(items, list):
-                      raise RuntimeError("BLOCKSCOUT_REST_ITEMS_MISSING")
-                  if not items:
-                      break
-
-                  page_blocks = []
-                  for item in items:
-                      block_number = item.get("block_number")
-                      if not isinstance(block_number, int):
-                          raise RuntimeError(
-                              "BLOCKSCOUT_REST_PAGE_BLOCK_INVALID"
-                          )
-                      page_blocks.append(block_number)
-                      if block_number < args.from_block:
-                          continue
-                      launch = normalize_launch(
-                          item,
+              raw = []
+              counter = [0]
+              start = args.from_block
+              while start <= observed_head:
+                  end = min(observed_head, start + args.chunk_blocks - 1)
+                  raw.extend(
+                      get_logs_adaptive(
+                          args.rpc,
                           args.factory,
                           args.topic0,
+                          start,
+                          end,
+                          counter,
                       )
-                      if launch is not None:
-                          raw_launches.append(launch)
-
-                  page_oldest = min(page_blocks)
-                  oldest_seen = (
-                      page_oldest
-                      if oldest_seen is None
-                      else min(oldest_seen, page_oldest)
                   )
-                  if page_oldest < args.from_block:
-                      break
+                  start = end + 1
+                  time.sleep(0.25)
 
-                  cursor = page.get("next_page_params")
-                  if cursor is None:
-                      break
-                  cursor_key = json.dumps(
-                      cursor,
-                      sort_keys=True,
-                      separators=(",", ":"),
-                  )
-                  if cursor_key in seen_cursors:
-                      raise RuntimeError(
-                          "BLOCKSCOUT_REST_CURSOR_REPEATED"
-                      )
-                  seen_cursors.add(cursor_key)
-                  time.sleep(1)
-
-              if oldest_seen is None or oldest_seen > args.from_block:
-                  raise RuntimeError(
-                      "BLOCKSCOUT_REST_DID_NOT_COVER_AUTHORITY_START:"
-                      + str(oldest_seen)
-                  )
-
-              raw_launches.sort(
+              logs = [normalize(item, args.factory, args.topic0) for item in raw]
+              logs.sort(
                   key=lambda row: (
                       int(row["blockNumber"]),
                       row["logIndex"],
@@ -308,61 +239,54 @@ jobs:
                   )
               )
               seen = set()
-              for row in raw_launches:
+              for row in logs:
                   key = (
                       row["blockNumber"],
                       row["transactionHash"],
                       row["logIndex"],
                   )
                   if key in seen:
-                      raise RuntimeError(
-                          "BLOCKSCOUT_DUPLICATE_LAUNCH_LOG:" + str(key)
-                      )
+                      raise RuntimeError("DISCOVERY_DUPLICATE_LOG:" + str(key))
                   seen.add(key)
 
               receipt = {
-                  "schema":
-                      "ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1",
+                  "schema": "ROBINHOOD_RPC_PONS_S0_LAUNCH_INDEX_V1",
                   "acquisition":
-                      "BLOCKSCOUT_NATIVE_REST_CURSOR_ADDRESS_LOGS",
+                      "ROBINHOOD_OFFICIAL_PUBLIC_RPC_TOPIC_FILTERED_LOGS",
                   "factory": args.factory.lower(),
                   "eventTopic": args.topic0.lower(),
                   "scannedFromBlock": str(args.from_block),
-                  "scannedThroughBlock": str(indexed_head),
-                  "blockscoutIndexedHeadBlock": str(indexed_head),
-                  "queryCount": query_count,
-                  "launchCount": len(raw_launches),
-                  "logs": raw_launches,
+                  "scannedThroughBlock": str(observed_head),
+                  "observedHeadBlock": str(observed_head),
+                  "queryCount": counter[0],
+                  "adaptiveRangeSplit": True,
+                  "launchCount": len(logs),
+                  "logs": logs,
               }
               with open(args.output, "w", encoding="utf-8") as fh:
-                  json.dump(
-                      receipt,
-                      fh,
-                      sort_keys=True,
-                      separators=(",", ":"),
-                  )
+                  json.dump(receipt, fh, sort_keys=True, separators=(",", ":"))
                   fh.write("\n")
 
               print(json.dumps({
-                  "launchCount": len(raw_launches),
-                  "queryCount": query_count,
-                  "scannedThroughBlock": indexed_head,
-                  "blockscoutIndexedHeadBlock": indexed_head,
+                  "launchCount": len(logs),
+                  "queryCount": counter[0],
+                  "observedHeadBlock": observed_head,
               }, sort_keys=True))
 
           if __name__ == "__main__":
               main()
           PY
-          chmod 700 "${RUNNER_TEMP}/pons-s0-blockscout-index.py"
+          chmod 700 "${RUNNER_TEMP}/pons-s0-rpc-launch-index.py"
 
-          python3 "${RUNNER_TEMP}/pons-s0-blockscout-index.py"             --base "${PONS_S0_BLOCKSCOUT_BASE}"             --factory "${PONS_S0_FACTORY}"             --topic0 "${PONS_S0_EVENT_TOPIC}"             --from-block "${PONS_S0_AUTHORITY_FROM_BLOCK}"             --output "${PONS_S0_LAUNCH_INDEX_PATH}"             | tee "${GITHUB_WORKSPACE}/blockscout-launch-index-summary.json"
+          python3 "${RUNNER_TEMP}/pons-s0-rpc-launch-index.py"             --rpc "${PONS_S0_DISCOVERY_RPC_URL}"             --factory "${PONS_S0_FACTORY}"             --topic0 "${PONS_S0_EVENT_TOPIC}"             --from-block "${PONS_S0_AUTHORITY_FROM_BLOCK}"             --chunk-blocks "${PONS_S0_LOG_CHUNK_BLOCKS}"             --output "${PONS_S0_LAUNCH_INDEX_PATH}"             | tee "${GITHUB_WORKSPACE}/pons-launch-index-summary.json"
 
           test -s "${PONS_S0_LAUNCH_INDEX_PATH}"
           jq -e '
-            .schema == "ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1" and
-            .acquisition == "BLOCKSCOUT_NATIVE_REST_CURSOR_ADDRESS_LOGS" and
+            .schema == "ROBINHOOD_RPC_PONS_S0_LAUNCH_INDEX_V1" and
+            .acquisition == "ROBINHOOD_OFFICIAL_PUBLIC_RPC_TOPIC_FILTERED_LOGS" and
             .launchCount > 0 and
-            (.logs | length) == .launchCount
+            (.logs | length) == .launchCount and
+            .adaptiveRangeSplit == true
           ' "${PONS_S0_LAUNCH_INDEX_PATH}" >/dev/null
 
       - uses: actions/setup-node@v4
@@ -386,7 +310,7 @@ jobs:
           PONS_S0_OUTPUT_DIR: ${{ github.workspace }}/cohort
           PONS_S0_HARNESS_REPOSITORY: ${{ github.repository }}
           PONS_S0_HARNESS_COMMIT: ${{ github.sha }}
-          PONS_S0_LAUNCH_LOGS_PATH: ${{ github.workspace }}/blockscout-launch-index.json
+          PONS_S0_LAUNCH_LOGS_PATH: ${{ github.workspace }}/pons-launch-index.json
         run: |
           set -euo pipefail
 
@@ -419,7 +343,7 @@ jobs:
                   self.topic0 = args.topic0.lower()
                   with open(args.launch_index, "r", encoding="utf-8") as fh:
                       index = json.load(fh)
-                  if index.get("schema") != "ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1":
+                  if index.get("schema") != "ROBINHOOD_RPC_PONS_S0_LAUNCH_INDEX_V1":
                       raise RuntimeError("PROXY_LAUNCH_INDEX_SCHEMA_MISMATCH")
                   if str(index.get("factory", "")).lower() != self.factory:
                       raise RuntimeError("PROXY_LAUNCH_INDEX_FACTORY_MISMATCH")
@@ -565,7 +489,8 @@ jobs:
                           "blockNumber": hex_quantity(block_number),
                           "transactionHash":
                               str(item["transactionHash"]).lower(),
-                          "transactionIndex": None,
+                          "transactionIndex":
+                              hex_quantity(item["transactionIndex"]),
                           "blockHash": str(item["blockHash"]).lower(),
                           "logIndex": hex_quantity(item["logIndex"]),
                           "removed": False,
@@ -689,8 +614,8 @@ jobs:
             .exportContract.manifest == "PONS_S0_EXPORT_MANIFEST_V1" and
             .materialization.harnessCommit == $harness and
             .frozenAuthority.targetPerformanceInspectedForSelection == false and
-            .materialization.launchDiscovery == "ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1" and
-            .materialization.launchDiscoveryTransport == "BLOCKSCOUT_NATIVE_REST_CURSOR_ADDRESS_LOGS" and
+            .materialization.launchDiscovery == "ROBINHOOD_RPC_PONS_S0_LAUNCH_INDEX_V1" and
+            .materialization.launchDiscoveryTransport == "ROBINHOOD_OFFICIAL_PUBLIC_RPC_TOPIC_FILTERED_LOGS" and
             (.materialization.launchIndexSha256 | length) == 64 and
             .frozenAuthority.cohortTargetCount == 96 and
             .frozenAuthority.selectedLaunchCount == .artifacts.featurePacketCount and
@@ -761,7 +686,7 @@ jobs:
             cohort/
             materialization.log
             pons-s0-rpc-proxy.log
-            blockscout-launch-index.json
-            blockscout-launch-index-summary.json
+            pons-launch-index.json
+            pons-launch-index-summary.json
           if-no-files-found: warn
           retention-days: 30
