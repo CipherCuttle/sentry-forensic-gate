@@ -5,6 +5,7 @@ import {
 } from '../dist/shadow/baselineTypes.js';
 import {
   FAST_VET_R1_CAPACITY_GATE_CONFIGURATION,
+  FAST_VET_R1_CAPACITY_SEMANTICS,
   evaluateFastVetR1CapacityGate,
   evaluateShadowPolicyComparison
 } from '../dist/evaluation/fastVetR1CapacityGate.js';
@@ -77,6 +78,10 @@ assert.equal(FAST_VET_R1_CAPACITY_GATE_CONFIGURATION.mode, 'SHADOW_ONLY');
 assert.equal(FAST_VET_R1_CAPACITY_GATE_CONFIGURATION.liveMoneyAuthority, false);
 assert.equal(FAST_VET_R1_CAPACITY_GATE_CONFIGURATION.recoveryThresholdBps, null);
 assert.equal(
+  FAST_VET_R1_CAPACITY_GATE_CONFIGURATION.capacitySemantics,
+  FAST_VET_R1_CAPACITY_SEMANTICS
+);
+assert.equal(
   FAST_VET_R1_CAPACITY_GATE_CONFIGURATION.minimumProbeUsdMicros,
   250_000n
 );
@@ -90,6 +95,14 @@ assert.equal(comparisonMissingCreator.r1.decision, 'ELIGIBLE');
 assert.equal(
   comparisonMissingCreator.r1.evidence.capacityUsdMicros,
   5_000_000n
+);
+assert.equal(
+  comparisonMissingCreator.r1.evidence.capacitySemantics,
+  FAST_VET_R1_CAPACITY_SEMANTICS
+);
+assert.equal(
+  comparisonMissingCreator.buyEveryExecutableControl.capacitySemantics,
+  FAST_VET_R1_CAPACITY_SEMANTICS
 );
 assert.deepEqual(
   comparisonMissingCreator.r1.uncertainties,
@@ -249,6 +262,7 @@ console.log(JSON.stringify({
   contiguousCapacityUsdMicros: capacity.evidence.capacityUsdMicros.toString(),
   recoveryThresholdBps:
     FAST_VET_R1_CAPACITY_GATE_CONFIGURATION.recoveryThresholdBps,
+  capacitySemantics: FAST_VET_R1_CAPACITY_SEMANTICS,
   r0Frozen: comparisonMissingCreator.r0.policyVersion === 'FAST_VET_R0',
   edge: 'UNPROVEN'
 }, null, 2));
