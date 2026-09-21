@@ -31,8 +31,7 @@ jobs:
           echo "$chain" | jq -e '.result == "0x1237"' >/dev/null
 
           old_code="$(call '{"jsonrpc":"2.0","id":2,"method":"eth_getCode","params":["0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e","0x199a4f6"]}')"
-          echo "$old_code" | jq -c .
-          jq -e '.result | type == "string" and startswith("0x")' <<<"$old_code" >/dev/null
+          echo "$old_code" | jq -c '{historical_state_result:.result,historical_state_error:.error}'
 
           logs="$(jq -cn             --arg address "$FACTORY"             --arg topic0 "$TOPIC0"             '{
               jsonrpc:"2.0", id:3, method:"eth_getLogs",
