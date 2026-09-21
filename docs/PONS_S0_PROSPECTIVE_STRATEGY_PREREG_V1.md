@@ -40,6 +40,24 @@ No strategy feature may mutate execution semantics.
 No execution result may silently redefine a research label.
 No research model may construct, sign, or broadcast transactions.
 
+### Repository ownership
+
+To avoid turning the evidence authority into a model-development monolith:
+
+- **SENTRY** owns canonical point-in-time facts, feature evidence, outcome
+  evidence, policy-independent receipts, and live-safe deterministic guards.
+- **QntyLab** owns exploratory model development, feature selection, fitting,
+  ablation, calibration research, null tests, and search accounting.
+- A model may cross back into SENTRY only as a **frozen content-addressed
+  strategy artifact** with explicit schema/version, feature contract, training
+  cutoff, model digest, calibration digest, and policy identity.
+- SENTRY may evaluate that frozen artifact in shadow. It must not retrain it.
+- Live execution remains a separately authorized consumer of an already-closed
+  strategy policy; no training dependency enters the signing/broadcast surface.
+
+Cross-repository handoff is by immutable artifact/receipt identity, not shared
+mutable databases or implicit imports.
+
 This follows the information-hiding principle: isolate decisions likely to
 change behind stable module contracts rather than letting model choice leak into
 execution machinery.
@@ -349,6 +367,22 @@ Any pooled model must declare chain/protocol identity and separately report
 within-domain performance and calibration. Transfer learning / common features
 are a hypothesis, not an assumption.
 
+### F15 — model-development dependencies must not enter SENTRY authority code
+
+Python notebooks, AutoML/search frameworks, gradient-boosting libraries, GNN
+stacks, LLM calls, and training caches belong in the research environment
+(QntyLab), not in SENTRY's canonical evidence or execution authority surface.
+
+SENTRY consumes only frozen strategy artifacts through a narrow adapter.
+
+This avoids:
+
+- dependency/version drift changing historical decisions;
+- training-time network/data access leaking into decision-time evidence;
+- accidental retraining;
+- model code gaining wallet/network authority;
+- a future model migration forcing changes to chain adapters or recovery code.
+
 ---
 
 ## 6. Experimental lanes
@@ -581,19 +615,21 @@ A favorable backtest alone can never promote S0 to live.
 
 ## 14. Immediate implementation order
 
-1. Add a versioned `StrategyTrialReceipt` / trial ledger.
-2. Add `ExecutionPersona` binding to portable baseline/strategy evidence.
-3. Add latency evidence + frozen latency-envelope semantics.
-4. Add a separately versioned net-cost projection (gas + execution costs).
-5. Clarify R1 capacity semantics so no live consumer can mistake it for
+1. Add a versioned `StrategyTrialReceipt` / trial ledger contract.
+2. Add canonical SENTRY feature-packet + frozen-strategy-artifact schemas so
+   QntyLab can research without becoming part of SENTRY runtime authority.
+3. Add `ExecutionPersona` binding to portable baseline/strategy evidence.
+4. Add latency evidence + frozen latency-envelope semantics.
+5. Add a separately versioned net-cost projection (gas + execution costs).
+6. Clarify R1 capacity semantics so no live consumer can mistake it for
    sequential capacity.
-6. Add diagnostic entity-linkage receipt without changing existing gates.
-7. Build point-in-time feature registry receipts.
-8. Add finite-capital occupancy / concurrency diagnostics.
-9. Run S0A development with time-aware null/ablation tests.
-10. Freeze S0B policy and stopping rule.
-11. Start untouched S0C prospective witness.
-12. Only after S0C closure consider a new exact-small live strategy canary.
+7. Add diagnostic entity-linkage receipt without changing existing gates.
+8. Build point-in-time feature registry receipts.
+9. Add finite-capital occupancy / concurrency diagnostics.
+10. Run S0A model development in QntyLab with time-aware null/ablation tests.
+11. Freeze a content-addressed S0B strategy artifact and stopping rule.
+12. Start untouched S0C prospective witness in SENTRY.
+13. Only after S0C closure consider a new exact-small live strategy canary.
 
 ---
 
