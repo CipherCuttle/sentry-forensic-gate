@@ -18,15 +18,17 @@ jobs:
     timeout-minutes: 180
     env:
       PONS_S0_SOURCE_COMMIT: '493c85b8d84565cedf6e936063549edfa02edf3a'
-      PONS_S0_RPC_URL: 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public'
+      PONS_S0_UPSTREAM_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+      PONS_S0_RPC_URL: 'http://127.0.0.1:18547'
       PONS_S0_RPC_MIN_INTERVAL_MS: '650'
       PONS_S0_CONFIRMATIONS: '12'
       PONS_S0_LOG_CHUNK_BLOCKS: '1000000'
+      PONS_S0_COHORT_TARGET_COUNT: '96'
     steps:
       - name: Checkout materialization harness
         uses: actions/checkout@v4
         with:
-          ref: agent/pons-s0-real-cohort-materialization-v1
+          ref: ${{ github.sha }}
           path: harness
 
       - name: Checkout exact reviewed SENTRY source
@@ -35,6 +37,20 @@ jobs:
           ref: 493c85b8d84565cedf6e936063549edfa02edf3a
           path: source
           persist-credentials: false
+
+      - name: Preflight NodeFlare archive transport with curl
+        shell: bash
+        run: |
+          set -euo pipefail
+          rpc_call() {
+            curl --fail --silent --show-error --location               --connect-timeout 10 --max-time 45               --retry 4 --retry-delay 3 --retry-all-errors               --user-agent 'sentry-forensic-gate-pons-s0-archive-probe/1'               --header 'content-type: application/json'               --data-binary "$1"               "${PONS_S0_UPSTREAM_RPC_URL}"
+          }
+
+          chain_response="$(rpc_call '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}')"
+          jq -e '.result == "0x1237"' <<<"${chain_response}" >/dev/null
+
+          archive_response="$(rpc_call '{"jsonrpc":"2.0","id":2,"method":"eth_getCode","params":["0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e","0x3ded702"]}')"
+          jq -e '.result | type == "string" and startswith("0x") and length > 2' <<<"${archive_response}" >/dev/null
 
       - uses: actions/setup-node@v4
         with:
@@ -51,7 +67,7 @@ jobs:
           pnpm build
           test "$(git rev-parse HEAD)" = "${PONS_S0_SOURCE_COMMIT}"
 
-      - name: Materialize complete mature Pons S0 cohort
+      - name: Materialize target-blind Pons S0 cohort
         shell: bash
         env:
           PONS_S0_OUTPUT_DIR: ${{ github.workspace }}/cohort
@@ -59,9 +75,141 @@ jobs:
           PONS_S0_HARNESS_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
+
+          cat > "${RUNNER_TEMP}/pons-s0-curl-rpc-proxy.py" <<'PY'
+          #!/usr/bin/env python3
+          import argparse
+          import json
+          import os
+          import subprocess
+          import tempfile
+          import threading
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+          class State:
+              def __init__(self, upstream):
+                  self.upstream = upstream
+                  self.lock = threading.Lock()
+
+              def forward(self, raw):
+                  with self.lock:
+                      with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                          body_path = tmp.name
+                      try:
+                          proc = subprocess.run(
+                              [
+                                  "curl",
+                                  "--silent",
+                                  "--show-error",
+                                  "--location",
+                                  "--connect-timeout", "10",
+                                  "--max-time", "90",
+                                  "--retry", "6",
+                                  "--retry-delay", "3",
+                                  "--retry-all-errors",
+                                  "--user-agent",
+                                  "sentry-forensic-gate-pons-s0-archive-proxy/1",
+                                  "--header", "content-type: application/json",
+                                  "--output", body_path,
+                                  "--write-out", "%{http_code}",
+                                  "--data-binary", raw.decode("utf-8"),
+                                  self.upstream,
+                              ],
+                              check=False,
+                              text=True,
+                              capture_output=True,
+                          )
+                          with open(body_path, "rb") as fh:
+                              body = fh.read()
+                          status_text = (proc.stdout or "").strip()
+                          status = int(status_text) if status_text.isdigit() else 0
+                          if proc.returncode != 0 or status < 200 or status >= 300:
+                              raise RuntimeError(
+                                  "UPSTREAM_RPC_TRANSPORT_FAILURE:"
+                                  + str(proc.returncode)
+                                  + ":"
+                                  + str(status)
+                                  + ":"
+                                  + (proc.stderr or "")[:512]
+                              )
+                          parsed = json.loads(body.decode("utf-8"))
+                          if not isinstance(parsed, (dict, list)):
+                              raise RuntimeError("UPSTREAM_RPC_NON_JSON_OBJECT")
+                          return body
+                      finally:
+                          try:
+                              os.unlink(body_path)
+                          except FileNotFoundError:
+                              pass
+
+          def main():
+              parser = argparse.ArgumentParser()
+              parser.add_argument("--upstream", required=True)
+              parser.add_argument("--port", type=int, required=True)
+              args = parser.parse_args()
+              state = State(args.upstream)
+
+              class Handler(BaseHTTPRequestHandler):
+                  def log_message(self, fmt, *args):
+                      return
+
+                  def do_GET(self):
+                      if self.path != "/health":
+                          self.send_response(404)
+                          self.end_headers()
+                          return
+                      body = b'{"ok":true}'
+                      self.send_response(200)
+                      self.send_header("content-type", "application/json")
+                      self.send_header("content-length", str(len(body)))
+                      self.end_headers()
+                      self.wfile.write(body)
+
+                  def do_POST(self):
+                      length = int(self.headers.get("content-length", "0"))
+                      raw = self.rfile.read(length)
+                      try:
+                          body = state.forward(raw)
+                          self.send_response(200)
+                      except Exception as exc:
+                          body = json.dumps({
+                              "jsonrpc": "2.0",
+                              "id": None,
+                              "error": {
+                                  "code": -32099,
+                                  "message": str(exc)[:1024],
+                              },
+                          }, separators=(",", ":")).encode()
+                          self.send_response(502)
+                      self.send_header("content-type", "application/json")
+                      self.send_header("content-length", str(len(body)))
+                      self.end_headers()
+                      self.wfile.write(body)
+
+              ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
+
+          if __name__ == "__main__":
+              main()
+          PY
+          chmod 700 "${RUNNER_TEMP}/pons-s0-curl-rpc-proxy.py"
+
+          python3 "${RUNNER_TEMP}/pons-s0-curl-rpc-proxy.py"             --upstream "${PONS_S0_UPSTREAM_RPC_URL}"             --port 18547             > "${GITHUB_WORKSPACE}/pons-s0-rpc-proxy.log" 2>&1 &
+          proxy_pid=$!
+          trap 'kill "${proxy_pid}" 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 30); do
+            curl --silent --fail http://127.0.0.1:18547/health >/dev/null && break
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:18547/health >/dev/null
+
           cp harness/scripts/pons-s0-real-cohort-materialize.mjs source/scripts/pons-s0-real-cohort-materialize.mjs
           cd source
           node scripts/pons-s0-real-cohort-materialize.mjs | tee "${GITHUB_WORKSPACE}/materialization.log"
+
+          kill "${proxy_pid}"
+          wait "${proxy_pid}" 2>/dev/null || true
+          trap - EXIT
 
       - name: Verify exact origin binding and separation
         shell: bash
@@ -81,6 +229,11 @@ jobs:
             .exportContract.manifest == "PONS_S0_EXPORT_MANIFEST_V1" and
             .materialization.harnessCommit == $harness and
             .frozenAuthority.targetPerformanceInspectedForSelection == false and
+            .frozenAuthority.cohortTargetCount == 96 and
+            .frozenAuthority.selectedLaunchCount == .artifacts.featurePacketCount and
+            .frozenAuthority.matureUniverseLaunchCount >= .frozenAuthority.selectedLaunchCount and
+            (.frozenAuthority.cohortSelection == "COMPLETE_MATURE_FACTORY_UNIVERSE" or
+             .frozenAuthority.cohortSelection == "SYSTEMATIC_ORDINAL_SAMPLE_OVER_COMPLETE_MATURE_FACTORY_UNIVERSE_V1") and
             .boundaries.readOnly == true and
             .boundaries.signer == false and
             .boundaries.broadcast == false and
@@ -104,8 +257,9 @@ jobs:
           jq -e '
             .verdict == "REAL_COHORT_READY_FOR_QNTYLAB" and
             .scientificState == "EDGE_UNPROVEN" and
-            .featurePacketCount == .matureLaunchCount and
-            .featurePacketCount > 0 and
+            .featurePacketCount == .selectedLaunchCount and
+            .selectedLaunchCount > 0 and
+            .matureUniverseLaunchCount >= .selectedLaunchCount and
             .boundaries.liveMoneyAuthority == false
           ' cohort/summary.json >/dev/null
 
@@ -143,5 +297,6 @@ jobs:
           path: |
             cohort/
             materialization.log
+            pons-s0-rpc-proxy.log
           if-no-files-found: warn
           retention-days: 30
