@@ -15,6 +15,8 @@ import type {
 export const PONS_S0_FEATURE_PACKET_V1 = 'PONS_S0_FEATURE_PACKET_V1' as const;
 export const PONS_S0_OUTCOME_PACKET_V1 = 'PONS_S0_OUTCOME_PACKET_V1' as const;
 export const PONS_S0_EXPORT_MANIFEST_V1 = 'PONS_S0_EXPORT_MANIFEST_V1' as const;
+export const PONS_S0_FULL_EXECUTION_COST_V1 =
+  'PONS_S0_FULL_EXECUTION_COST_V1' as const;
 
 export const PONS_S0_CAPACITY_SEMANTICS =
   'INDEPENDENT_PROBE_CAPACITY_NOT_SEQUENTIAL' as const;
@@ -173,6 +175,22 @@ export interface PonsS0FeaturePacket {
   };
 }
 
+export interface PonsS0ExecutionCostEvidence {
+  policyVersion: typeof PONS_S0_FULL_EXECUTION_COST_V1;
+  launchId: string;
+  baselineId: string;
+  horizonMs: number;
+  componentsUsdMicros: {
+    entryTransaction: bigint;
+    approvalTransactions: bigint;
+    exitTransaction: bigint;
+    recoveryTransactions: bigint;
+    otherExecution: bigint;
+  };
+  totalUsdMicros: bigint;
+  evidenceDigest: string;
+}
+
 export interface PonsS0OutcomePacket {
   schemaVersion: typeof PONS_S0_OUTCOME_PACKET_V1;
   packetId: string;
@@ -200,6 +218,7 @@ export interface PonsS0OutcomePacket {
   slippageBps: bigint | null;
   costProjection: {
     status: 'COMPLETE' | 'UNVERIFIED_EXECUTION_COST' | 'UNVERIFIED_GROSS_VALUE';
+    executionCostPolicyVersion: typeof PONS_S0_FULL_EXECUTION_COST_V1 | null;
     executionCostUsdMicros: bigint | null;
     executionCostEvidenceDigest: string | null;
     netExecutableValueUsdMicros: bigint | null;
@@ -260,7 +279,19 @@ export async function buildPonsS0FeaturePacket(input: {
     baseline: input.baseline,
     creatorFeature: input.creatorFeature
   });
-  const legs = await Promise.all(input.baseline.legs.map(projectBaselineLeg));
+  const marketId = input.baseline.market?.marketId ?? null;
+  if (input.baseline.legs.length > 0 && marketId === null) {
+    throw new Error('PONS_S0_BASELINE_MARKET_MISSING');
+  }
+  const legs = await Promise.all(input.baseline.legs.map((leg) =>
+    projectBaselineLeg({
+      leg,
+      launchId: input.launch.launchId,
+      marketId: marketId!,
+      decisionBlock: input.baseline.decisionBlock,
+      decisionBlockHash: input.baseline.decisionBlockHash
+    })
+  ));
   const executionPersona = projectExecutionPersona(legs);
   const diagnosticEntityEdges = projectDiagnosticEntityEdges({
     launch: input.launch,
@@ -360,17 +391,16 @@ export async function buildPonsS0OutcomePacket(input: {
   launch: NormalizedLaunchCandidate;
   baseline: PortableBaselineBatch;
   outcome: PortableForwardOutcome;
-  executionCost?: {
-    totalUsdMicros: bigint;
-    evidenceDigest: string;
-    semantics: 'FULL_POLICY_PATH_COST_USD_MICROS';
-  };
+  executionCost?: PonsS0ExecutionCostEvidence;
 }): Promise<PonsS0OutcomePacket> {
   assertPonsIdentity(input.launch, input.baseline);
   assertOutcomeBinding(input.launch, input.baseline, input.outcome);
 
   const grossValue = input.outcome.executableValueUsdMicros ?? null;
-  const costProjection = projectNetCost({
+  const costProjection = await projectNetCost({
+    launchId: input.outcome.launchId,
+    baselineId: input.outcome.baselineId,
+    horizonMs: input.outcome.horizonMs,
     entryNotionalUsdMicros: input.outcome.entryNotionalUsdMicros,
     grossValueUsdMicros: grossValue,
     executionCost: input.executionCost ?? null
@@ -417,7 +447,8 @@ export async function buildPonsS0OutcomePacket(input: {
     baselineId: input.outcome.baselineId,
     horizonMs: input.outcome.horizonMs,
     outcomeId: input.outcome.outcomeId,
-    outcomeAuthorityDigest: input.outcome.authorityDigest
+    outcomeAuthorityDigest: input.outcome.authorityDigest,
+    executionCostEvidenceDigest: input.executionCost?.evidenceDigest ?? null
   });
   const evidenceDigest = await sha256Hex({
     schemaVersion: PONS_S0_OUTCOME_PACKET_V1,
@@ -439,8 +470,10 @@ export async function buildPonsS0ResearchExportBundle(input: {
 }): Promise<PonsS0ResearchExportBundle> {
   const featurePackets = [...input.featurePackets].sort(compareFeaturePackets);
   const outcomePackets = [...input.outcomePackets].sort(compareOutcomePackets);
+  if (featurePackets.length === 0) throw new Error('PONS_S0_EMPTY_FEATURE_EXPORT');
   assertUniqueFeaturePackets(featurePackets);
   assertUniqueOutcomePackets(outcomePackets);
+  assertOutcomeFeatureBindings(featurePackets, outcomePackets);
 
   const featuresJsonl = jsonl(featurePackets);
   const outcomesJsonl = jsonl(outcomePackets);
@@ -495,6 +528,20 @@ async function projectLaunchConfig(launch: NormalizedLaunchCandidate) {
     throw new Error('PONS_S0_LAUNCH_AUTHORITY_SCHEMA_MISMATCH');
   }
   const payload = record(launch.sourceAuthority.payload, 'PONS_S0_LAUNCH_AUTHORITY_MALFORMED');
+  if (
+    stringField(payload, 'launchId') !== launch.launchId ||
+    stringField(payload, 'eventId') !== launch.eventId ||
+    numberField(payload, 'chainId') !== launch.chainId ||
+    address(payload, 'factory').toLowerCase() !== launch.factory.toLowerCase() ||
+    bigintString(payload, 'blockNumber') !== launch.blockNumber ||
+    stringField(payload, 'blockHash').toLowerCase() !== launch.blockHash.toLowerCase() ||
+    stringField(payload, 'txHash').toLowerCase() !== launch.txHash.toLowerCase() ||
+    numberField(payload, 'logIndex') !== launch.logIndex ||
+    address(payload, 'token').toLowerCase() !== launch.token.toLowerCase() ||
+    address(payload, 'deployer').toLowerCase() !== launch.creator.toLowerCase()
+  ) {
+    throw new Error('PONS_S0_LAUNCH_AUTHORITY_BINDING_MISMATCH');
+  }
   const sourceAuthorityDigest = await sha256Hex(launch.sourceAuthority);
   return {
     launchConfigId: bigintString(payload, 'launchConfigId'),
@@ -506,10 +553,50 @@ async function projectLaunchConfig(launch: NormalizedLaunchCandidate) {
   };
 }
 
-async function projectBaselineLeg(
-  leg: PortableBaselineBatch['legs'][number]
-): Promise<PonsS0BaselineLegFeature> {
-  const quoteState = await projectQuoteState(leg.entry.sourceAuthority);
+async function projectBaselineLeg(input: {
+  leg: PortableBaselineBatch['legs'][number];
+  launchId: string;
+  marketId: string;
+  decisionBlock: bigint;
+  decisionBlockHash: Hex;
+}): Promise<PonsS0BaselineLegFeature> {
+  const leg = input.leg;
+  const entryExpected: QuoteAuthorityBinding = {
+    kind: 'ENTRY',
+    launchId: input.launchId,
+    marketId: input.marketId,
+    decisionBlock: input.decisionBlock,
+    decisionBlockHash: input.decisionBlockHash,
+    amountIn: leg.entry.amountIn,
+    amountOut: leg.entry.amountOut,
+    executable: leg.entry.executable
+  };
+  const quoteState = await projectQuoteState(leg.entry.sourceAuthority, entryExpected);
+  let reverse: PonsS0BaselineLegFeature['reverse'] = null;
+  if (leg.reverse) {
+    const reverseExpected: QuoteAuthorityBinding = {
+      kind: 'INDEPENDENT_REVERSE_EXIT',
+      launchId: input.launchId,
+      marketId: input.marketId,
+      decisionBlock: input.decisionBlock,
+      decisionBlockHash: input.decisionBlockHash,
+      amountIn: leg.reverse.amountIn,
+      amountOut: leg.reverse.amountOut,
+      executable: leg.reverse.executable
+    };
+    validateQuoteAuthorityBinding(leg.reverse.sourceAuthority, reverseExpected);
+    reverse = {
+      quoteId: leg.reverse.quoteId,
+      observedAtMs: leg.reverse.observedAtMs,
+      executable: leg.reverse.executable,
+      amountIn: leg.reverse.amountIn,
+      amountOut: leg.reverse.amountOut,
+      failureReason: leg.reverse.failureReason ?? null,
+      gasEstimate: leg.reverse.gasEstimate ?? null,
+      sourceAuthorityDigest: await sha256Hex(leg.reverse.sourceAuthority)
+    };
+  }
+
   return {
     notionalUsdMicros: leg.notionalUsdMicros,
     baseAmount: leg.calibration.baseAmount,
@@ -523,32 +610,31 @@ async function projectBaselineLeg(
       gasEstimate: leg.entry.gasEstimate ?? null,
       quoteState
     },
-    reverse: leg.reverse
-      ? {
-          quoteId: leg.reverse.quoteId,
-          observedAtMs: leg.reverse.observedAtMs,
-          executable: leg.reverse.executable,
-          amountIn: leg.reverse.amountIn,
-          amountOut: leg.reverse.amountOut,
-          failureReason: leg.reverse.failureReason ?? null,
-          gasEstimate: leg.reverse.gasEstimate ?? null,
-          sourceAuthorityDigest: await sha256Hex(leg.reverse.sourceAuthority)
-        }
-      : null,
+    reverse,
     independentReverseRecoveryBps: leg.independentReverseRecoveryBps
   };
 }
 
+interface QuoteAuthorityBinding {
+  kind: 'ENTRY' | 'INDEPENDENT_REVERSE_EXIT';
+  launchId: string;
+  marketId: string;
+  decisionBlock: bigint;
+  decisionBlockHash: Hex;
+  amountIn: bigint;
+  amountOut: bigint;
+  executable: boolean;
+}
+
 async function projectQuoteState(
-  authority: SourceAuthorityEnvelope
+  authority: SourceAuthorityEnvelope,
+  expected: QuoteAuthorityBinding
 ): Promise<PonsS0QuoteStateFeature> {
-  if (authority.schema !== 'ROBINHOOD_PONS_V2_CURVE_QUOTE_R1') {
-    throw new Error('PONS_S0_QUOTE_AUTHORITY_SCHEMA_MISMATCH');
-  }
-  const payload = record(authority.payload, 'PONS_S0_QUOTE_AUTHORITY_MALFORMED');
+  const payload = validateQuoteAuthorityBinding(authority, expected);
   return {
     curve: address(payload, 'curve'),
     pairToken: address(payload, 'pairToken'),
+    shadowRecipient: address(payload, 'shadowRecipient'),
     quoteReserve: bigintString(payload, 'quoteReserve'),
     tokenReserve: bigintString(payload, 'tokenReserve'),
     trackedQuote: bigintString(payload, 'trackedQuote'),
@@ -569,6 +655,29 @@ async function projectQuoteState(
     marketState: stringField(payload, 'marketState'),
     sourceAuthorityDigest: await sha256Hex(authority)
   };
+}
+
+function validateQuoteAuthorityBinding(
+  authority: SourceAuthorityEnvelope,
+  expected: QuoteAuthorityBinding
+): Readonly<Record<string, CanonicalJsonValue>> {
+  if (authority.schema !== 'ROBINHOOD_PONS_V2_CURVE_QUOTE_R1') {
+    throw new Error('PONS_S0_QUOTE_AUTHORITY_SCHEMA_MISMATCH');
+  }
+  const payload = record(authority.payload, 'PONS_S0_QUOTE_AUTHORITY_MALFORMED');
+  if (
+    stringField(payload, 'kind') !== expected.kind ||
+    stringField(payload, 'launchId') !== expected.launchId ||
+    stringField(payload, 'marketId') !== expected.marketId ||
+    bigintString(payload, 'decisionBlock') !== expected.decisionBlock ||
+    stringField(payload, 'decisionBlockHash').toLowerCase() !== expected.decisionBlockHash.toLowerCase() ||
+    bigintString(payload, 'amountInExecutable') !== expected.amountIn ||
+    bigintString(payload, 'amountOut') !== expected.amountOut ||
+    booleanField(payload, 'executable') !== expected.executable
+  ) {
+    throw new Error('PONS_S0_QUOTE_AUTHORITY_BINDING_MISMATCH');
+  }
+  return payload;
 }
 
 function projectExecutionPersona(
@@ -653,18 +762,50 @@ function projectDiagnosticEntityEdges(input: {
     );
 }
 
-function projectNetCost(input: {
+export async function buildPonsS0ExecutionCostEvidence(input: {
+  launchId: string;
+  baselineId: string;
+  horizonMs: number;
+  componentsUsdMicros: PonsS0ExecutionCostEvidence['componentsUsdMicros'];
+}): Promise<PonsS0ExecutionCostEvidence> {
+  const components = input.componentsUsdMicros;
+  const values = [
+    components.entryTransaction,
+    components.approvalTransactions,
+    components.exitTransaction,
+    components.recoveryTransactions,
+    components.otherExecution
+  ];
+  if (values.some((value) => value < 0n)) {
+    throw new Error('PONS_S0_EXECUTION_COST_NEGATIVE_COMPONENT');
+  }
+  const totalUsdMicros = values.reduce((sum, value) => sum + value, 0n);
+  const core = {
+    policyVersion: PONS_S0_FULL_EXECUTION_COST_V1,
+    launchId: input.launchId,
+    baselineId: input.baselineId,
+    horizonMs: input.horizonMs,
+    componentsUsdMicros: { ...components },
+    totalUsdMicros
+  };
+  return {
+    ...core,
+    evidenceDigest: await sha256Hex(core)
+  };
+}
+
+async function projectNetCost(input: {
+  launchId: string;
+  baselineId: string;
+  horizonMs: number;
   entryNotionalUsdMicros: bigint;
   grossValueUsdMicros: bigint | null;
-  executionCost: {
-    totalUsdMicros: bigint;
-    evidenceDigest: string;
-    semantics: 'FULL_POLICY_PATH_COST_USD_MICROS';
-  } | null;
-}): PonsS0OutcomePacket['costProjection'] {
+  executionCost: PonsS0ExecutionCostEvidence | null;
+}): Promise<PonsS0OutcomePacket['costProjection']> {
   if (input.grossValueUsdMicros === null) {
     return {
       status: 'UNVERIFIED_GROSS_VALUE',
+      executionCostPolicyVersion: input.executionCost?.policyVersion ?? null,
       executionCostUsdMicros: input.executionCost?.totalUsdMicros ?? null,
       executionCostEvidenceDigest: input.executionCost?.evidenceDigest ?? null,
       netExecutableValueUsdMicros: null,
@@ -675,6 +816,7 @@ function projectNetCost(input: {
   if (input.executionCost === null) {
     return {
       status: 'UNVERIFIED_EXECUTION_COST',
+      executionCostPolicyVersion: null,
       executionCostUsdMicros: null,
       executionCostEvidenceDigest: null,
       netExecutableValueUsdMicros: null,
@@ -683,15 +825,30 @@ function projectNetCost(input: {
     };
   }
   if (
-    input.executionCost.totalUsdMicros < 0n ||
-    input.executionCost.evidenceDigest.length === 0 ||
-    input.executionCost.semantics !== 'FULL_POLICY_PATH_COST_USD_MICROS'
+    input.executionCost.policyVersion !== PONS_S0_FULL_EXECUTION_COST_V1 ||
+    input.executionCost.launchId !== input.launchId ||
+    input.executionCost.baselineId !== input.baselineId ||
+    input.executionCost.horizonMs !== input.horizonMs
   ) {
-    throw new Error('PONS_S0_EXECUTION_COST_INVALID');
+    throw new Error('PONS_S0_EXECUTION_COST_BINDING_MISMATCH');
   }
+  const rebuilt = await buildPonsS0ExecutionCostEvidence({
+    launchId: input.executionCost.launchId,
+    baselineId: input.executionCost.baselineId,
+    horizonMs: input.executionCost.horizonMs,
+    componentsUsdMicros: input.executionCost.componentsUsdMicros
+  });
+  if (
+    rebuilt.totalUsdMicros !== input.executionCost.totalUsdMicros ||
+    rebuilt.evidenceDigest !== input.executionCost.evidenceDigest
+  ) {
+    throw new Error('PONS_S0_EXECUTION_COST_EVIDENCE_MISMATCH');
+  }
+
   const net = input.grossValueUsdMicros - input.executionCost.totalUsdMicros;
   return {
     status: 'COMPLETE',
+    executionCostPolicyVersion: input.executionCost.policyVersion,
     executionCostUsdMicros: input.executionCost.totalUsdMicros,
     executionCostEvidenceDigest: input.executionCost.evidenceDigest,
     netExecutableValueUsdMicros: net,
@@ -789,7 +946,8 @@ function assertOutcomeBinding(
     outcome.ecosystem !== 'ROBINHOOD' ||
     outcome.launchProtocol !== 'PONS' ||
     outcome.launchId !== launch.launchId ||
-    outcome.baselineId !== baseline.baselineId
+    outcome.baselineId !== baseline.baselineId ||
+    outcome.observedBlock < baseline.decisionBlock
   ) {
     throw new Error('PONS_S0_OUTCOME_BINDING_MISMATCH');
   }
@@ -811,6 +969,21 @@ function assertUniqueOutcomePackets(packets: readonly PonsS0OutcomePacket[]): vo
     const key = `${packet.launchId}:${packet.baselineId}:${packet.horizonMs}`;
     if (seen.has(key)) throw new Error(`PONS_S0_DUPLICATE_OUTCOME_PACKET:${key}`);
     seen.add(key);
+  }
+}
+
+function assertOutcomeFeatureBindings(
+  features: readonly PonsS0FeaturePacket[],
+  outcomes: readonly PonsS0OutcomePacket[]
+): void {
+  const featureKeys = new Set(
+    features.map((packet) => `${packet.launch.launchId}:${packet.baseline.baselineId}`)
+  );
+  for (const outcome of outcomes) {
+    const key = `${outcome.launchId}:${outcome.baselineId}`;
+    if (!featureKeys.has(key)) {
+      throw new Error(`PONS_S0_OUTCOME_WITHOUT_FEATURE_PACKET:${key}`);
+    }
   }
 }
 
@@ -870,6 +1043,17 @@ function nullableString(
   const field = value[key];
   if (field === null) return null;
   if (typeof field !== 'string') throw new Error(`PONS_S0_FIELD_INVALID:${key}`);
+  return field;
+}
+
+function numberField(
+  value: Readonly<Record<string, CanonicalJsonValue>>,
+  key: string
+): number {
+  const field = value[key];
+  if (typeof field !== 'number' || !Number.isSafeInteger(field)) {
+    throw new Error(`PONS_S0_FIELD_INVALID:${key}`);
+  }
   return field;
 }
 
