@@ -1,0 +1,111 @@
+name: Pons S0 Historical Cohort V1
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/pons-s0-historical-cohort.mjs'
+      - 'scripts/pons-s0-historical-cohort-check.mjs'
+      - 'src/research/ponsS0ResearchExport.ts'
+      - 'docs/PONS_S0_HISTORICAL_COHORT_V1.md'
+      - 'package.json'
+      - '.github/workflows/pons-s0-historical-cohort-v1.yml'
+  push:
+    branches:
+      - agent/pons-s0-historical-cohort-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SENTRY_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      PONS_S0_COHORT_OUTPUT_DIR: artifacts/pons-s0-historical-cohort-v1
+      PONS_S0_COHORT_RPC_URL: https://rpc.nodeflare.app/robinhood/public
+      PONS_S0_COHORT_RPC_MIN_INTERVAL_MS: '650'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: corepack enable
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build reviewed source
+        run: pnpm build
+
+      - name: Verify fixed cohort contract offline
+        run: pnpm ponss0cohortcheck
+
+      - name: Preserve research-only boundaries
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+
+      - name: Materialize fixed historical cohort
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${PONS_S0_COHORT_OUTPUT_DIR}"
+          node scripts/pons-s0-historical-cohort.mjs \
+            | tee "${PONS_S0_COHORT_OUTPUT_DIR}/materializer-output.json"
+
+      - name: Verify cohort artifact boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+
+          const dir = process.env.PONS_S0_COHORT_OUTPUT_DIR;
+          const output = JSON.parse(fs.readFileSync(`${dir}/materializer-output.json`, 'utf8'));
+          const origin = JSON.parse(fs.readFileSync(`${dir}/origin.json`, 'utf8'));
+          const selection = JSON.parse(fs.readFileSync(`${dir}/selection.json`, 'utf8'));
+          const manifest = JSON.parse(fs.readFileSync(`${dir}/manifest.json`, 'utf8'));
+
+          const sha = (path) => crypto.createHash('sha256').update(fs.readFileSync(path)).digest('hex');
+
+          if (output.verdict !== 'PONS_S0_HISTORICAL_COHORT_MATERIALIZED') throw new Error('materializer verdict mismatch');
+          if (output.liveMoneyAuthority !== false || output.edge !== 'UNPROVEN') throw new Error('materializer authority mismatch');
+          if (origin.sourceCommit !== process.env.SENTRY_SOURCE_COMMIT.toLowerCase()) throw new Error('origin source commit mismatch');
+          if (origin.boundaries.liveMoney !== false || origin.boundaries.wallet !== false || origin.boundaries.signer !== false || origin.boundaries.broadcast !== false) {
+            throw new Error('origin live boundary mismatch');
+          }
+          if (selection.selectionRule.outcomeIndependentSelection !== true) throw new Error('selection outcome independence missing');
+          if (selection.selectionRule.creatorFeaturePolicy !== 'EXPLICIT_NULL_NO_HISTORICAL_CREATOR_BACKFILL_V1') throw new Error('creator feature policy drift');
+          if (manifest.featurePacketCount !== output.featurePacketCount) throw new Error('feature count mismatch');
+          if (manifest.outcomePacketCount !== output.outcomePacketCount) throw new Error('outcome count mismatch');
+          if (manifest.featurePacketCount !== output.selectedCount) throw new Error('selected launches must all remain visible as feature packets');
+          if (sha(`${dir}/features.jsonl`) !== manifest.featureStreamSha256) throw new Error('feature stream hash mismatch');
+          if (sha(`${dir}/outcomes.jsonl`) !== manifest.outcomeStreamSha256) throw new Error('outcome stream hash mismatch');
+
+          console.log(JSON.stringify({
+            verdict: 'PONS_S0_HISTORICAL_COHORT_ARTIFACT_PASS',
+            selectedCount: output.selectedCount,
+            featurePacketCount: output.featurePacketCount,
+            outcomePacketCount: output.outcomePacketCount,
+            completeBaselineCount: output.completeBaselineCount,
+            completeOutcomeCount: output.completeOutcomeCount,
+            classifiedOutcomeCount: output.classifiedOutcomeCount,
+            sampleAdequacyInferred: false,
+            liveMoneyAuthority: false,
+            edge: 'UNPROVEN'
+          }, null, 2));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-s0-historical-cohort-v1-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/pons-s0-historical-cohort-v1/
+          if-no-files-found: warn
