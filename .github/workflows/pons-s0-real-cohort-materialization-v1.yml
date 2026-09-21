@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 180
     env:
       PONS_S0_SOURCE_COMMIT: '493c85b8d84565cedf6e936063549edfa02edf3a'
-      PONS_S0_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+      PONS_S0_RPC_URL: 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public'
       PONS_S0_RPC_MIN_INTERVAL_MS: '650'
       PONS_S0_CONFIRMATIONS: '12'
       PONS_S0_LOG_CHUNK_BLOCKS: '1000000'
