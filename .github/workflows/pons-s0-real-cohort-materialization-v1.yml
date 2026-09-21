@@ -19,7 +19,7 @@ concurrency:
 jobs:
   materialize:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 350
     env:
       PONS_S0_SOURCE_COMMIT: '493c85b8d84565cedf6e936063549edfa02edf3a'
       PONS_S0_UPSTREAM_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'

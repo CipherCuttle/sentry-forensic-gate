@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { writeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   createPublicClient,
@@ -262,10 +263,30 @@ const relevantRawLogs = rawLaunchLogs.filter((log) =>
   selectedRawKeys.has(launchLogKey(log)) ||
   selectedCreators.has(log.args.deployer.toLowerCase())
 );
+writeSync(
+  2,
+  JSON.stringify({
+    progress: 'PONS_S0_MATERIALIZATION_PHASE',
+    phase: 'UNIVERSE_FACTS',
+    relevantRawLogCount: relevantRawLogs.length
+  }) + '\n'
+);
 const blockHashCache = new Map();
 const universeFacts = await Promise.all(
   relevantRawLogs.map((log) =>
-    rawLaunchLogToProvenanceFact(log, client, blockHashCache)
+    rawLaunchLogToProvenanceFact(log, client, blockHashCache).then(
+      (fact) => {
+        writeSync(
+          2,
+          JSON.stringify({
+            progress: 'PONS_S0_MATERIALIZATION_PROGRESS',
+            phase: 'UNIVERSE_FACTS',
+            done: blockHashCache.size
+          }) + '\n'
+        );
+        return fact;
+      }
+    )
   )
 );
 const factByLaunch = new Map(
@@ -330,7 +351,17 @@ const outcomeStatusCounts = {
   ABSENT_BASELINE_UNVERIFIED: 0
 };
 
-for (const launch of selectedLaunches) {
+for (const [launchIndex, launch] of selectedLaunches.entries()) {
+  writeSync(
+    2,
+    JSON.stringify({
+      progress: 'PONS_S0_MATERIALIZATION_PROGRESS',
+      phase: 'SELECTED_LAUNCH',
+      index: launchIndex,
+      total: selectedLaunches.length,
+      launchId: launch.launchId
+    }) + '\n'
+  );
   const baseline = await buildPortableBaselineBatch(
     {
       launch: launchAdapter,
