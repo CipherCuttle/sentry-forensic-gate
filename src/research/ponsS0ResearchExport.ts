@@ -548,7 +548,6 @@ async function projectLaunchConfig(launch: NormalizedLaunchCandidate) {
     graduationThreshold: bigintString(payload, 'graduationThreshold'),
     curve: address(payload, 'curve'),
     pairToken: address(payload, 'pairToken'),
-    shadowRecipient: address(payload, 'shadowRecipient'),
     sourceAuthorityDigest
   };
 }
