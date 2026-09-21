@@ -143,7 +143,6 @@ export interface PonsS0FeaturePacket {
     normalWinCount: number;
     fatTailWinCount: number;
     sourceFactIds: readonly string[];
-    sourceOutcomeIds: readonly string[];
   } | null;
   executionPersona: PonsS0ExecutionPersona | null;
   timing: {
@@ -200,11 +199,12 @@ export interface PonsS0OutcomePacket {
   liquidityState: PortableForwardOutcome['liquidity']['state'];
   slippageBps: bigint | null;
   costProjection: {
-    status: 'COMPLETE' | 'UNVERIFIED_GAS_COST' | 'UNVERIFIED_GROSS_VALUE';
-    gasCostUsdMicros: bigint | null;
+    status: 'COMPLETE' | 'UNVERIFIED_EXECUTION_COST' | 'UNVERIFIED_GROSS_VALUE';
+    executionCostUsdMicros: bigint | null;
+    executionCostEvidenceDigest: string | null;
     netExecutableValueUsdMicros: bigint | null;
     netExecutableReturnBps: bigint | null;
-    semantics: 'GROSS_EXECUTABLE_VALUE_MINUS_GAS_COST_ONLY';
+    semantics: 'GROSS_EXECUTABLE_VALUE_MINUS_VERIFIED_FULL_EXECUTION_COST';
   };
   outcomeAuthorityDigest: string;
   sourceAuthorityDigest: string;
@@ -252,6 +252,8 @@ export async function buildPonsS0FeaturePacket(input: {
   provenanceEdges?: readonly ProvenanceEdge[];
 }): Promise<PonsS0FeaturePacket> {
   assertPonsIdentity(input.launch, input.baseline);
+  assertBaselinePointInTime(input.launch, input.baseline);
+  assertCreatorFeaturePointInTime(input.launch, input.baseline, input.creatorFeature);
   const launchConfig = await projectLaunchConfig(input.launch);
   const policyComparison = await buildShadowPolicyComparisonReceipt({
     launchId: input.launch.launchId,
@@ -358,16 +360,20 @@ export async function buildPonsS0OutcomePacket(input: {
   launch: NormalizedLaunchCandidate;
   baseline: PortableBaselineBatch;
   outcome: PortableForwardOutcome;
+  executionCost?: {
+    totalUsdMicros: bigint;
+    evidenceDigest: string;
+    semantics: 'FULL_POLICY_PATH_COST_USD_MICROS';
+  };
 }): Promise<PonsS0OutcomePacket> {
   assertPonsIdentity(input.launch, input.baseline);
   assertOutcomeBinding(input.launch, input.baseline, input.outcome);
 
   const grossValue = input.outcome.executableValueUsdMicros ?? null;
-  const gasCost = input.outcome.gasCostUsdMicros ?? null;
   const costProjection = projectNetCost({
     entryNotionalUsdMicros: input.outcome.entryNotionalUsdMicros,
     grossValueUsdMicros: grossValue,
-    gasCostUsdMicros: gasCost
+    executionCost: input.executionCost ?? null
   });
   const sourceAuthorityDigest = await sha256Hex(input.outcome.sourceAuthority);
 
@@ -610,8 +616,7 @@ function projectCreatorFeature(feature: CreatorOutcomeFeatureReceipt) {
     normalLossCount: feature.normalLossCount,
     normalWinCount: feature.normalWinCount,
     fatTailWinCount: feature.fatTailWinCount,
-    sourceFactIds: [...feature.sourceFactIds],
-    sourceOutcomeIds: [...feature.sourceOutcomeIds]
+    sourceFactIds: [...feature.sourceFactIds]
   };
 }
 
@@ -651,37 +656,105 @@ function projectDiagnosticEntityEdges(input: {
 function projectNetCost(input: {
   entryNotionalUsdMicros: bigint;
   grossValueUsdMicros: bigint | null;
-  gasCostUsdMicros: bigint | null;
+  executionCost: {
+    totalUsdMicros: bigint;
+    evidenceDigest: string;
+    semantics: 'FULL_POLICY_PATH_COST_USD_MICROS';
+  } | null;
 }): PonsS0OutcomePacket['costProjection'] {
   if (input.grossValueUsdMicros === null) {
     return {
       status: 'UNVERIFIED_GROSS_VALUE',
-      gasCostUsdMicros: input.gasCostUsdMicros,
+      executionCostUsdMicros: input.executionCost?.totalUsdMicros ?? null,
+      executionCostEvidenceDigest: input.executionCost?.evidenceDigest ?? null,
       netExecutableValueUsdMicros: null,
       netExecutableReturnBps: null,
-      semantics: 'GROSS_EXECUTABLE_VALUE_MINUS_GAS_COST_ONLY'
+      semantics: 'GROSS_EXECUTABLE_VALUE_MINUS_VERIFIED_FULL_EXECUTION_COST'
     };
   }
-  if (input.gasCostUsdMicros === null) {
+  if (input.executionCost === null) {
     return {
-      status: 'UNVERIFIED_GAS_COST',
-      gasCostUsdMicros: null,
+      status: 'UNVERIFIED_EXECUTION_COST',
+      executionCostUsdMicros: null,
+      executionCostEvidenceDigest: null,
       netExecutableValueUsdMicros: null,
       netExecutableReturnBps: null,
-      semantics: 'GROSS_EXECUTABLE_VALUE_MINUS_GAS_COST_ONLY'
+      semantics: 'GROSS_EXECUTABLE_VALUE_MINUS_VERIFIED_FULL_EXECUTION_COST'
     };
   }
-  const net = input.grossValueUsdMicros - input.gasCostUsdMicros;
+  if (
+    input.executionCost.totalUsdMicros < 0n ||
+    input.executionCost.evidenceDigest.length === 0 ||
+    input.executionCost.semantics !== 'FULL_POLICY_PATH_COST_USD_MICROS'
+  ) {
+    throw new Error('PONS_S0_EXECUTION_COST_INVALID');
+  }
+  const net = input.grossValueUsdMicros - input.executionCost.totalUsdMicros;
   return {
     status: 'COMPLETE',
-    gasCostUsdMicros: input.gasCostUsdMicros,
+    executionCostUsdMicros: input.executionCost.totalUsdMicros,
+    executionCostEvidenceDigest: input.executionCost.evidenceDigest,
     netExecutableValueUsdMicros: net,
     netExecutableReturnBps:
       input.entryNotionalUsdMicros > 0n
         ? (net * 10_000n) / input.entryNotionalUsdMicros
         : null,
-    semantics: 'GROSS_EXECUTABLE_VALUE_MINUS_GAS_COST_ONLY'
+    semantics: 'GROSS_EXECUTABLE_VALUE_MINUS_VERIFIED_FULL_EXECUTION_COST'
   };
+}
+
+function assertBaselinePointInTime(
+  launch: NormalizedLaunchCandidate,
+  baseline: PortableBaselineBatch
+): void {
+  for (const leg of baseline.legs) {
+    if (leg.notionalUsdMicros !== leg.entry.notionalUsdMicros) {
+      throw new Error('PONS_S0_BASELINE_NOTIONAL_MISMATCH');
+    }
+    if (
+      leg.entry.launchId !== launch.launchId ||
+      leg.entry.blockNumber !== baseline.decisionBlock ||
+      leg.entry.blockHash.toLowerCase() !== baseline.decisionBlockHash.toLowerCase() ||
+      leg.entry.kind !== 'ENTRY'
+    ) {
+      throw new Error('PONS_S0_ENTRY_POINT_IN_TIME_MISMATCH');
+    }
+    if (baseline.market && leg.entry.marketId !== baseline.market.marketId) {
+      throw new Error('PONS_S0_ENTRY_MARKET_MISMATCH');
+    }
+    if (leg.reverse) {
+      if (
+        leg.reverse.launchId !== launch.launchId ||
+        leg.reverse.blockNumber !== baseline.decisionBlock ||
+        leg.reverse.blockHash.toLowerCase() !== baseline.decisionBlockHash.toLowerCase() ||
+        leg.reverse.kind !== 'INDEPENDENT_REVERSE_EXIT' ||
+        leg.reverse.notionalUsdMicros !== leg.notionalUsdMicros
+      ) {
+        throw new Error('PONS_S0_REVERSE_POINT_IN_TIME_MISMATCH');
+      }
+      if (baseline.market && leg.reverse.marketId !== baseline.market.marketId) {
+        throw new Error('PONS_S0_REVERSE_MARKET_MISMATCH');
+      }
+    }
+  }
+}
+
+function assertCreatorFeaturePointInTime(
+  launch: NormalizedLaunchCandidate,
+  baseline: PortableBaselineBatch,
+  feature: CreatorOutcomeFeatureReceipt | null
+): void {
+  if (!feature) return;
+  if (
+    feature.chainId !== launch.chainId ||
+    feature.launchId !== launch.launchId ||
+    feature.creator.toLowerCase() !== launch.creator.toLowerCase() ||
+    feature.baselineId !== baseline.baselineId ||
+    feature.decisionBlock !== baseline.decisionBlock ||
+    feature.decisionBlockHash.toLowerCase() !== baseline.decisionBlockHash.toLowerCase()
+  ) {
+    throw new Error('PONS_S0_CREATOR_POINT_IN_TIME_MISMATCH');
+  }
 }
 
 function assertPonsIdentity(
