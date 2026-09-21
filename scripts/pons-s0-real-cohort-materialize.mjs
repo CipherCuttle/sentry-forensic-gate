@@ -492,6 +492,8 @@ const originCore = {
     rpcTransportClass:
       'BLOCKSCOUT_INDEXED_LOGS_PLUS_NODEFLARE_ARCHIVE_STATE_VIA_LOCAL_PROXY',
     launchDiscovery: 'ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1',
+    launchDiscoveryTransport:
+      'BLOCKSCOUT_NATIVE_REST_CURSOR_ADDRESS_LOGS',
     launchIndexSha256: launchIndex.sha256,
     blockscoutIndexedHeadBlock:
       launchIndex.blockscoutIndexedHeadBlock.toString(),
@@ -574,7 +576,7 @@ async function rawLaunchLogToProvenanceFact(
   );
 
   const blockKey = log.blockNumber.toString();
-  let blockHash = blockHashCache.get(blockKey);
+  let blockHash = log.blockHash ?? blockHashCache.get(blockKey);
   if (!blockHash) {
     const block = await client.getBlock({
       blockNumber: log.blockNumber
@@ -584,8 +586,8 @@ async function rawLaunchLogToProvenanceFact(
       'PONS_S0_RELEVANT_LOG_BLOCK_HASH_MISSING:' + blockKey
     );
     blockHash = block.hash.toLowerCase();
-    blockHashCache.set(blockKey, blockHash);
   }
+  blockHashCache.set(blockKey, blockHash);
 
   const factory = CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase();
   const txHash = log.transactionHash.toLowerCase();
@@ -673,6 +675,11 @@ async function loadIndexedLaunchLogs(input) {
         'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_LOG_INDEX_INVALID'
       );
       assert.match(
+        String(item.blockHash),
+        /^0x[0-9a-fA-F]{64}$/,
+        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_BLOCK_HASH_INVALID'
+      );
+      assert.match(
         String(item.transactionHash),
         /^0x[0-9a-fA-F]{64}$/,
         'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_TX_INVALID'
@@ -689,6 +696,7 @@ async function loadIndexedLaunchLogs(input) {
       );
       return {
         blockNumber,
+        blockHash: String(item.blockHash).toLowerCase(),
         transactionHash: String(item.transactionHash).toLowerCase(),
         logIndex,
         args: {
