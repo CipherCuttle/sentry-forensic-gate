@@ -38,6 +38,7 @@ export interface PonsS0ExecutionPersona {
 export interface PonsS0QuoteStateFeature {
   curve: Hex;
   pairToken: Hex;
+  shadowRecipient: Hex;
   quoteReserve: bigint;
   tokenReserve: bigint;
   trackedQuote: bigint;
@@ -494,6 +495,7 @@ async function projectLaunchConfig(launch: NormalizedLaunchCandidate) {
     graduationThreshold: bigintString(payload, 'graduationThreshold'),
     curve: address(payload, 'curve'),
     pairToken: address(payload, 'pairToken'),
+    shadowRecipient: address(payload, 'shadowRecipient'),
     sourceAuthorityDigest
   };
 }
@@ -569,7 +571,7 @@ function projectExecutionPersona(
   if (legs.length === 0) return null;
   const first = legs[0]!.entry.quoteState;
   const persona: PonsS0ExecutionPersona = {
-    recipient: recipientFromEntry(legs[0]!),
+    recipient: first.shadowRecipient,
     recipientRole: 'PONS_V2_SHADOW_QUOTE_RECIPIENT',
     parity: PONS_S0_EXECUTION_PERSONA_PARITY,
     sourceQuoteSchema: 'ROBINHOOD_PONS_V2_CURVE_QUOTE_R1',
@@ -583,7 +585,7 @@ function projectExecutionPersona(
   for (const leg of legs.slice(1)) {
     const state = leg.entry.quoteState;
     if (
-      recipientFromEntry(leg).toLowerCase() !== persona.recipient.toLowerCase() ||
+      state.shadowRecipient.toLowerCase() !== persona.recipient.toLowerCase() ||
       state.snipeTaxBps !== persona.snipeTaxBps ||
       state.effectiveSnipeTaxBps !== persona.effectiveSnipeTaxBps
     ) {
@@ -591,17 +593,6 @@ function projectExecutionPersona(
     }
   }
   return persona;
-}
-
-function recipientFromEntry(leg: PonsS0BaselineLegFeature): Hex {
-  // The recipient is not duplicated in quoteState to keep the feature row
-  // compact. It is encoded in the entry quote authority digest and recovered
-  // before this projection in projectBaselineLeg.
-  const tagged = (leg as PonsS0BaselineLegFeature & { __recipient?: Hex }).__recipient;
-  if (!tagged) {
-    throw new Error('PONS_S0_EXECUTION_PERSONA_RECIPIENT_MISSING');
-  }
-  return tagged;
 }
 
 function projectCreatorFeature(feature: CreatorOutcomeFeatureReceipt) {
