@@ -289,6 +289,66 @@ autonomously change the live policy.
 
 Any model update creates a new policy version and a new prospective witness.
 
+### F11 — gross executable value is not net strategy P&L
+
+Current forward outcomes reconstruct executable exit value. That is necessary,
+but a strategy promotion metric must additionally account for the complete
+transaction path.
+
+At the intended execution policy, include:
+
+- entry transaction gas;
+- approval / Permit2 / allowance-management gas actually required by policy;
+- exit transaction gas;
+- protocol / creator / swap fees already embedded in execution;
+- quote-to-inclusion slippage;
+- recovery / cleanup gas when the path requires it.
+
+A $1 strategy can be gross-profitable and net-negative after execution costs.
+
+The gross outcome receipt should remain unchanged for evidence compatibility.
+Net strategy economics belong in a separately versioned strategy-cost projection.
+
+### F12 — opportunity edge is not portfolio implementability
+
+The current per-launch hypothetical comparison effectively asks what would
+happen if $1 were independently available for each opportunity.
+
+A live wallet has finite capital and overlapping positions.
+
+Before portfolio promotion, measure:
+
+- capital-time occupancy;
+- concurrent eligible positions;
+- skipped opportunities caused by capital reservation;
+- deterministic allocation priority when simultaneous candidates compete;
+- realized portfolio-level terminal capital under the same capital budget.
+
+S0 first proves opportunity-level predictive value.
+A separate portfolio-routing stage proves finite-capital implementability.
+
+### F13 — random cross-validation is forbidden for promotion evidence
+
+Launches are time ordered, clustered, and subject to regime drift.
+
+Random train/test shuffling can leak market regimes and near-duplicate behavior.
+
+Model development may use time-aware walk-forward / blocked evaluation and
+dependence-aware resampling. Final promotion evidence remains the untouched
+prospective witness.
+
+### F14 — multichain observations are not IID sample multiplication
+
+Ink, Robinhood/Pons, Arc, and other venues have different launch mechanisms,
+liquidity rules, participants, fees, latency, and adversaries.
+
+Cross-chain evidence may test transportability, but it MUST NOT be pooled merely
+to inflate sample size.
+
+Any pooled model must declare chain/protocol identity and separately report
+within-domain performance and calibration. Transfer learning / common features
+are a hypothesis, not an assumption.
+
 ---
 
 ## 6. Experimental lanes
@@ -524,14 +584,16 @@ A favorable backtest alone can never promote S0 to live.
 1. Add a versioned `StrategyTrialReceipt` / trial ledger.
 2. Add `ExecutionPersona` binding to portable baseline/strategy evidence.
 3. Add latency evidence + frozen latency-envelope semantics.
-4. Clarify R1 capacity semantics so no live consumer can mistake it for
+4. Add a separately versioned net-cost projection (gas + execution costs).
+5. Clarify R1 capacity semantics so no live consumer can mistake it for
    sequential capacity.
-5. Add diagnostic entity-linkage receipt without changing existing gates.
-6. Build point-in-time feature registry receipts.
-7. Run S0A development and null/ablation tests.
-8. Freeze S0B policy and stopping rule.
-9. Start untouched S0C prospective witness.
-10. Only after S0C closure consider a new exact-small live strategy canary.
+6. Add diagnostic entity-linkage receipt without changing existing gates.
+7. Build point-in-time feature registry receipts.
+8. Add finite-capital occupancy / concurrency diagnostics.
+9. Run S0A development with time-aware null/ablation tests.
+10. Freeze S0B policy and stopping rule.
+11. Start untouched S0C prospective witness.
+12. Only after S0C closure consider a new exact-small live strategy canary.
 
 ---
 
