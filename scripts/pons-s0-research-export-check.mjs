@@ -541,7 +541,7 @@ await assert.rejects(
 
 await assert.rejects(
   () => buildPonsS0ResearchExportBundle({
-    featurePackets: [],
+    featurePackets: [feature],
     outcomePackets: [oneMinute, oneMinute]
   }),
   /PONS_S0_DUPLICATE_OUTCOME_PACKET/
