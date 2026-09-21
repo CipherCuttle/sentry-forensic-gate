@@ -195,7 +195,8 @@ for (let index = 0; index < selected.length; index += 1) {
     launch,
     baseline,
     creatorFeature: null,
-    provenanceEdges: []
+    provenanceEdges: [],
+    timingClockSemantics: 'CANONICAL_BLOCK_TIMESTAMP_REPLAY'
   });
   featurePackets.push(featurePacket);
 
@@ -275,7 +276,8 @@ const originCore = {
   chainId: CHAIN_ID,
   acquisition: {
     providerClass,
-    credentialRequired: false,
+    credentialRequired:
+      providerClass === 'NODEFLARE_PUBLIC_ARCHIVE' ? false : null,
     rpcEndpointRecorded: providerClass === 'NODEFLARE_PUBLIC_ARCHIVE'
       ? RPC_URL
       : null,
