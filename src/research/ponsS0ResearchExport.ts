@@ -179,6 +179,7 @@ export interface PonsS0ExecutionCostEvidence {
   policyVersion: typeof PONS_S0_FULL_EXECUTION_COST_V1;
   launchId: string;
   baselineId: string;
+  outcomeId: string;
   horizonMs: number;
   componentsUsdMicros: {
     entryTransaction: bigint;
@@ -400,6 +401,7 @@ export async function buildPonsS0OutcomePacket(input: {
   const costProjection = await projectNetCost({
     launchId: input.outcome.launchId,
     baselineId: input.outcome.baselineId,
+    outcomeId: input.outcome.outcomeId,
     horizonMs: input.outcome.horizonMs,
     entryNotionalUsdMicros: input.outcome.entryNotionalUsdMicros,
     grossValueUsdMicros: grossValue,
