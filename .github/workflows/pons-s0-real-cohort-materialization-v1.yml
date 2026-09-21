@@ -140,6 +140,10 @@ jobs:
               raise RuntimeError("BLOCKSCOUT_HEAD_HEIGHT_INVALID")
 
           def query_logs(base, factory, topic0, start, end, counter):
+              # Blockscout's public API rate-limits sustained recursive scans.
+              # Use the same conservative cadence that previously proved
+              # creator-history acquisition on this explorer.
+              time.sleep(15)
               counter[0] += 1
               value = curl_json([
                   "--get",
