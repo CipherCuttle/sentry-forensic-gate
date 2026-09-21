@@ -568,12 +568,16 @@ async function findRecentLaunch(
     );
   }
 
-  const logChunkSize = 2_000n;
-  for (let chunkFrom = fromBlock; chunkFrom <= head; chunkFrom += logChunkSize) {
-    const chunkTo = chunkFrom + logChunkSize - 1n < head
-      ? chunkFrom + logChunkSize - 1n
-      : head;
-    await readRange(chunkFrom, chunkTo);
+  if (launchBlockHint !== null) {
+    await readRange(launchBlockHint, launchBlockHint);
+  } else {
+    const logChunkSize = 2_000n;
+    for (let chunkFrom = fromBlock; chunkFrom <= head; chunkFrom += logChunkSize) {
+      const chunkTo = chunkFrom + logChunkSize - 1n < head
+        ? chunkFrom + logChunkSize - 1n
+        : head;
+      await readRange(chunkFrom, chunkTo);
+    }
   }
 
   if (matchCount !== 1) {

@@ -1,0 +1,67 @@
+{
+  "schema": "sentry.pons-e4c-live-canary-closure/1.0",
+  "generatedAt": "2026-09-21T03:20:00Z",
+  "verdict": "CLOSED_PASS_LIVE_ONE_SHOT",
+  "scientificState": "EDGE_UNPROVEN",
+  "mergeAuthority": "NONE",
+  "liveAuthority": {
+    "scope": "exactly one $1 PONS E4C canary",
+    "consumed": true,
+    "additionalAttemptsAuthorized": false,
+    "rerunForbidden": true
+  },
+  "runtime": {
+    "reviewedCodeHead": "b267d0d312567d802591fc37817f90ba301e569f",
+    "executionSurfaceDigestSha256": "0xe1e03f20af2fba688c62679d7b4d3c92efc1c8076161cd52eefa386660902232"
+  },
+  "grant": {
+    "grantId": "0x71337fafe575caa2db831e277b5bf3284e39c1b5c8c2dc26e9bf26efaca1a68b",
+    "consumed": true
+  },
+  "chain": {
+    "chainId": 4663,
+    "wallet": "0x9343835Fe138FFfF68293B361b3C69FEbd83C031",
+    "token": "0x8D2a90D5325F6fcD71cDBE5f57871b6a5F7E23DA",
+    "curve": "0x736D573a7265a8849733189d97DE7F7f92dd1B67",
+    "launchBlock": "68456262",
+    "quotedEntryWei": "376225977105611",
+    "tokensOwned": "212443235919051012526606"
+  },
+  "transactions": {
+    "buy": "0xfcbea327c28250c8c328b4048545f7107c99dc8be0975db0f25a1f412b0c2fde",
+    "approval": "0x964d67e6dfff9412e5a9923be903da5d8a76fdc509e418244c71c23c6bc0206f",
+    "sell": "0xf6430de98fe7a82c2c087cfe2d9625814d1eca6d100b0597be5e868b9cf1bf17"
+  },
+  "localTerminalEvidence": {
+    "e0Verdict": "PONS_E0_REAL_MONEY_ROUNDTRIP_COMPLETE",
+    "e0TerminalStatus": "COMPLETED",
+    "exitCode": 0,
+    "stoppedAfterOneRoundTrip": true,
+    "grantConsumed": true,
+    "stateExists": true,
+    "e0AssertedFinalTokenBalanceZero": true,
+    "e0AssertedFinalCurveAllowanceZero": true
+  },
+  "independentExplorerVerification": {
+    "source": "Robinhood Chain Blockscout",
+    "buyStatus": "SUCCESS",
+    "buyBlock": "68457569",
+    "buyValueEth": "0.000376225977105611",
+    "buyTokenAmount": "212443.235919051012526606",
+    "approvalStatus": "SUCCESS",
+    "approvalBlock": "68457650",
+    "sellStatus": "SUCCESS",
+    "sellBlock": "68457723",
+    "sellTokenAmount": "212443.235919051012526606",
+    "currentWalletTokenBalances": [],
+    "allowanceIndependentlyQueried": false,
+    "allowanceNote": "Blockscout proxy eth_call endpoint returned HTTP 400; final curve allowance zero is therefore supported by E0 runtime assertion rather than independent explorer RPC."
+  },
+  "interpretation": {
+    "executionPlumbingValidated": true,
+    "edgeProven": false,
+    "profitabilityProven": false,
+    "repeatedLiveReliabilityProven": false,
+    "graduatedFailoverExercised": false
+  }
+}

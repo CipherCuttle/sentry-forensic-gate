@@ -1,0 +1,70 @@
+name: pons-e4c-exact-launch-hint-readiness
+
+concurrency:
+  group: pons-e4c-exact-launch-hint-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - agent/pons-e4c-exact-launch-hint-v2
+  pull_request:
+    paths:
+      - 'src/canary/ponsE0Cli.ts'
+      - '.github/workflows/pons-e4c-exact-launch-hint-readiness.yml'
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E0_LIVE: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: corepack enable
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Preserve research-only boundaries
+        run: pnpm --package=@ast-grep/cli@0.45.0 dlx ast-grep scan
+
+      - name: Verify bounded E0 regression
+        run: pnpm ponse0check
+
+      - name: Emit E4C execution surface digest
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { computePonsE4ExecutionSurfaceDigest } from './dist/canary/ponsE4OneShotGrant.js';
+          console.log('PONS_E4C_EXECUTION_SURFACE_DIGEST=' + computePonsE4ExecutionSurfaceDigest());
+          NODE
+
+      - name: Verify exact hinted launch dry plan
+        env:
+          PONS_E0_CANARY_ENABLED: 'true'
+          PONS_E0_TOKEN: '0x8f436A8959678b0f3F7E471E2B7BEe8d57Dd07A2'
+          PONS_E0_WALLET: '0x9343835Fe138FFfF68293B361b3C69FEbd83C031'
+          PONS_E0_LAUNCH_BLOCK: '68293321'
+          PONS_E0_SLIPPAGE_BPS: '500'
+          PONS_E0_MAX_NATIVE_VALUE_WEI: '417570938694147'
+        run: node dist/canary/ponsE0Cli.js
+
+      - name: Assert exact-hint optimization and no live authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "await readRange(launchBlockHint, launchBlockHint)" src/canary/ponsE0Cli.ts
+          test -z "${PONS_E0_PRIVATE_KEY}"
+          test "${PONS_E0_LIVE}" != "true"
+          echo "PONS_E4C_EXACT_HINT_READ_ONLY_PASS"
