@@ -15,6 +15,7 @@ for (const exact of [
   "candidateRule: 'FIRST_NATIVE_PAIR_TOKEN_LAUNCHED_EVENT_PER_BUCKET'",
   "creatorFeaturePolicy: 'EXPLICIT_NULL_NO_HISTORICAL_CREATOR_BACKFILL_V1'",
   "creatorFeature: null",
+  "timingClockSemantics: 'CANONICAL_BLOCK_TIMESTAMP_REPLAY'",
   "buildPortableBaselineBatch(",
   "buildPortableForwardOutcome(",
   "buildPonsS0FeaturePacket(",
