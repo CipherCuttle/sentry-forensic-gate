@@ -1,0 +1,147 @@
+name: pons-s0-real-cohort-materialization-v1
+
+on:
+  push:
+    branches:
+      - agent/pons-s0-real-cohort-materialization-v1
+    paths:
+      - scripts/pons-s0-real-cohort-materialize.mjs
+      - .github/workflows/pons-s0-real-cohort-materialization-v1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PONS_S0_SOURCE_COMMIT: '493c85b8d84565cedf6e936063549edfa02edf3a'
+      PONS_S0_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+      PONS_S0_RPC_MIN_INTERVAL_MS: '650'
+      PONS_S0_CONFIRMATIONS: '12'
+      PONS_S0_LOG_CHUNK_BLOCKS: '1000000'
+    steps:
+      - name: Checkout materialization harness
+        uses: actions/checkout@v4
+        with:
+          ref: agent/pons-s0-real-cohort-materialization-v1
+          path: harness
+
+      - name: Checkout exact reviewed SENTRY source
+        uses: actions/checkout@v4
+        with:
+          ref: 493c85b8d84565cedf6e936063549edfa02edf3a
+          path: source
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build exact reviewed SENTRY source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "${PONS_S0_SOURCE_COMMIT}"
+          corepack enable
+          cd source
+          pnpm install --no-frozen-lockfile
+          pnpm build
+          test "$(git rev-parse HEAD)" = "${PONS_S0_SOURCE_COMMIT}"
+
+      - name: Materialize complete mature Pons S0 cohort
+        shell: bash
+        env:
+          PONS_S0_OUTPUT_DIR: ${{ github.workspace }}/cohort
+          PONS_S0_HARNESS_REPOSITORY: ${{ github.repository }}
+          PONS_S0_HARNESS_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cp harness/scripts/pons-s0-real-cohort-materialize.mjs source/scripts/pons-s0-real-cohort-materialize.mjs
+          cd source
+          node scripts/pons-s0-real-cohort-materialize.mjs | tee "${GITHUB_WORKSPACE}/materialization.log"
+
+      - name: Verify exact origin binding and separation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s cohort/features.jsonl
+          test -f cohort/outcomes.jsonl
+          test -s cohort/manifest.json
+          test -s cohort/origin-receipt.json
+          test -s cohort/summary.json
+
+          jq -e --arg source "${PONS_S0_SOURCE_COMMIT}" --arg harness "${GITHUB_SHA}" '
+            .source.repository == "CipherCuttle/sentry-forensic-gate" and
+            .source.repositoryCommit == $source and
+            .exportContract.feature == "PONS_S0_FEATURE_PACKET_V1" and
+            .exportContract.outcome == "PONS_S0_OUTCOME_PACKET_V1" and
+            .exportContract.manifest == "PONS_S0_EXPORT_MANIFEST_V1" and
+            .materialization.harnessCommit == $harness and
+            .frozenAuthority.targetPerformanceInspectedForSelection == false and
+            .boundaries.readOnly == true and
+            .boundaries.signer == false and
+            .boundaries.broadcast == false and
+            .boundaries.liveMoneyAuthority == false and
+            .boundaries.modelPromotionAuthority == false and
+            .boundaries.mergeAuthority == false and
+            .boundaries.edge == "UNPROVEN"
+          ' cohort/origin-receipt.json >/dev/null
+
+          feature_sha="$(sha256sum cohort/features.jsonl | awk '{print $1}')"
+          outcome_sha="$(sha256sum cohort/outcomes.jsonl | awk '{print $1}')"
+          manifest_sha="$(sha256sum cohort/manifest.json | awk '{print $1}')"
+          test "${feature_sha}" = "$(jq -r '.featureStreamSha256' cohort/manifest.json)"
+          test "${outcome_sha}" = "$(jq -r '.outcomeStreamSha256' cohort/manifest.json)"
+          test "${feature_sha}" = "$(jq -r '.artifacts.featureStreamSha256' cohort/origin-receipt.json)"
+          test "${outcome_sha}" = "$(jq -r '.artifacts.outcomeStreamSha256' cohort/origin-receipt.json)"
+          test "${manifest_sha}" = "$(jq -r '.artifacts.manifestFileSha256' cohort/origin-receipt.json)"
+          test "$(jq -r '.manifestId' cohort/manifest.json)" = "$(jq -r '.artifacts.manifestId' cohort/origin-receipt.json)"
+          test "$(jq -r '.evidenceDigest' cohort/manifest.json)" = "$(jq -r '.artifacts.manifestEvidenceDigest' cohort/origin-receipt.json)"
+
+          jq -e '
+            .verdict == "REAL_COHORT_READY_FOR_QNTYLAB" and
+            .scientificState == "EDGE_UNPROVEN" and
+            .featurePacketCount == .matureLaunchCount and
+            .featurePacketCount > 0 and
+            .boundaries.liveMoneyAuthority == false
+          ' cohort/summary.json >/dev/null
+
+          sha256sum cohort/features.jsonl cohort/outcomes.jsonl cohort/manifest.json cohort/origin-receipt.json cohort/summary.json > cohort/SHA256SUMS
+
+      - name: Commit immutable cohort evidence to harness branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest='harness/docs/evidence/pons-s0-real-cohort-v1'
+          rm -rf "${dest}"
+          mkdir -p "${dest}"
+          cp cohort/features.jsonl "${dest}/features.jsonl"
+          cp cohort/outcomes.jsonl "${dest}/outcomes.jsonl"
+          cp cohort/manifest.json "${dest}/manifest.json"
+          cp cohort/origin-receipt.json "${dest}/origin-receipt.json"
+          cp cohort/summary.json "${dest}/summary.json"
+          cp cohort/SHA256SUMS "${dest}/SHA256SUMS"
+
+          git -C harness config user.name 'github-actions[bot]'
+          git -C harness config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C harness add docs/evidence/pons-s0-real-cohort-v1
+          if git -C harness diff --cached --quiet; then
+            echo 'No evidence diff to commit'
+            exit 0
+          fi
+          git -C harness commit -m 'Materialize origin-bound Pons S0 real cohort [skip ci]'
+          git -C harness push origin HEAD:agent/pons-s0-real-cohort-materialization-v1
+
+      - name: Upload cohort evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-s0-real-cohort-v1
+          path: |
+            cohort/
+            materialization.log
+          if-no-files-found: warn
+          retention-days: 30
