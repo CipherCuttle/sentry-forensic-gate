@@ -29,6 +29,9 @@ import {
   buildPonsS0ResearchExportBundle,
   buildPortableBaselineBatch,
   buildPortableForwardOutcome,
+  derivePonsV2EventId,
+  derivePonsV2LaunchId,
+  findPortableFirstBlockAtOrAfterTimestamp,
   ponsV2TokenLaunchedEvent,
   projectPortableCreatorOutcomeFeature,
   projectPortableOutcomeReceipt,
@@ -43,6 +46,7 @@ const ORIGIN_RECEIPT_SCHEMA = 'PONS_S0_EXTERNAL_ORIGIN_RECEIPT_V1';
 const HORIZON_MS = 86_400_000;
 const DEFAULT_CONFIRMATIONS = 12n;
 const DEFAULT_LOG_CHUNK_BLOCKS = 1_000_000n;
+const DEFAULT_COHORT_TARGET_COUNT = 96;
 
 const rpcUrl = process.env.PONS_S0_RPC_URL;
 assert.ok(rpcUrl, 'PONS_S0_RPC_URL is required');
@@ -78,8 +82,17 @@ const confirmations = BigInt(
 const logChunkBlocks = BigInt(
   process.env.PONS_S0_LOG_CHUNK_BLOCKS ?? DEFAULT_LOG_CHUNK_BLOCKS.toString()
 );
+const cohortTargetCount = parsePositiveInteger(
+  process.env.PONS_S0_COHORT_TARGET_COUNT ??
+    String(DEFAULT_COHORT_TARGET_COUNT),
+  'PONS_S0_COHORT_TARGET_COUNT'
+);
 assert.ok(confirmations >= 2n, 'PONS_S0_CONFIRMATIONS must be >= 2');
 assert.ok(logChunkBlocks > 0n, 'PONS_S0_LOG_CHUNK_BLOCKS must be > 0');
+assert.ok(
+  cohortTargetCount >= 40,
+  'PONS_S0_COHORT_TARGET_COUNT must remain >= frozen minimum 40'
+);
 
 const robinhood = defineChain({
   id: ROBINHOOD_CHAIN_ID,
@@ -155,12 +168,44 @@ assert.equal(
   'PONS_S0_AS_OF_FORWARD_POINT_TIMESTAMP_MISMATCH'
 );
 
+const maturityCutoffTimestampMs = asOfTimestampMs - HORIZON_MS;
+const firstImmaturePoint = await findPortableFirstBlockAtOrAfterTimestamp(
+  forwardAdapter,
+  CURRENT_PONS_V2_AUTHORITY.fromBlock,
+  asOfBlock,
+  maturityCutoffTimestampMs + 1
+);
+assert.ok(
+  firstImmaturePoint,
+  'PONS_S0_MATURITY_BOUNDARY_NOT_FOUND_AT_FROZEN_AS_OF'
+);
+assert.ok(
+  firstImmaturePoint.blockNumber > CURRENT_PONS_V2_AUTHORITY.fromBlock,
+  'PONS_S0_NO_MATURE_FACTORY_EPOCH_AT_FROZEN_AS_OF'
+);
+const matureThroughBlock = firstImmaturePoint.blockNumber - 1n;
+const matureThroughPoint = await forwardAdapter.getBlockPoint(
+  matureThroughBlock
+);
+assert.ok(
+  matureThroughPoint.timestampMs <= maturityCutoffTimestampMs,
+  'PONS_S0_MATURE_THROUGH_TIMESTAMP_AFTER_CUTOFF'
+);
+assert.ok(
+  firstImmaturePoint.timestampMs > maturityCutoffTimestampMs,
+  'PONS_S0_FIRST_IMMATURE_TIMESTAMP_NOT_AFTER_CUTOFF'
+);
+
 const rawLaunchLogs = await scanLaunchLogs({
   client,
   fromBlock: CURRENT_PONS_V2_AUTHORITY.fromBlock,
-  toBlock: asOfBlock,
+  toBlock: matureThroughBlock,
   chunkBlocks: logChunkBlocks
 });
+assert.ok(
+  rawLaunchLogs.length > 0,
+  'PONS_S0_NO_MATURE_LAUNCHES_AT_FROZEN_AS_OF'
+);
 
 const rawLogKeys = new Set(
   rawLaunchLogs.map((log) => launchLogKey(log))
@@ -171,67 +216,87 @@ assert.equal(
   'PONS_S0_DUPLICATE_RAW_LAUNCH_LOG'
 );
 
-const launchBlocks = [
-  ...new Set(rawLaunchLogs.map((log) => log.blockNumber.toString()))
+const universeFacts = await Promise.all(
+  rawLaunchLogs.map((log) => rawLaunchLogToProvenanceFact(log))
+);
+const factByLaunch = new Map(
+  universeFacts.map((fact) => [fact.launchId, fact])
+);
+assert.equal(
+  factByLaunch.size,
+  rawLaunchLogs.length,
+  'PONS_S0_DUPLICATE_MATURE_UNIVERSE_LAUNCH_ID'
+);
+
+const matureLaunchUniverseEvidenceDigest = await sha256Hex({
+  kind: 'PONS_S0_MATURE_LAUNCH_UNIVERSE_V1',
+  authorityId: CURRENT_PONS_V2_AUTHORITY.authorityId,
+  authorityFromBlock: CURRENT_PONS_V2_AUTHORITY.fromBlock,
+  matureThroughBlock,
+  matureThroughBlockHash: matureThroughPoint.blockHash,
+  maturityCutoffTimestampMs,
+  launchCount: rawLaunchLogs.length,
+  facts: universeFacts.map((fact) => ({
+    factId: fact.factId,
+    evidenceDigest: fact.evidenceDigest
+  }))
+});
+
+const selectedRawLogs = systematicOrdinalSample(
+  rawLaunchLogs,
+  cohortTargetCount
+);
+const selectedRawKeys = new Set(
+  selectedRawLogs.map((log) => launchLogKey(log))
+);
+assert.equal(
+  selectedRawKeys.size,
+  selectedRawLogs.length,
+  'PONS_S0_SYSTEMATIC_SAMPLE_DUPLICATE'
+);
+
+const selectedLaunchBlocks = [
+  ...new Set(selectedRawLogs.map((log) => log.blockNumber.toString()))
 ]
   .map((value) => BigInt(value))
   .sort(compareBigInt);
 
-const launches = [];
-for (const blockNumber of launchBlocks) {
-  const blockLaunches = await launchAdapter.catchUp(blockNumber, blockNumber);
+const selectedLaunches = [];
+for (const blockNumber of selectedLaunchBlocks) {
+  const blockLaunches = await launchAdapter.catchUp(
+    blockNumber,
+    blockNumber
+  );
   for (const launch of blockLaunches) {
     const key = [
       launch.blockNumber.toString(),
       launch.txHash.toLowerCase(),
       String(launch.logIndex)
     ].join(':');
-    if (!rawLogKeys.has(key)) {
-      throw new Error('PONS_S0_MATERIALIZED_LAUNCH_NOT_IN_SCANNED_LOG_SET:' + key);
-    }
-    launches.push(launch);
+    if (selectedRawKeys.has(key)) selectedLaunches.push(launch);
   }
 }
 
-launches.sort(compareLaunches);
-const launchIds = new Set(launches.map((launch) => launch.launchId));
-assert.equal(
-  launchIds.size,
-  launches.length,
-  'PONS_S0_DUPLICATE_MATERIALIZED_LAUNCH_ID'
+selectedLaunches.sort(compareLaunches);
+const selectedLaunchIds = new Set(
+  selectedLaunches.map((launch) => launch.launchId)
 );
 assert.equal(
-  launches.length,
-  rawLaunchLogs.length,
-  'PONS_S0_LAUNCH_SCAN_CARDINALITY_MISMATCH'
+  selectedLaunchIds.size,
+  selectedLaunches.length,
+  'PONS_S0_DUPLICATE_SELECTED_MATERIALIZED_LAUNCH_ID'
 );
-
-const matureLaunches = [];
-for (const launch of launches) {
-  const launchBlock = await client.getBlock({ blockNumber: launch.blockNumber });
-  assert.ok(launchBlock.hash, 'PONS_S0_LAUNCH_BLOCK_HASH_MISSING');
-  assert.equal(
-    launchBlock.hash.toLowerCase(),
-    launch.blockHash.toLowerCase(),
-    'PONS_S0_LAUNCH_BLOCK_HASH_DRIFT:' + launch.launchId
+assert.equal(
+  selectedLaunches.length,
+  selectedRawLogs.length,
+  'PONS_S0_SELECTED_LAUNCH_MATERIALIZATION_CARDINALITY_MISMATCH'
+);
+for (const launch of selectedLaunches) {
+  assert.ok(
+    factByLaunch.has(launch.launchId),
+    'PONS_S0_SELECTED_LAUNCH_FACT_MISSING:' + launch.launchId
   );
-  const launchTimestampMs = Number(launchBlock.timestamp) * 1000;
-  if (launchTimestampMs + HORIZON_MS <= asOfTimestampMs) {
-    matureLaunches.push(launch);
-  }
 }
-
-assert.ok(
-  matureLaunches.length > 0,
-  'PONS_S0_NO_MATURE_LAUNCHES_AT_FROZEN_AS_OF'
-);
-
-const facts = await Promise.all(
-  matureLaunches.map((launch) => buildNormalizedProvenanceFact(launch))
-);
-const factByLaunch = new Map(
-  facts.map((fact) => [fact.launchId, fact])
-);
 
 const featurePackets = [];
 const outcomePackets = [];
@@ -243,8 +308,7 @@ const outcomeStatusCounts = {
   ABSENT_BASELINE_UNVERIFIED: 0
 };
 
-for (let index = 0; index < matureLaunches.length; index += 1) {
-  const launch = matureLaunches[index];
+for (const launch of selectedLaunches) {
   const baseline = await buildPortableBaselineBatch(
     {
       launch: launchAdapter,
@@ -259,11 +323,16 @@ for (let index = 0; index < matureLaunches.length; index += 1) {
   const targetFact = factByLaunch.get(launch.launchId);
   assert.ok(targetFact, 'PONS_S0_TARGET_FACT_MISSING:' + launch.launchId);
 
-  const priorFacts = facts
-    .slice(0, index)
-    .filter((fact) =>
-      fact.creator.toLowerCase() === targetFact.creator.toLowerCase()
-    );
+  const priorFacts = universeFacts.filter((fact) =>
+    fact.creator.toLowerCase() === targetFact.creator.toLowerCase() &&
+    (
+      fact.observedBlock < launch.blockNumber ||
+      (
+        fact.observedBlock === launch.blockNumber &&
+        fact.logIndex < launch.logIndex
+      )
+    )
+  );
 
   const creatorFeature = await projectPortableCreatorOutcomeFeature(
     baseline,
@@ -306,7 +375,7 @@ for (let index = 0; index < matureLaunches.length; index += 1) {
 
 assert.equal(
   featurePackets.length,
-  matureLaunches.length,
+  selectedLaunches.length,
   'PONS_S0_FEATURE_COHORT_CARDINALITY_MISMATCH'
 );
 
@@ -320,7 +389,7 @@ assert.equal(bundle.manifest.featureSchema, PONS_S0_FEATURE_PACKET_V1);
 assert.equal(bundle.manifest.outcomeSchema, PONS_S0_OUTCOME_PACKET_V1);
 assert.equal(
   bundle.manifest.featurePacketCount,
-  matureLaunches.length,
+  selectedLaunches.length,
   'PONS_S0_MANIFEST_FEATURE_COUNT_MISMATCH'
 );
 assert.equal(bundle.manifest.liveMoneyAuthority, false);
@@ -375,8 +444,19 @@ const originCore = {
     headObservedBlock: headBlock.toString(),
     confirmations: confirmations.toString(),
     maturityHorizonMs: HORIZON_MS,
+    maturityCutoffTimestampMs,
+    matureThroughBlock: matureThroughBlock.toString(),
+    matureThroughBlockHash: matureThroughPoint.blockHash.toLowerCase(),
+    matureUniverseLaunchCount: rawLaunchLogs.length,
+    matureLaunchUniverseEvidenceDigest,
+    cohortTargetCount,
+    selectedLaunchCount: selectedLaunches.length,
     cohortSelection:
-      'COMPLETE_REVIEWED_FACTORY_EPOCH_LAUNCH_UNIVERSE_MATURE_AT_24H_AS_OF_FROZEN_BLOCK',
+      rawLaunchLogs.length <= cohortTargetCount
+        ? 'COMPLETE_MATURE_FACTORY_UNIVERSE'
+        : 'SYSTEMATIC_ORDINAL_SAMPLE_OVER_COMPLETE_MATURE_FACTORY_UNIVERSE_V1',
+    cohortSelectionRule:
+      'k=min(N,96); index_i=floor(i*(N-1)/(k-1)); endpoints included',
     targetPerformanceInspectedForSelection: false
   },
   materialization: {
@@ -387,7 +467,7 @@ const originCore = {
       process.env.PONS_S0_HARNESS_REPOSITORY ?? SOURCE_REPOSITORY,
     harnessCommit:
       process.env.PONS_S0_HARNESS_COMMIT ?? null,
-    rpcTransportClass: 'PUBLIC_READ_ONLY_ARCHIVE_RPC',
+    rpcTransportClass: 'NODEFLARE_PUBLIC_ARCHIVE_VIA_LOCAL_CURL_PROXY',
     logScanChunkBlocks: logChunkBlocks.toString(),
     minRpcIntervalMs
   },
@@ -417,8 +497,14 @@ const summary = {
   asOfBlock: asOfBlock.toString(),
   asOfBlockHash,
   asOfTimestampMs,
-  scannedLaunchCount: launches.length,
-  matureLaunchCount: matureLaunches.length,
+  matureUniverseLaunchCount: rawLaunchLogs.length,
+  matureLaunchUniverseEvidenceDigest,
+  cohortTargetCount,
+  selectedLaunchCount: selectedLaunches.length,
+  cohortSelection:
+    rawLaunchLogs.length <= cohortTargetCount
+      ? 'COMPLETE_MATURE_FACTORY_UNIVERSE'
+      : 'SYSTEMATIC_ORDINAL_SAMPLE_OVER_COMPLETE_MATURE_FACTORY_UNIVERSE_V1',
   featurePacketCount: featurePackets.length,
   outcomePacketCount: outcomePackets.length,
   baselineStatusCounts,
@@ -434,6 +520,66 @@ await writeFile(
 );
 
 console.log(JSON.stringify(summary, null, 2));
+
+async function rawLaunchLogToProvenanceFact(log) {
+  assert.ok(log.blockNumber !== null, 'PONS_S0_LOG_BLOCK_MISSING');
+  assert.ok(log.blockHash, 'PONS_S0_LOG_BLOCK_HASH_MISSING');
+  assert.ok(log.transactionHash, 'PONS_S0_LOG_TX_HASH_MISSING');
+  assert.ok(log.logIndex !== null, 'PONS_S0_LOG_INDEX_MISSING');
+  const args = log.args ?? {};
+  assert.equal(
+    typeof args.token,
+    'string',
+    'PONS_S0_LOG_TOKEN_MISSING'
+  );
+  assert.equal(
+    typeof args.deployer,
+    'string',
+    'PONS_S0_LOG_DEPLOYER_MISSING'
+  );
+  const factory = CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase();
+  const txHash = log.transactionHash.toLowerCase();
+  const token = args.token.toLowerCase();
+  const creator = args.deployer.toLowerCase();
+  const [launchId, eventId] = await Promise.all([
+    derivePonsV2LaunchId({
+      chainId: ROBINHOOD_CHAIN_ID,
+      factory,
+      txHash,
+      token
+    }),
+    derivePonsV2EventId({
+      chainId: ROBINHOOD_CHAIN_ID,
+      factory,
+      txHash,
+      logIndex: log.logIndex
+    })
+  ]);
+  return buildNormalizedProvenanceFact({
+    chainId: ROBINHOOD_CHAIN_ID,
+    launchId,
+    creator,
+    blockNumber: log.blockNumber,
+    blockHash: log.blockHash.toLowerCase(),
+    logIndex: log.logIndex,
+    eventId
+  });
+}
+
+function systematicOrdinalSample(items, targetCount) {
+  assert.ok(items.length > 0, 'PONS_S0_SAMPLE_EMPTY_UNIVERSE');
+  const count = Math.min(items.length, targetCount);
+  if (count === items.length) return [...items];
+  if (count === 1) return [items[0]];
+  const selected = [];
+  for (let i = 0; i < count; i += 1) {
+    const index = Math.floor(
+      (i * (items.length - 1)) / (count - 1)
+    );
+    selected.push(items[index]);
+  }
+  return selected;
+}
 
 async function scanLaunchLogs(input) {
   const logs = [];
