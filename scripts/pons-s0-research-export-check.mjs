@@ -12,6 +12,7 @@ import {
   PONS_S0_EXECUTION_PERSONA_PARITY,
   PONS_S0_FEATURE_PACKET_V1,
   PONS_S0_OUTCOME_PACKET_V1,
+  buildPonsS0ExecutionCostEvidence,
   buildPonsS0FeaturePacket,
   buildPonsS0OutcomePacket,
   buildPonsS0ResearchExportBundle
@@ -348,6 +349,24 @@ await assert.rejects(
   /PONS_S0_ENTRY_POINT_IN_TIME_MISMATCH/
 );
 
+const badAuthorityBaseline = baseline();
+badAuthorityBaseline.legs[0].entry.sourceAuthority = {
+  ...badAuthorityBaseline.legs[0].entry.sourceAuthority,
+  payload: {
+    ...badAuthorityBaseline.legs[0].entry.sourceAuthority.payload,
+    launchId: 'other-launch'
+  }
+};
+await assert.rejects(
+  () => buildPonsS0FeaturePacket({
+    launch,
+    baseline: badAuthorityBaseline,
+    creatorFeature,
+    provenanceEdges
+  }),
+  /PONS_S0_QUOTE_AUTHORITY_BINDING_MISMATCH/
+);
+
 await assert.rejects(
   () => buildPonsS0FeaturePacket({
     launch,
@@ -405,20 +424,28 @@ function outcome(horizonMs, overrides = {}) {
   };
 }
 
+const oneMinuteCost = await buildPonsS0ExecutionCostEvidence({
+  launchId: launch.launchId,
+  baselineId: baseline().baselineId,
+  horizonMs: 60_000,
+  componentsUsdMicros: {
+    entryTransaction: 20_000n,
+    approvalTransactions: 10_000n,
+    exitTransaction: 20_000n,
+    recoveryTransactions: 0n,
+    otherExecution: 0n
+  }
+});
 const oneMinute = await buildPonsS0OutcomePacket({
   launch,
   baseline: baseline(),
   outcome: outcome(60_000),
-  executionCost: {
-    totalUsdMicros: 50_000n,
-    evidenceDigest: 'full-policy-path-cost-1',
-    semantics: 'FULL_POLICY_PATH_COST_USD_MICROS'
-  }
+  executionCost: oneMinuteCost
 });
 assert.equal(oneMinute.schemaVersion, PONS_S0_OUTCOME_PACKET_V1);
 assert.equal(oneMinute.costProjection.status, 'COMPLETE');
 assert.equal(oneMinute.costProjection.executionCostUsdMicros, 50_000n);
-assert.equal(oneMinute.costProjection.executionCostEvidenceDigest, 'full-policy-path-cost-1');
+assert.equal(oneMinute.costProjection.executionCostEvidenceDigest, oneMinuteCost.evidenceDigest);
 assert.equal(oneMinute.costProjection.netExecutableValueUsdMicros, 1_150_000n);
 assert.equal(oneMinute.costProjection.netExecutableReturnBps, 11_500n);
 assert.equal(oneMinute.boundaries.forbiddenAsFeatureInput, true);
@@ -439,6 +466,26 @@ await assert.rejects(
     outcome: outcome(60_000, { baselineId: 'wrong-baseline' })
   }),
   /PONS_S0_OUTCOME_BINDING_MISMATCH/
+);
+
+await assert.rejects(
+  () => buildPonsS0OutcomePacket({
+    launch,
+    baseline: baseline(),
+    outcome: outcome(60_000),
+    executionCost: { ...oneMinuteCost, launchId: 'wrong-launch' }
+  }),
+  /PONS_S0_EXECUTION_COST_BINDING_MISMATCH/
+);
+
+await assert.rejects(
+  () => buildPonsS0OutcomePacket({
+    launch,
+    baseline: baseline(),
+    outcome: outcome(60_000),
+    executionCost: { ...oneMinuteCost, totalUsdMicros: oneMinuteCost.totalUsdMicros + 1n }
+  }),
+  /PONS_S0_EXECUTION_COST_EVIDENCE_MISMATCH/
 );
 
 const bundle = await buildPonsS0ResearchExportBundle({
@@ -473,6 +520,23 @@ await assert.rejects(
     outcomePackets: []
   }),
   /PONS_S0_DUPLICATE_FEATURE_PACKET/
+);
+
+await assert.rejects(
+  () => buildPonsS0ResearchExportBundle({
+    featurePackets: [],
+    outcomePackets: [oneMinute]
+  }),
+  /PONS_S0_EMPTY_FEATURE_EXPORT/
+);
+
+const orphanOutcome = { ...oneMinute, launchId: 'other-launch' };
+await assert.rejects(
+  () => buildPonsS0ResearchExportBundle({
+    featurePackets: [feature],
+    outcomePackets: [orphanOutcome]
+  }),
+  /PONS_S0_OUTCOME_WITHOUT_FEATURE_PACKET/
 );
 
 await assert.rejects(
