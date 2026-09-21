@@ -1,0 +1,282 @@
+name: pons-s0-real-cohort-evidence-v1
+
+on:
+  push:
+    branches:
+      - agent/pons-s0-real-cohort-evidence-v1
+
+permissions:
+  contents: read
+
+jobs:
+  real-cohort:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PONS_S0_UPSTREAM_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+      PONS_S0_ACQUIRE_RPC_URL: 'http://127.0.0.1:18555'
+      PONS_S0_REPLAY_RPC_URL: 'http://127.0.0.1:18556'
+      PONS_S0_CACHE: 'artifacts/pons-s0-real/rpc-cache.json'
+      SENTRY_PR_A_HEAD: '493c85b8d84565cedf6e936063549edfa02edf3a'
+      QNTYLAB_PR_B_HEAD: '86b7cc0f65ceaf66327bb22e834dfd2045901097'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+
+      - name: Freeze acquisition capture clock
+        shell: bash
+        run: |
+          set -euo pipefail
+          CAPTURE_MS="$(date +%s%3N)"
+          test "${#CAPTURE_MS}" -ge 13
+          echo "PONS_S0_CAPTURE_MS=$CAPTURE_MS" >> "$GITHUB_ENV"
+          mkdir -p artifacts/pons-s0-real
+          printf '%s\n' "$CAPTURE_MS" > artifacts/pons-s0-real/capture-ms.txt
+
+      - name: Acquire exact historical RPC request set
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/pons-s0-rpc-record-replay.py \
+            --mode acquire \
+            --cache "$PONS_S0_CACHE" \
+            --port 18555 \
+            --upstream "$PONS_S0_UPSTREAM_RPC_URL" \
+            --min-interval-ms 650 \
+            > artifacts/pons-s0-real/acquire-proxy.log 2>&1 &
+          proxy_pid=$!
+          trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 30); do
+            curl --silent --fail http://127.0.0.1:18555/health >/dev/null && break
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:18555/health \
+            > artifacts/pons-s0-real/acquire-health.json
+
+          PONS_S0_RPC_URL="$PONS_S0_ACQUIRE_RPC_URL" \
+          PONS_S0_OUTPUT_DIR="artifacts/pons-s0-real/acquisition-driver" \
+          node scripts/pons-s0-real-cohort.mjs \
+            | tee artifacts/pons-s0-real/acquisition-driver-summary.json
+
+          kill "$proxy_pid"
+          wait "$proxy_pid" 2>/dev/null || true
+          trap - EXIT
+
+          jq -e '.schema == "PONS_S0_RPC_RECORD_REPLAY_V1" and (.entries | length) > 0' \
+            "$PONS_S0_CACHE" >/dev/null
+          sha256sum "$PONS_S0_CACHE" > artifacts/pons-s0-real/rpc-cache.sha256
+
+      - name: Replay twice and require byte-identical SENTRY export
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="$(sha256sum "$PONS_S0_CACHE" | awk '{print $1}')"
+
+          python3 scripts/pons-s0-rpc-record-replay.py \
+            --mode replay \
+            --cache "$PONS_S0_CACHE" \
+            --port 18556 \
+            > artifacts/pons-s0-real/replay-proxy.log 2>&1 &
+          replay_pid=$!
+          trap 'kill "$replay_pid" 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 30); do
+            curl --silent --fail http://127.0.0.1:18556/health >/dev/null && break
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:18556/health \
+            > artifacts/pons-s0-real/replay-health.json
+
+          for pass in 1 2; do
+            PONS_S0_RPC_URL="$PONS_S0_REPLAY_RPC_URL" \
+            PONS_S0_OUTPUT_DIR="artifacts/pons-s0-real/replay-$pass" \
+            node scripts/pons-s0-real-cohort.mjs \
+              > "artifacts/pons-s0-real/replay-$pass-summary.json"
+          done
+
+          diff -ru \
+            artifacts/pons-s0-real/replay-1 \
+            artifacts/pons-s0-real/replay-2
+
+          after="$(sha256sum "$PONS_S0_CACHE" | awk '{print $1}')"
+          test "$before" = "$after"
+
+          kill "$replay_pid"
+          wait "$replay_pid" 2>/dev/null || true
+          trap - EXIT
+
+          jq -e '
+            .schema == "PONS_S0_REAL_COHORT_V1" and
+            .mode == "SHADOW_ONLY" and
+            .edge == "UNPROVEN" and
+            .cohortRule.targetLaunchCount == 80 and
+            .cohortRule.outcomeBlindSelection == true and
+            .researchSemantics.creatorAwareStrategyClaimAllowed == false and
+            .researchSemantics.netProfitabilityClaimAllowed == false and
+            .boundaries.liveMoney == false and
+            .boundaries.promotionAuthority == "NONE"
+          ' artifacts/pons-s0-real/replay-1/cohort_receipt.json >/dev/null
+
+      - name: Write exact SENTRY origin receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          root = Path("artifacts/pons-s0-real")
+          replay = root / "replay-1"
+          cache = root / "rpc-cache.json"
+          manifest = json.loads((replay / "manifest.json").read_text())
+          cohort = json.loads((replay / "cohort_receipt.json").read_text())
+
+          def sha(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          receipt = {
+              "schema": "PONS_S0_REAL_COHORT_ORIGIN_V1",
+              "sentryEvidenceBranchHead": subprocess.check_output(
+                  ["git", "rev-parse", "HEAD"], text=True
+              ).strip(),
+              "sentryExportContractHead": os.environ["SENTRY_PR_A_HEAD"],
+              "qntylabScreenHead": os.environ["QNTYLAB_PR_B_HEAD"],
+              "captureMs": int(os.environ["PONS_S0_CAPTURE_MS"]),
+              "providerClass": "NODEFLARE_PUBLIC_ARCHIVE",
+              "upstreamCredentialRequired": False,
+              "acquisitionBoundary": "WORKFLOW_ONLY_RECORD_THEN_REPLAY",
+              "rpcCacheSha256": sha(cache),
+              "manifestId": manifest["manifestId"],
+              "manifestEvidenceDigest": manifest["evidenceDigest"],
+              "cohortEvidenceDigest": cohort["evidenceDigest"],
+              "authoritativeFiles": {
+                  name: sha(replay / name)
+                  for name in (
+                      "features.jsonl",
+                      "outcomes.jsonl",
+                      "manifest.json",
+                      "cohort_receipt.json",
+                      "file_digests.json",
+                  )
+              },
+              "replayByteIdentical": True,
+              "mode": "SHADOW_ONLY",
+              "liveMoneyAuthority": False,
+              "promotionAuthority": "NONE",
+              "edge": "UNPROVEN",
+          }
+          canonical = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+          receipt["evidenceDigest"] = hashlib.sha256(canonical).hexdigest()
+          (root / "origin_receipt.json").write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+
+      - name: Checkout exact QntyLab PR-B screen
+        uses: actions/checkout@v4
+        with:
+          repository: CipherCuttle/QntyLab
+          ref: ${{ env.QNTYLAB_PR_B_HEAD }}
+          path: qntylab-screen
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install frozen QntyLab S0 dependencies
+        working-directory: qntylab-screen
+        run: |
+          python -m pip install --disable-pip-version-check \
+            -r requirements-pons-s0-v1.txt
+
+      - name: Run QntyLab PR-B on authoritative replay bytes
+        working-directory: qntylab-screen
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/artifacts/pons-s0-real"
+          PYTHONPATH=. python -m qntylab.pons_s0_screen \
+            --manifest "$ROOT/replay-1/manifest.json" \
+            --features "$ROOT/replay-1/features.jsonl" \
+            --outcomes "$ROOT/replay-1/outcomes.jsonl" \
+            --config experiments/specs/pons_s0_model_screen_v1.json \
+            --output "$ROOT/qntylab-screen" \
+            --research-root "$ROOT/qntylab-research-ledger" \
+            | tee "$ROOT/qntylab-screen-summary.json"
+
+          PYTHONPATH=. python -m qntylab.research_ledger \
+            --root "$ROOT/qntylab-research-ledger" doctor
+
+          jq -e '
+            .screen_id == "PONS_S0_MODEL_SCREEN_V1" and
+            .verdict == "EXPLORATORY_SCREEN_COMPLETE_NO_PROMOTION" and
+            .registered_variant_denominator == 4 and
+            .candidate_artifact == null and
+            .automatic_winner_selection == false and
+            .promotion_authority == "NONE" and
+            .live_money_authority == false and
+            .edge == "UNPROVEN"
+          ' "$ROOT/qntylab-screen/screen_receipt.json" >/dev/null
+
+      - name: Bind final cross-repo evidence receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("artifacts/pons-s0-real")
+          origin = json.loads((root / "origin_receipt.json").read_text())
+          screen_path = root / "qntylab-screen" / "screen_receipt.json"
+          screen = json.loads(screen_path.read_text())
+
+          receipt = {
+              "schema": "PONS_S0_REAL_SCREEN_EVIDENCE_V1",
+              "originEvidenceDigest": origin["evidenceDigest"],
+              "sentryEvidenceBranchHead": origin["sentryEvidenceBranchHead"],
+              "sentryExportContractHead": origin["sentryExportContractHead"],
+              "qntylabScreenHead": origin["qntylabScreenHead"],
+              "manifestId": origin["manifestId"],
+              "screenReceiptSha256": hashlib.sha256(screen_path.read_bytes()).hexdigest(),
+              "screenVerdict": screen["verdict"],
+              "registeredVariantDenominator": screen["registered_variant_denominator"],
+              "candidateArtifact": screen["candidate_artifact"],
+              "automaticWinnerSelection": screen["automatic_winner_selection"],
+              "creatorAwareStrategyClaimAllowed": False,
+              "netProfitabilityClaimAllowed": False,
+              "promotionAuthority": "NONE",
+              "liveMoneyAuthority": False,
+              "edge": "UNPROVEN",
+          }
+          canonical = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+          receipt["evidenceDigest"] = hashlib.sha256(canonical).hexdigest()
+          (root / "final_evidence_receipt.json").write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+
+      - name: Upload immutable run artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-s0-real-cohort-evidence-v1
+          path: artifacts/pons-s0-real/
+          if-no-files-found: error
+          retention-days: 30
