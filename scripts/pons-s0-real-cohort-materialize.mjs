@@ -32,7 +32,6 @@ import {
   derivePonsV2EventId,
   derivePonsV2LaunchId,
   findPortableFirstBlockAtOrAfterTimestamp,
-  ponsV2TokenLaunchedEvent,
   projectPortableCreatorOutcomeFeature,
   projectPortableOutcomeReceipt,
   sha256Hex
@@ -50,6 +49,11 @@ const DEFAULT_COHORT_TARGET_COUNT = 96;
 
 const rpcUrl = process.env.PONS_S0_RPC_URL;
 assert.ok(rpcUrl, 'PONS_S0_RPC_URL is required');
+const launchLogsPath = process.env.PONS_S0_LAUNCH_LOGS_PATH;
+assert.ok(
+  launchLogsPath,
+  'PONS_S0_LAUNCH_LOGS_PATH is required'
+);
 
 const sourceCommit =
   process.env.PONS_S0_SOURCE_COMMIT ?? EXPECTED_SOURCE_COMMIT;
@@ -196,15 +200,19 @@ assert.ok(
   'PONS_S0_FIRST_IMMATURE_TIMESTAMP_NOT_AFTER_CUTOFF'
 );
 
-const rawLaunchLogs = await scanLaunchLogs({
-  client,
-  fromBlock: CURRENT_PONS_V2_AUTHORITY.fromBlock,
-  toBlock: matureThroughBlock,
-  chunkBlocks: logChunkBlocks
+const launchIndex = await loadIndexedLaunchLogs({
+  path: launchLogsPath,
+  authorityFromBlock: CURRENT_PONS_V2_AUTHORITY.fromBlock,
+  matureThroughBlock
 });
+const rawLaunchLogs = launchIndex.logs;
 assert.ok(
   rawLaunchLogs.length > 0,
   'PONS_S0_NO_MATURE_LAUNCHES_AT_FROZEN_AS_OF'
+);
+assert.ok(
+  launchIndex.blockscoutIndexedHeadBlock >= matureThroughBlock,
+  'PONS_S0_BLOCKSCOUT_INDEX_BEHIND_MATURITY_BOUNDARY'
 );
 
 const rawLogKeys = new Set(
@@ -216,18 +224,6 @@ assert.equal(
   'PONS_S0_DUPLICATE_RAW_LAUNCH_LOG'
 );
 
-const universeFacts = await Promise.all(
-  rawLaunchLogs.map((log) => rawLaunchLogToProvenanceFact(log))
-);
-const factByLaunch = new Map(
-  universeFacts.map((fact) => [fact.launchId, fact])
-);
-assert.equal(
-  factByLaunch.size,
-  rawLaunchLogs.length,
-  'PONS_S0_DUPLICATE_MATURE_UNIVERSE_LAUNCH_ID'
-);
-
 const matureLaunchUniverseEvidenceDigest = await sha256Hex({
   kind: 'PONS_S0_MATURE_LAUNCH_UNIVERSE_V1',
   authorityId: CURRENT_PONS_V2_AUTHORITY.authorityId,
@@ -236,9 +232,13 @@ const matureLaunchUniverseEvidenceDigest = await sha256Hex({
   matureThroughBlockHash: matureThroughPoint.blockHash,
   maturityCutoffTimestampMs,
   launchCount: rawLaunchLogs.length,
-  facts: universeFacts.map((fact) => ({
-    factId: fact.factId,
-    evidenceDigest: fact.evidenceDigest
+  launchIndexSha256: launchIndex.sha256,
+  logs: rawLaunchLogs.map((log) => ({
+    blockNumber: log.blockNumber,
+    transactionHash: log.transactionHash.toLowerCase(),
+    logIndex: log.logIndex,
+    token: log.args.token.toLowerCase(),
+    deployer: log.args.deployer.toLowerCase()
   }))
 });
 
@@ -253,6 +253,28 @@ assert.equal(
   selectedRawKeys.size,
   selectedRawLogs.length,
   'PONS_S0_SYSTEMATIC_SAMPLE_DUPLICATE'
+);
+
+const selectedCreators = new Set(
+  selectedRawLogs.map((log) => log.args.deployer.toLowerCase())
+);
+const relevantRawLogs = rawLaunchLogs.filter((log) =>
+  selectedRawKeys.has(launchLogKey(log)) ||
+  selectedCreators.has(log.args.deployer.toLowerCase())
+);
+const blockHashCache = new Map();
+const universeFacts = await Promise.all(
+  relevantRawLogs.map((log) =>
+    rawLaunchLogToProvenanceFact(log, client, blockHashCache)
+  )
+);
+const factByLaunch = new Map(
+  universeFacts.map((fact) => [fact.launchId, fact])
+);
+assert.equal(
+  factByLaunch.size,
+  universeFacts.length,
+  'PONS_S0_DUPLICATE_RELEVANT_LAUNCH_ID'
 );
 
 const selectedLaunchBlocks = [
@@ -467,7 +489,14 @@ const originCore = {
       process.env.PONS_S0_HARNESS_REPOSITORY ?? SOURCE_REPOSITORY,
     harnessCommit:
       process.env.PONS_S0_HARNESS_COMMIT ?? null,
-    rpcTransportClass: 'NODEFLARE_PUBLIC_ARCHIVE_VIA_LOCAL_CURL_PROXY',
+    rpcTransportClass:
+      'BLOCKSCOUT_INDEXED_LOGS_PLUS_NODEFLARE_ARCHIVE_STATE_VIA_LOCAL_PROXY',
+    launchDiscovery: 'ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1',
+    launchIndexSha256: launchIndex.sha256,
+    blockscoutIndexedHeadBlock:
+      launchIndex.blockscoutIndexedHeadBlock.toString(),
+    blockscoutAcquisitionThroughBlock:
+      launchIndex.scannedThroughBlock.toString(),
     logScanChunkBlocks: logChunkBlocks.toString(),
     minRpcIntervalMs
   },
@@ -499,6 +528,9 @@ const summary = {
   asOfTimestampMs,
   matureUniverseLaunchCount: rawLaunchLogs.length,
   matureLaunchUniverseEvidenceDigest,
+  launchIndexSha256: launchIndex.sha256,
+  blockscoutIndexedHeadBlock:
+    launchIndex.blockscoutIndexedHeadBlock.toString(),
   cohortTargetCount,
   selectedLaunchCount: selectedLaunches.length,
   cohortSelection:
@@ -521,9 +553,12 @@ await writeFile(
 
 console.log(JSON.stringify(summary, null, 2));
 
-async function rawLaunchLogToProvenanceFact(log) {
+async function rawLaunchLogToProvenanceFact(
+  log,
+  client,
+  blockHashCache
+) {
   assert.ok(log.blockNumber !== null, 'PONS_S0_LOG_BLOCK_MISSING');
-  assert.ok(log.blockHash, 'PONS_S0_LOG_BLOCK_HASH_MISSING');
   assert.ok(log.transactionHash, 'PONS_S0_LOG_TX_HASH_MISSING');
   assert.ok(log.logIndex !== null, 'PONS_S0_LOG_INDEX_MISSING');
   const args = log.args ?? {};
@@ -537,6 +572,21 @@ async function rawLaunchLogToProvenanceFact(log) {
     'string',
     'PONS_S0_LOG_DEPLOYER_MISSING'
   );
+
+  const blockKey = log.blockNumber.toString();
+  let blockHash = blockHashCache.get(blockKey);
+  if (!blockHash) {
+    const block = await client.getBlock({
+      blockNumber: log.blockNumber
+    });
+    assert.ok(
+      block.hash,
+      'PONS_S0_RELEVANT_LOG_BLOCK_HASH_MISSING:' + blockKey
+    );
+    blockHash = block.hash.toLowerCase();
+    blockHashCache.set(blockKey, blockHash);
+  }
+
   const factory = CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase();
   const txHash = log.transactionHash.toLowerCase();
   const token = args.token.toLowerCase();
@@ -560,10 +610,105 @@ async function rawLaunchLogToProvenanceFact(log) {
     launchId,
     creator,
     blockNumber: log.blockNumber,
-    blockHash: log.blockHash.toLowerCase(),
+    blockHash,
     logIndex: log.logIndex,
     eventId
   });
+}
+
+async function loadIndexedLaunchLogs(input) {
+  const raw = await readFile(input.path);
+  const sha256 = sha256Bytes(raw);
+  let parsed;
+  try {
+    parsed = JSON.parse(raw.toString('utf8'));
+  } catch (error) {
+    throw new Error(
+      'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_MALFORMED:' +
+      (error instanceof Error ? error.message : String(error))
+    );
+  }
+  assert.equal(
+    parsed.schema,
+    'ROBINHOOD_BLOCKSCOUT_PONS_S0_LAUNCH_INDEX_V1',
+    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_SCHEMA_MISMATCH'
+  );
+  assert.equal(
+    String(parsed.factory).toLowerCase(),
+    CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase(),
+    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_FACTORY_MISMATCH'
+  );
+  assert.equal(
+    BigInt(parsed.scannedFromBlock),
+    input.authorityFromBlock,
+    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_START_MISMATCH'
+  );
+  const scannedThroughBlock = BigInt(parsed.scannedThroughBlock);
+  const blockscoutIndexedHeadBlock = BigInt(
+    parsed.blockscoutIndexedHeadBlock
+  );
+  assert.ok(
+    scannedThroughBlock >= input.matureThroughBlock,
+    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_RANGE_TOO_SHORT'
+  );
+  assert.ok(
+    blockscoutIndexedHeadBlock >= input.matureThroughBlock,
+    'PONS_S0_BLOCKSCOUT_INDEX_BEHIND_MATURITY_BOUNDARY'
+  );
+  assert.ok(
+    Array.isArray(parsed.logs),
+    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_LOGS_MISSING'
+  );
+
+  const logs = parsed.logs
+    .map((item) => {
+      assert.ok(
+        item && typeof item === 'object' && !Array.isArray(item),
+        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_LOG_INVALID'
+      );
+      const blockNumber = BigInt(item.blockNumber);
+      const logIndex = Number(item.logIndex);
+      assert.ok(
+        Number.isSafeInteger(logIndex) && logIndex >= 0,
+        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_LOG_INDEX_INVALID'
+      );
+      assert.match(
+        String(item.transactionHash),
+        /^0x[0-9a-fA-F]{64}$/,
+        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_TX_INVALID'
+      );
+      assert.match(
+        String(item.token),
+        /^0x[0-9a-fA-F]{40}$/,
+        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_TOKEN_INVALID'
+      );
+      assert.match(
+        String(item.deployer),
+        /^0x[0-9a-fA-F]{40}$/,
+        'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_DEPLOYER_INVALID'
+      );
+      return {
+        blockNumber,
+        transactionHash: String(item.transactionHash).toLowerCase(),
+        logIndex,
+        args: {
+          token: String(item.token).toLowerCase(),
+          deployer: String(item.deployer).toLowerCase()
+        }
+      };
+    })
+    .filter((log) =>
+      log.blockNumber >= input.authorityFromBlock &&
+      log.blockNumber <= input.matureThroughBlock
+    )
+    .sort(compareLogs);
+
+  return {
+    sha256,
+    scannedThroughBlock,
+    blockscoutIndexedHeadBlock,
+    logs
+  };
 }
 
 function systematicOrdinalSample(items, targetCount) {
@@ -579,43 +724,6 @@ function systematicOrdinalSample(items, targetCount) {
     selected.push(items[index]);
   }
   return selected;
-}
-
-async function scanLaunchLogs(input) {
-  const logs = [];
-  let fromBlock = input.fromBlock;
-  while (fromBlock <= input.toBlock) {
-    const toBlock = minBigInt(
-      input.toBlock,
-      fromBlock + input.chunkBlocks - 1n
-    );
-    const rangeLogs = await getLogsAdaptive(
-      input.client,
-      fromBlock,
-      toBlock
-    );
-    logs.push(...rangeLogs);
-    fromBlock = toBlock + 1n;
-  }
-  return logs.sort(compareLogs);
-}
-
-async function getLogsAdaptive(client, fromBlock, toBlock) {
-  try {
-    return await client.getLogs({
-      address: CURRENT_PONS_V2_AUTHORITY.factory,
-      event: ponsV2TokenLaunchedEvent,
-      fromBlock,
-      toBlock,
-      strict: true
-    });
-  } catch (error) {
-    if (fromBlock === toBlock) throw error;
-    const midpoint = fromBlock + ((toBlock - fromBlock) / 2n);
-    const left = await getLogsAdaptive(client, fromBlock, midpoint);
-    const right = await getLogsAdaptive(client, midpoint + 1n, toBlock);
-    return [...left, ...right];
-  }
 }
 
 function launchLogKey(log) {
