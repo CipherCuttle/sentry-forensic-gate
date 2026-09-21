@@ -1,0 +1,57 @@
+name: Pons S0 Official RPC Archive Probe
+
+on:
+  push:
+    branches:
+      - agent/pons-s0-real-cohort-materialization-v1
+    paths:
+      - .github/workflows/pons-s0-official-rpc-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe historical Pons log support
+        shell: bash
+        env:
+          RPC: https://rpc.mainnet.chain.robinhood.com
+          FACTORY: '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e'
+          TOPIC0: '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607'
+        run: |
+          set -euo pipefail
+          call() {
+            curl --fail --silent --show-error --location               --connect-timeout 10 --max-time 60               --retry 3 --retry-delay 2 --retry-all-errors               --user-agent 'sentry-forensic-gate-pons-s0-official-probe/1'               --header 'content-type: application/json'               --data-binary "$1" "$RPC"
+          }
+
+          chain="$(call '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}')"
+          echo "$chain" | jq -e '.result == "0x1237"' >/dev/null
+
+          old_code="$(call '{"jsonrpc":"2.0","id":2,"method":"eth_getCode","params":["0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e","0x199a4f6"]}')"
+          echo "$old_code" | jq -c .
+          jq -e '.result | type == "string" and startswith("0x")' <<<"$old_code" >/dev/null
+
+          logs="$(jq -cn             --arg address "$FACTORY"             --arg topic0 "$TOPIC0"             '{
+              jsonrpc:"2.0", id:3, method:"eth_getLogs",
+              params:[{
+                fromBlock:"0x199a4f6",
+                toBlock:"0x1a8e736",
+                address:$address,
+                topics:[$topic0]
+              }]
+            }' | xargs -0 echo 2>/dev/null || true)"
+          payload="$(jq -cn             --arg address "$FACTORY"             --arg topic0 "$TOPIC0"             '{
+              jsonrpc:"2.0", id:3, method:"eth_getLogs",
+              params:[{
+                fromBlock:"0x199a4f6",
+                toBlock:"0x1a8e736",
+                address:$address,
+                topics:[$topic0]
+              }]
+            }')"
+          result="$(call "$payload")"
+          echo "$result" | jq -c '{error, count:(.result|if type=="array" then length else null end)}'
+          jq -e 'has("result") and (.result|type=="array")' <<<"$result" >/dev/null
