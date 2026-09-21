@@ -93,6 +93,7 @@ export function evaluateFastVetR1CapacityGate(
     return result('NO_DECISION', ['BASELINE_MISSING'], [], {
       baselineStatus: 'MISSING',
       capacityUsdMicros: null,
+      capacitySemantics: FAST_VET_R1_CAPACITY_SEMANTICS,
       executablePrefixUsdMicros: [],
       creatorCoverage: input.creatorFeature?.coverage ?? 'MISSING',
       creatorPriorLaunchCount: input.creatorFeature?.priorLaunchCount ?? null,
