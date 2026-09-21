@@ -211,8 +211,8 @@ assert.ok(
   'PONS_S0_NO_MATURE_LAUNCHES_AT_FROZEN_AS_OF'
 );
 assert.ok(
-  launchIndex.blockscoutIndexedHeadBlock >= matureThroughBlock,
-  'PONS_S0_BLOCKSCOUT_INDEX_BEHIND_MATURITY_BOUNDARY'
+  launchIndex.observedHeadBlock >= matureThroughBlock,
+  'PONS_S0_LAUNCH_INDEX_BEHIND_MATURITY_BOUNDARY'
 );
 
 const rawLogKeys = new Set(
@@ -490,7 +490,7 @@ const originCore = {
     harnessCommit:
       process.env.PONS_S0_HARNESS_COMMIT ?? null,
     rpcTransportClass:
-      'BLOCKSCOUT_INDEXED_LOGS_PLUS_NODEFLARE_ARCHIVE_STATE_VIA_LOCAL_PROXY',
+      'ROBINHOOD_OFFICIAL_PUBLIC_RPC_LOGS_PLUS_NODEFLARE_ARCHIVE_STATE_VIA_LOCAL_PROXY',
     launchDiscovery: 'ROBINHOOD_RPC_PONS_S0_LAUNCH_INDEX_V1',
     launchDiscoveryTransport:
       'ROBINHOOD_OFFICIAL_PUBLIC_RPC_TOPIC_FILTERED_LOGS',
@@ -626,7 +626,7 @@ async function loadIndexedLaunchLogs(input) {
     parsed = JSON.parse(raw.toString('utf8'));
   } catch (error) {
     throw new Error(
-      'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_MALFORMED:' +
+      'PONS_S0_LAUNCH_INDEX_MALFORMED:' +
       (error instanceof Error ? error.message : String(error))
     );
   }
@@ -651,7 +651,7 @@ async function loadIndexedLaunchLogs(input) {
   );
   assert.ok(
     scannedThroughBlock >= input.matureThroughBlock,
-    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_RANGE_TOO_SHORT'
+    'PONS_S0_LAUNCH_INDEX_RANGE_TOO_SHORT'
   );
   assert.ok(
     observedHeadBlock >= input.matureThroughBlock,
@@ -659,7 +659,7 @@ async function loadIndexedLaunchLogs(input) {
   );
   assert.ok(
     Array.isArray(parsed.logs),
-    'PONS_S0_BLOCKSCOUT_LAUNCH_INDEX_LOGS_MISSING'
+    'PONS_S0_LAUNCH_INDEX_LOGS_MISSING'
   );
 
   const logs = parsed.logs
