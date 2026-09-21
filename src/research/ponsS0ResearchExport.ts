@@ -1022,7 +1022,7 @@ function record(
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(errorCode);
   }
-  return value;
+  return value as Readonly<Record<string, CanonicalJsonValue>>;
 }
 
 function stringField(
