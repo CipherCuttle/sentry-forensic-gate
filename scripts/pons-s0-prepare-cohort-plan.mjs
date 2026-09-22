@@ -4,6 +4,7 @@ import { createPublicClient, defineChain, http } from 'viem';
 import {
   CREATOR_OUTCOME_HORIZON_MS,
   CURRENT_PONS_V2_AUTHORITY,
+  CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
   ROBINHOOD_CHAIN_ID,
   ROBINHOOD_EXPLORER_URL,
   ViemPonsV2ForwardOutcomeAdapter,
