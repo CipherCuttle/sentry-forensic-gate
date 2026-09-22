@@ -122,12 +122,22 @@ const client = pacedClient(rawClient, minRpcIntervalMs);
 const chainId = await client.getChainId();
 assert.equal(chainId, ROBINHOOD_CHAIN_ID, 'PONS_S0_CHAIN_ID_MISMATCH');
 
-const headBlock = await client.getBlockNumber();
+const runtimeHeadBlock = await client.getBlockNumber();
 assert.ok(
-  headBlock > CURRENT_PONS_V2_AUTHORITY.fromBlock + confirmations,
+  runtimeHeadBlock > CURRENT_PONS_V2_AUTHORITY.fromBlock + confirmations,
   'PONS_S0_HEAD_BEFORE_REVIEWED_EPOCH'
 );
-const asOfBlock = headBlock - confirmations;
+const frozenAsOfBlockRaw = process.env.PONS_S0_FROZEN_AS_OF_BLOCK;
+const asOfBlock = frozenAsOfBlockRaw
+  ? BigInt(frozenAsOfBlockRaw)
+  : runtimeHeadBlock - confirmations;
+const headBlock = frozenAsOfBlockRaw
+  ? asOfBlock + confirmations
+  : runtimeHeadBlock;
+assert.ok(
+  runtimeHeadBlock >= headBlock,
+  'PONS_S0_RUNTIME_HEAD_BEFORE_FROZEN_AS_OF_CONFIRMATION_HEAD'
+);
 const asOfRaw = await client.getBlock({ blockNumber: asOfBlock });
 assert.ok(asOfRaw.hash, 'PONS_S0_AS_OF_BLOCK_HASH_MISSING');
 const asOfBlockHash = asOfRaw.hash.toLowerCase();
@@ -206,6 +216,20 @@ const launchIndex = await loadIndexedLaunchLogs({
   authorityFromBlock: CURRENT_PONS_V2_AUTHORITY.fromBlock,
   matureThroughBlock
 });
+const expectedLaunchIndexSha256 =
+  process.env.PONS_S0_FROZEN_LAUNCH_INDEX_SHA256 ?? null;
+if (expectedLaunchIndexSha256 !== null) {
+  assert.equal(
+    launchIndex.sha256,
+    expectedLaunchIndexSha256,
+    'PONS_S0_FROZEN_LAUNCH_INDEX_SHA256_MISMATCH'
+  );
+  assert.equal(
+    launchIndex.observedHeadBlock,
+    headBlock,
+    'PONS_S0_FROZEN_LAUNCH_INDEX_HEAD_MISMATCH'
+  );
+}
 const rawLaunchLogs = launchIndex.logs;
 assert.ok(
   rawLaunchLogs.length > 0,
@@ -537,6 +561,12 @@ const originCore = {
     launchDiscoveryTransport:
       'ROBINHOOD_OFFICIAL_PUBLIC_RPC_TOPIC_FILTERED_LOGS',
     launchIndexSha256: launchIndex.sha256,
+    frozenDiscoveryRunId:
+      process.env.PONS_S0_FROZEN_DISCOVERY_RUN_ID ?? null,
+    frozenDiscoveryArtifactId:
+      process.env.PONS_S0_FROZEN_DISCOVERY_ARTIFACT_ID ?? null,
+    frozenAsOfBlock: frozenAsOfBlockRaw ? asOfBlock.toString() : null,
+    runtimeHeadObservedBlock: runtimeHeadBlock.toString(),
     launchDiscoveryHeadBlock:
       launchIndex.observedHeadBlock.toString(),
     launchDiscoveryThroughBlock:
