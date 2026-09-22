@@ -6,37 +6,44 @@ on:
       - agent/pons-s0-real-cohort-materialization-v1
     paths:
       - scripts/pons-s0-real-cohort-materialize.mjs
+      - scripts/pons-s0-cohort-lib.mjs
+      - scripts/pons-s0-prepare-cohort-plan.mjs
+      - scripts/pons-s0-materialize-shard.mjs
+      - scripts/pons-s0-assemble-cohort.mjs
+      - scripts/pons-s0-rpc-proxy.py
       - .github/workflows/pons-s0-real-cohort-materialization-v1.yml
   workflow_dispatch:
 
 permissions:
   contents: write
-  actions: read
 
 concurrency:
   group: pons-s0-real-cohort-materialization-v1
   cancel-in-progress: true
 
+env:
+  PONS_S0_SOURCE_COMMIT: '493c85b8d84565cedf6e936063549edfa02edf3a'
+  PONS_S0_UPSTREAM_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+  PONS_S0_RPC_URL: 'http://127.0.0.1:18547'
+  PONS_S0_RPC_MIN_INTERVAL_MS: '250'
+  PONS_S0_CONFIRMATIONS: '12'
+  PONS_S0_LOG_CHUNK_BLOCKS: '400000'
+  PONS_S0_COHORT_TARGET_COUNT: '96'
+  PONS_S0_DISCOVERY_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
+  PONS_S0_FACTORY: '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e'
+  PONS_S0_EVENT_TOPIC: '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607'
+  PONS_S0_AUTHORITY_FROM_BLOCK: '26841846'
+  PONS_S0_FROZEN_AS_OF_BLOCK: '69066751'
+  PONS_S0_FROZEN_DISCOVERY_RUN_ID: '35648177392'
+  PONS_S0_FROZEN_DISCOVERY_ARTIFACT_ID: '10669670502'
+  PONS_S0_FROZEN_LAUNCH_INDEX_SHA256: '00af1e630831ccdd3658559627964ca4d1c5b64b488f1aca5a429b28323eb5eb'
+  PONS_S0_SHARD_COUNT: '16'
+
 jobs:
-  materialize:
+  prepare:
+    name: Prepare target-blind cohort plan
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-    env:
-      PONS_S0_SOURCE_COMMIT: '493c85b8d84565cedf6e936063549edfa02edf3a'
-      PONS_S0_UPSTREAM_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
-      PONS_S0_RPC_URL: 'http://127.0.0.1:18547'
-      PONS_S0_RPC_MIN_INTERVAL_MS: '250'
-      PONS_S0_CONFIRMATIONS: '12'
-      PONS_S0_LOG_CHUNK_BLOCKS: '400000'
-      PONS_S0_COHORT_TARGET_COUNT: '96'
-      PONS_S0_DISCOVERY_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com'
-      PONS_S0_FACTORY: '0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e'
-      PONS_S0_EVENT_TOPIC: '0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607'
-      PONS_S0_AUTHORITY_FROM_BLOCK: '26841846'
-      PONS_S0_FROZEN_AS_OF_BLOCK: '69066751'
-      PONS_S0_FROZEN_DISCOVERY_RUN_ID: '35648177392'
-      PONS_S0_FROZEN_DISCOVERY_ARTIFACT_ID: '10669670502'
-      PONS_S0_FROZEN_LAUNCH_INDEX_SHA256: '00af1e630831ccdd3658559627964ca4d1c5b64b488f1aca5a429b28323eb5eb'
+    timeout-minutes: 60
     steps:
       - name: Checkout materialization harness
         uses: actions/checkout@v4
@@ -56,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           rpc_call() {
-            curl --fail --silent --show-error --location               --connect-timeout 10 --max-time 45               --retry 4 --retry-delay 3 --retry-all-errors               --user-agent 'sentry-forensic-gate-pons-s0-archive-probe/1'               --header 'content-type: application/json'               --data-binary "$1"               "${PONS_S0_UPSTREAM_RPC_URL}"
+            curl --fail --silent --show-error --location                 --connect-timeout 10 --max-time 45                 --retry 4 --retry-delay 3 --retry-all-errors                 --user-agent 'sentry-forensic-gate-pons-s0-archive-probe/1'                 --header 'content-type: application/json'                 --data-binary "$1"                 "${PONS_S0_UPSTREAM_RPC_URL}"
           }
 
           chain_response="$(rpc_call '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}')"
@@ -117,281 +124,118 @@ jobs:
           pnpm build
           test "$(git rev-parse HEAD)" = "${PONS_S0_SOURCE_COMMIT}"
 
-      - name: Materialize target-blind Pons S0 cohort
+      - name: Start local paced RPC proxy over frozen chronology
         shell: bash
-        env:
-          PONS_S0_OUTPUT_DIR: ${{ github.workspace }}/cohort
-          PONS_S0_HARNESS_REPOSITORY: ${{ github.repository }}
-          PONS_S0_HARNESS_COMMIT: ${{ github.sha }}
-          PONS_S0_LAUNCH_LOGS_PATH: ${{ github.workspace }}/pons-launch-index.json
         run: |
           set -euo pipefail
+          python3 harness/scripts/pons-s0-rpc-proxy.py             --upstream "${PONS_S0_UPSTREAM_RPC_URL}"             --launch-index "${GITHUB_WORKSPACE}/pons-launch-index.json"             --factory "${PONS_S0_FACTORY}"             --topic0 "${PONS_S0_EVENT_TOPIC}"             --port 18547             > "${GITHUB_WORKSPACE}/pons-s0-rpc-proxy.log" 2>&1 &
+          proxy_pid=$!
+          echo "proxy_pid=${proxy_pid}" >> "${GITHUB_WORKSPACE}/proxy.env"
+          trap 'kill "${proxy_pid}" 2>/dev/null || true' EXIT
 
-          cat > "${RUNNER_TEMP}/pons-s0-curl-rpc-proxy.py" <<'PY'
-          #!/usr/bin/env python3
-          import argparse
-          import json
-          import os
-          import subprocess
-          import tempfile
-          import threading
-          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+          for _ in $(seq 1 30); do
+            curl --silent --fail http://127.0.0.1:18547/health >/dev/null && break
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:18547/health >/dev/null
 
-          def quantity(value, label):
-              if isinstance(value, int):
-                  return value
-              if not isinstance(value, str):
-                  raise RuntimeError(label + "_INVALID")
-              if value.startswith("0x"):
-                  return int(value, 16)
-              return int(value, 10)
+          cp harness/scripts/pons-s0-cohort-lib.mjs source/scripts/
+          cp harness/scripts/pons-s0-prepare-cohort-plan.mjs source/scripts/
+          cd source
+          PONS_S0_PLAN_OUTPUT_DIR="${GITHUB_WORKSPACE}/cohort-plan"           PONS_S0_LAUNCH_LOGS_PATH="${GITHUB_WORKSPACE}/pons-launch-index.json"           node scripts/pons-s0-prepare-cohort-plan.mjs 2> "${GITHUB_WORKSPACE}/prepare-progress.log" | tee "${GITHUB_WORKSPACE}/prepare.log"
 
-          def hex_quantity(value):
-              return hex(int(value))
+          kill "${proxy_pid}"
+          wait "${proxy_pid}" 2>/dev/null || true
+          trap - EXIT
 
-          class State:
-              def __init__(self, args):
-                  self.upstream = args.upstream
-                  self.factory = args.factory.lower()
-                  self.topic0 = args.topic0.lower()
-                  with open(args.launch_index, "r", encoding="utf-8") as fh:
-                      index = json.load(fh)
-                  if index.get("schema") != "ROBINHOOD_RPC_PONS_S0_LAUNCH_INDEX_V1":
-                      raise RuntimeError("PROXY_LAUNCH_INDEX_SCHEMA_MISMATCH")
-                  if str(index.get("factory", "")).lower() != self.factory:
-                      raise RuntimeError("PROXY_LAUNCH_INDEX_FACTORY_MISMATCH")
-                  if str(index.get("eventTopic", "")).lower() != self.topic0:
-                      raise RuntimeError("PROXY_LAUNCH_INDEX_TOPIC_MISMATCH")
-                  logs = index.get("logs")
-                  if not isinstance(logs, list):
-                      raise RuntimeError("PROXY_LAUNCH_INDEX_LOGS_MISSING")
-                  self.logs = logs
-                  self.lock = threading.Lock()
-                  self.block_hash_cache = {}
+      - name: Verify cohort plan invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s cohort-plan/plan.json
+          test -s cohort-plan/prepare-receipt.json
+          test "$(jq -r '.selectedLaunchCount' cohort-plan/prepare-receipt.json)" = "96"
+          test "$(jq -r '.shardCount' cohort-plan/prepare-receipt.json)" = "${PONS_S0_SHARD_COUNT}"
+          test "$(jq -r '.planFileSha256' cohort-plan/prepare-receipt.json)" = "$(sha256sum cohort-plan/plan.json | awk '{print $1}')"
+          for shard in $(seq 1 "${PONS_S0_SHARD_COUNT}"); do
+            padded="$(printf '%02d' "${shard}")"
+            test -s "cohort-plan/mini-index-shard-${padded}.json"
+          done
 
-              def upstream_call(self, request_obj):
-                  raw = json.dumps(
-                      request_obj,
-                      separators=(",", ":"),
-                  ).encode()
-                  with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                      body_path = tmp.name
-                  try:
-                      proc = subprocess.run(
-                          [
-                              "curl",
-                              "--silent",
-                              "--show-error",
-                              "--location",
-                              "--connect-timeout", "10",
-                              "--max-time", "90",
-                              "--retry", "6",
-                              "--retry-delay", "3",
-                              "--retry-all-errors",
-                              "--user-agent",
-                              "sentry-forensic-gate-pons-s0-archive-proxy/2",
-                              "--header", "content-type: application/json",
-                              "--output", body_path,
-                              "--write-out", "%{http_code}",
-                              "--data-binary", raw.decode("utf-8"),
-                              self.upstream,
-                          ],
-                          check=False,
-                          text=True,
-                          capture_output=True,
-                      )
-                      with open(body_path, "rb") as fh:
-                          body = fh.read()
-                      status_text = (proc.stdout or "").strip()
-                      status = int(status_text) if status_text.isdigit() else 0
-                      if proc.returncode != 0 or status < 200 or status >= 300:
-                          raise RuntimeError(
-                              "UPSTREAM_RPC_TRANSPORT_FAILURE:"
-                              + str(proc.returncode)
-                              + ":"
-                              + str(status)
-                              + ":"
-                              + (proc.stderr or "")[:512]
-                          )
-                      parsed = json.loads(body.decode("utf-8"))
-                      if not isinstance(parsed, dict):
-                          raise RuntimeError("UPSTREAM_RPC_NON_JSON_OBJECT")
-                      return parsed
-                  finally:
-                      try:
-                          os.unlink(body_path)
-                      except FileNotFoundError:
-                          pass
+      - name: Upload cohort plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-s0-cohort-plan
+          path: |
+            cohort-plan/
+            prepare.log
+            prepare-progress.log
+          if-no-files-found: error
+          retention-days: 30
 
-              def block_hash(self, block_number):
-                  key = int(block_number)
-                  cached = self.block_hash_cache.get(key)
-                  if cached:
-                      return cached
-                  response = self.upstream_call({
-                      "jsonrpc": "2.0",
-                      "id": 1,
-                      "method": "eth_getBlockByNumber",
-                      "params": [hex_quantity(key), False],
-                  })
-                  block = response.get("result")
-                  if not isinstance(block, dict):
-                      raise RuntimeError(
-                          "PROXY_BLOCK_MISSING:" + str(key)
-                      )
-                  block_hash = block.get("hash")
-                  if (
-                      not isinstance(block_hash, str)
-                      or len(block_hash) != 66
-                      or not block_hash.startswith("0x")
-                  ):
-                      raise RuntimeError(
-                          "PROXY_BLOCK_HASH_INVALID:" + str(key)
-                      )
-                  self.block_hash_cache[key] = block_hash.lower()
-                  return block_hash.lower()
+  materialize:
+    name: Materialize shard ${{ matrix.shard }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+      fail-fast: false
+    steps:
+      - name: Checkout materialization harness
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: harness
 
-              def indexed_logs(self, request_obj):
-                  params = request_obj.get("params")
-                  if not isinstance(params, list) or len(params) != 1:
-                      raise RuntimeError("PROXY_LOG_PARAMS_INVALID")
-                  filt = params[0]
-                  if not isinstance(filt, dict):
-                      raise RuntimeError("PROXY_LOG_FILTER_INVALID")
-                  if "blockHash" in filt:
-                      raise RuntimeError("PROXY_BLOCK_HASH_LOG_QUERY_UNSUPPORTED")
-                  address = str(filt.get("address", "")).lower()
-                  topics = filt.get("topics")
-                  if address != self.factory:
-                      raise RuntimeError("PROXY_NON_PONS_LOG_ADDRESS")
-                  if (
-                      not isinstance(topics, list)
-                      or not topics
-                      or str(topics[0]).lower() != self.topic0
-                  ):
-                      raise RuntimeError("PROXY_NON_PONS_LOG_TOPIC")
-                  if any(topic is not None for topic in topics[1:]):
-                      raise RuntimeError("PROXY_INDEXED_TOPIC_FILTER_UNSUPPORTED")
+      - name: Checkout exact reviewed SENTRY source
+        uses: actions/checkout@v4
+        with:
+          ref: 493c85b8d84565cedf6e936063549edfa02edf3a
+          path: source
+          persist-credentials: false
 
-                  start = quantity(
-                      filt.get("fromBlock"),
-                      "PROXY_FROM_BLOCK",
-                  )
-                  end = quantity(
-                      filt.get("toBlock"),
-                      "PROXY_TO_BLOCK",
-                  )
-                  if end < start:
-                      return []
-                  selected = [
-                      item
-                      for item in self.logs
-                      if start <= int(item["blockNumber"]) <= end
-                  ]
+      - name: Download frozen cohort plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pons-s0-cohort-plan
+          path: ${{ github.workspace }}/cohort-plan
 
-                  result = []
-                  for item in selected:
-                      block_number = int(item["blockNumber"])
-                      result.append({
-                          "address": str(item["address"]).lower(),
-                          "topics": [
-                              str(topic).lower()
-                              for topic in item["topics"]
-                          ],
-                          "data": str(item["data"]).lower(),
-                          "blockNumber": hex_quantity(block_number),
-                          "transactionHash":
-                              str(item["transactionHash"]).lower(),
-                          "transactionIndex":
-                              hex_quantity(item["transactionIndex"]),
-                          "blockHash": str(item["blockHash"]).lower(),
-                          "logIndex": hex_quantity(item["logIndex"]),
-                          "removed": False,
-                      })
-                  return result
+      - name: Verify frozen plan identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s cohort-plan/plan.json
+          test -s "cohort-plan/mini-index-shard-$(printf '%02d' "${{ matrix.shard }}").json"
+          test "$(jq -r '.planFileSha256' cohort-plan/prepare-receipt.json)" = "$(sha256sum cohort-plan/plan.json | awk '{print $1}')"
+          test "$(jq -r '.source.repositoryCommit' cohort-plan/plan.json)" = "${PONS_S0_SOURCE_COMMIT}"
+          test "$(jq -r '.asOf.block' cohort-plan/plan.json)" = "${PONS_S0_FROZEN_AS_OF_BLOCK}"
+          test "$(jq -r '.targetPerformanceInspectedForSelection' cohort-plan/plan.json)" = "false"
 
-              def handle_rpc(self, request_obj):
-                  if not isinstance(request_obj, dict):
-                      raise RuntimeError("PROXY_RPC_REQUEST_INVALID")
-                  method = request_obj.get("method")
-                  if method == "eth_getLogs":
-                      result = self.indexed_logs(request_obj)
-                      return {
-                          "jsonrpc": "2.0",
-                          "id": request_obj.get("id"),
-                          "result": result,
-                      }
-                  return self.upstream_call(request_obj)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-          def main():
-              parser = argparse.ArgumentParser()
-              parser.add_argument("--upstream", required=True)
-              parser.add_argument("--launch-index", required=True)
-              parser.add_argument("--factory", required=True)
-              parser.add_argument("--topic0", required=True)
-              parser.add_argument("--port", type=int, required=True)
-              args = parser.parse_args()
-              state = State(args)
+      - name: Build exact reviewed SENTRY source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "${PONS_S0_SOURCE_COMMIT}"
+          corepack enable
+          cd source
+          pnpm install --no-frozen-lockfile
+          pnpm build
+          test "$(git rev-parse HEAD)" = "${PONS_S0_SOURCE_COMMIT}"
 
-              class Handler(BaseHTTPRequestHandler):
-                  def log_message(self, fmt, *args):
-                      return
-
-                  def do_GET(self):
-                      if self.path != "/health":
-                          self.send_response(404)
-                          self.end_headers()
-                          return
-                      body = json.dumps({
-                          "ok": True,
-                          "indexedLaunchLogs": len(state.logs),
-                      }, separators=(",", ":")).encode()
-                      self.send_response(200)
-                      self.send_header("content-type", "application/json")
-                      self.send_header("content-length", str(len(body)))
-                      self.end_headers()
-                      self.wfile.write(body)
-
-                  def do_POST(self):
-                      length = int(self.headers.get("content-length", "0"))
-                      raw = self.rfile.read(length)
-                      try:
-                          request_obj = json.loads(raw.decode("utf-8"))
-                          if isinstance(request_obj, list):
-                              raise RuntimeError("PROXY_RPC_BATCH_UNSUPPORTED")
-                          with state.lock:
-                              response_obj = state.handle_rpc(request_obj)
-                          body = json.dumps(
-                              response_obj,
-                              separators=(",", ":"),
-                          ).encode()
-                          self.send_response(200)
-                      except Exception as exc:
-                          body = json.dumps({
-                              "jsonrpc": "2.0",
-                              "id": None,
-                              "error": {
-                                  "code": -32099,
-                                  "message": str(exc)[:1024],
-                              },
-                          }, separators=(",", ":")).encode()
-                          self.send_response(502)
-                      self.send_header("content-type", "application/json")
-                      self.send_header("content-length", str(len(body)))
-                      self.end_headers()
-                      self.wfile.write(body)
-
-              ThreadingHTTPServer(
-                  ("127.0.0.1", args.port),
-                  Handler,
-              ).serve_forever()
-
-          if __name__ == "__main__":
-              main()
-          PY
-          chmod 700 "${RUNNER_TEMP}/pons-s0-curl-rpc-proxy.py"
-
-          python3 "${RUNNER_TEMP}/pons-s0-curl-rpc-proxy.py"             --upstream "${PONS_S0_UPSTREAM_RPC_URL}"             --launch-index "${PONS_S0_LAUNCH_LOGS_PATH}"             --factory "${PONS_S0_FACTORY}"             --topic0 "${PONS_S0_EVENT_TOPIC}"             --port 18547             > "${GITHUB_WORKSPACE}/pons-s0-rpc-proxy.log" 2>&1 &
+      - name: Materialize assigned shard launches
+        shell: bash
+        env:
+          PONS_S0_SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          padded="$(printf '%02d' "${PONS_S0_SHARD_INDEX}")"
+          python3 harness/scripts/pons-s0-rpc-proxy.py             --upstream "${PONS_S0_UPSTREAM_RPC_URL}"             --launch-index "${GITHUB_WORKSPACE}/cohort-plan/mini-index-shard-${padded}.json"             --factory "${PONS_S0_FACTORY}"             --topic0 "${PONS_S0_EVENT_TOPIC}"             --port 18547             > "${GITHUB_WORKSPACE}/pons-s0-rpc-proxy-shard-${padded}.log" 2>&1 &
           proxy_pid=$!
           trap 'kill "${proxy_pid}" 2>/dev/null || true' EXIT
 
@@ -401,13 +245,81 @@ jobs:
           done
           curl --silent --fail http://127.0.0.1:18547/health >/dev/null
 
-          cp harness/scripts/pons-s0-real-cohort-materialize.mjs source/scripts/pons-s0-real-cohort-materialize.mjs
+          cp harness/scripts/pons-s0-cohort-lib.mjs source/scripts/
+          cp harness/scripts/pons-s0-materialize-shard.mjs source/scripts/
           cd source
-          node scripts/pons-s0-real-cohort-materialize.mjs | tee "${GITHUB_WORKSPACE}/materialization.log"
+          PONS_S0_PLAN_PATH="${GITHUB_WORKSPACE}/cohort-plan/plan.json"           PONS_S0_SHARD_OUTPUT_DIR="${GITHUB_WORKSPACE}/shard-output"           node scripts/pons-s0-materialize-shard.mjs 2> "${GITHUB_WORKSPACE}/shard-progress.log" | tee "${GITHUB_WORKSPACE}/shard.log"
 
           kill "${proxy_pid}"
           wait "${proxy_pid}" 2>/dev/null || true
           trap - EXIT
+
+      - name: Upload shard fragments
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-s0-shard-${{ matrix.shard }}
+          path: |
+            shard-output/
+            shard-progress.log
+          if-no-files-found: error
+          retention-days: 30
+
+  assemble:
+    name: Assemble and commit immutable cohort evidence
+    needs: materialize
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout materialization harness
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+
+      - name: Checkout exact reviewed SENTRY source
+        uses: actions/checkout@v4
+        with:
+          ref: 493c85b8d84565cedf6e936063549edfa02edf3a
+          path: source
+          persist-credentials: false
+
+      - name: Download frozen cohort plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pons-s0-cohort-plan
+          path: ${{ github.workspace }}/cohort-plan
+
+      - name: Download all shard fragments
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pons-s0-shard-*
+          path: ${{ github.workspace }}/shards
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build exact reviewed SENTRY source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "${PONS_S0_SOURCE_COMMIT}"
+          corepack enable
+          cd source
+          pnpm install --no-frozen-lockfile
+          pnpm build
+          test "$(git rev-parse HEAD)" = "${PONS_S0_SOURCE_COMMIT}"
+
+      - name: Assemble target-blind Pons S0 cohort
+        shell: bash
+        env:
+          PONS_S0_HARNESS_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cp harness/scripts/pons-s0-cohort-lib.mjs source/scripts/
+          cp harness/scripts/pons-s0-assemble-cohort.mjs source/scripts/
+          cd source
+          PONS_S0_PLAN_PATH="${GITHUB_WORKSPACE}/cohort-plan/plan.json"           PONS_S0_FRAGMENTS_DIR="${GITHUB_WORKSPACE}/shards"           PONS_S0_OUTPUT_DIR="${GITHUB_WORKSPACE}/cohort"           node scripts/pons-s0-assemble-cohort.mjs 2> "${GITHUB_WORKSPACE}/assemble-progress.log" | tee "${GITHUB_WORKSPACE}/assemble.log"
 
       - name: Verify exact origin binding and separation
         shell: bash
@@ -497,9 +409,7 @@ jobs:
           name: pons-s0-real-cohort-v1
           path: |
             cohort/
-            materialization.log
-            pons-s0-rpc-proxy.log
-            pons-launch-index.json
-            pons-launch-index-summary.json
+            assemble.log
+            assemble-progress.log
           if-no-files-found: warn
           retention-days: 30
