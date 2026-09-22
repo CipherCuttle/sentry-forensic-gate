@@ -263,32 +263,43 @@ const relevantRawLogs = rawLaunchLogs.filter((log) =>
   selectedRawKeys.has(launchLogKey(log)) ||
   selectedCreators.has(log.args.deployer.toLowerCase())
 );
+const UNIVERSE_FACT_BATCH_SIZE = 256;
 writeSync(
   2,
   JSON.stringify({
     progress: 'PONS_S0_MATERIALIZATION_PHASE',
     phase: 'UNIVERSE_FACTS',
-    relevantRawLogCount: relevantRawLogs.length
+    relevantRawLogCount: relevantRawLogs.length,
+    batchSize: UNIVERSE_FACT_BATCH_SIZE
   }) + '\n'
 );
 const blockHashCache = new Map();
-const universeFacts = await Promise.all(
-  relevantRawLogs.map((log) =>
-    rawLaunchLogToProvenanceFact(log, client, blockHashCache).then(
-      (fact) => {
-        writeSync(
-          2,
-          JSON.stringify({
-            progress: 'PONS_S0_MATERIALIZATION_PROGRESS',
-            phase: 'UNIVERSE_FACTS',
-            done: blockHashCache.size
-          }) + '\n'
-        );
-        return fact;
-      }
+const universeFacts = [];
+for (
+  let offset = 0;
+  offset < relevantRawLogs.length;
+  offset += UNIVERSE_FACT_BATCH_SIZE
+) {
+  const batch = relevantRawLogs.slice(
+    offset,
+    offset + UNIVERSE_FACT_BATCH_SIZE
+  );
+  const facts = await Promise.all(
+    batch.map((log) =>
+      rawLaunchLogToProvenanceFact(log, client, blockHashCache)
     )
-  )
-);
+  );
+  universeFacts.push(...facts);
+  writeSync(
+    2,
+    JSON.stringify({
+      progress: 'PONS_S0_MATERIALIZATION_PROGRESS',
+      phase: 'UNIVERSE_FACTS',
+      done: universeFacts.length,
+      total: relevantRawLogs.length
+    }) + '\n'
+  );
+}
 const factByLaunch = new Map(
   universeFacts.map((fact) => [fact.launchId, fact])
 );
