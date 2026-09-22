@@ -888,9 +888,13 @@ function pacedClient(rawClient, minIntervalMs) {
       }
       return (...args) => {
         if (!cacheable.has(method)) return paced(() => value.apply(target, args));
-        const key = method + ':' + JSON.stringify(args, (_key, item) =>
+        const argsJson = JSON.stringify(args, (_key, item) =>
           typeof item === 'bigint' ? item.toString() : item
         );
+        if (!argsJson.includes('"blockNumber"')) {
+          return paced(() => value.apply(target, args));
+        }
+        const key = method + ':' + argsJson;
         const existing = historicalCache.get(key);
         if (existing) return existing;
         const run = paced(() => value.apply(target, args));
