@@ -28,6 +28,8 @@ export interface PonsS0FrozenStrategyArtifactInput {
   trainingManifestId: string;
   trainingOriginEvidenceDigest: string;
   qntylabSourceCommit: string;
+  qntylabFreezeCommit: string;
+  qntylabFreezeReceiptDigest: string;
   runtimeIdentity: Readonly<Record<string, string>>;
   decisionRule: CanonicalJsonValue;
   strategyPayload: CanonicalJsonValue;
@@ -233,13 +235,22 @@ export async function buildPonsS0FrozenStrategyArtifact(
   input: PonsS0FrozenStrategyArtifactInput
 ): Promise<PonsS0FrozenStrategyArtifact> {
   assertNonEmpty(input.strategyId, 'PONS_S0_STRATEGY_ID_EMPTY');
+  if (input.strategyKind !== 'CONTROL' && input.strategyKind !== 'MODEL') {
+    throw new Error('PONS_S0_STRATEGY_KIND_INVALID');
+  }
   assertNonEmpty(input.familyId, 'PONS_S0_FAMILY_ID_EMPTY');
+  assertNonEmpty(input.trainingManifestId, 'PONS_S0_TRAINING_MANIFEST_ID_EMPTY');
   assertPositiveInteger(input.targetHorizonMs, 'PONS_S0_TARGET_HORIZON_INVALID');
   if (input.trainingCutoffBlock < 0n) {
     throw new Error('PONS_S0_TRAINING_CUTOFF_INVALID');
   }
   assertHex64(input.trainingOriginEvidenceDigest, 'PONS_S0_TRAINING_ORIGIN_DIGEST_INVALID');
   assertCommit(input.qntylabSourceCommit, 'PONS_S0_QNTYLAB_COMMIT_INVALID');
+  assertCommit(input.qntylabFreezeCommit, 'PONS_S0_QNTYLAB_FREEZE_COMMIT_INVALID');
+  assertHex64(
+    input.qntylabFreezeReceiptDigest,
+    'PONS_S0_QNTYLAB_FREEZE_RECEIPT_DIGEST_INVALID'
+  );
   assertFeatureNames(input.featureNames);
   if (input.executionPersonaParity !== PONS_S0_EXECUTION_PERSONA_PARITY) {
     throw new Error('PONS_S0_EXECUTION_PERSONA_PARITY_MISMATCH');
@@ -256,6 +267,8 @@ export async function buildPonsS0FrozenStrategyArtifact(
     trainingManifestId: input.trainingManifestId,
     trainingOriginEvidenceDigest: input.trainingOriginEvidenceDigest,
     qntylabSourceCommit: input.qntylabSourceCommit,
+    qntylabFreezeCommit: input.qntylabFreezeCommit,
+    qntylabFreezeReceiptDigest: input.qntylabFreezeReceiptDigest,
     decisionRule: input.decisionRule,
     strategyPayload: input.strategyPayload
   });
@@ -299,6 +312,8 @@ export async function assertPonsS0FrozenStrategyArtifact(
     trainingManifestId: artifact.trainingManifestId,
     trainingOriginEvidenceDigest: artifact.trainingOriginEvidenceDigest,
     qntylabSourceCommit: artifact.qntylabSourceCommit,
+    qntylabFreezeCommit: artifact.qntylabFreezeCommit,
+    qntylabFreezeReceiptDigest: artifact.qntylabFreezeReceiptDigest,
     runtimeIdentity: artifact.runtimeIdentity,
     decisionRule: artifact.decisionRule,
     strategyPayload: artifact.strategyPayload,
@@ -635,6 +650,8 @@ function artifactCore(input: PonsS0FrozenStrategyArtifactInput) {
     trainingManifestId: input.trainingManifestId,
     trainingOriginEvidenceDigest: input.trainingOriginEvidenceDigest,
     qntylabSourceCommit: input.qntylabSourceCommit,
+    qntylabFreezeCommit: input.qntylabFreezeCommit,
+    qntylabFreezeReceiptDigest: input.qntylabFreezeReceiptDigest,
     runtimeIdentity: { ...input.runtimeIdentity },
     decisionRule: input.decisionRule,
     strategyPayload: input.strategyPayload,
