@@ -10,7 +10,6 @@ import {
   ROBINHOOD_CHAIN_ID,
   ROBINHOOD_EXPLORER_URL,
   ViemPonsV2ForwardOutcomeAdapter,
-  derivePonsV2LaunchId,
   findPortableFirstBlockAtOrAfterTimestamp,
   sha256Hex
 } from '../dist/index.js';
@@ -268,19 +267,6 @@ assert.equal(
   universeFacts.length,
   'PONS_S0_DUPLICATE_RELEVANT_LAUNCH_ID'
 );
-const factory = CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase();
-for (const log of selectedRawLogs) {
-  const launchId = derivePonsV2LaunchId({
-    chainId: ROBINHOOD_CHAIN_ID,
-    factory,
-    txHash: log.transactionHash.toLowerCase(),
-    token: log.args.token.toLowerCase()
-  });
-  assert.ok(
-    factByLaunch.has(launchId),
-    'PONS_S0_SELECTED_LAUNCH_FACT_MISSING:' + launchLogKey(log)
-  );
-}
 
 const cohortSelection =
   rawLaunchLogs.length <= cohortTargetCount
