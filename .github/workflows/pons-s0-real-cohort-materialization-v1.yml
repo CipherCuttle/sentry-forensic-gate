@@ -133,7 +133,7 @@ jobs:
           echo "proxy_pid=${proxy_pid}" >> "${GITHUB_WORKSPACE}/proxy.env"
           trap 'kill "${proxy_pid}" 2>/dev/null || true' EXIT
 
-          for _ in $(seq 1 30); do
+          for _ in $(seq 1 180); do
             curl --silent --fail http://127.0.0.1:18547/health >/dev/null && break
             sleep 1
           done
@@ -170,6 +170,7 @@ jobs:
             cohort-plan/
             prepare.log
             prepare-progress.log
+            pons-s0-rpc-proxy.log
           if-no-files-found: error
           retention-days: 30
 
@@ -239,7 +240,7 @@ jobs:
           proxy_pid=$!
           trap 'kill "${proxy_pid}" 2>/dev/null || true' EXIT
 
-          for _ in $(seq 1 30); do
+          for _ in $(seq 1 60); do
             curl --silent --fail http://127.0.0.1:18547/health >/dev/null && break
             sleep 1
           done
