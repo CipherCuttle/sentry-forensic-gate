@@ -1,0 +1,38 @@
+{
+  "verdict": "REAL_COHORT_READY_FOR_QNTYLAB",
+  "scientificState": "EDGE_UNPROVEN",
+  "asOfBlock": "69066751",
+  "asOfBlockHash": "0xdad32c5b5e91eb495150ef498eba528c5d5e873c2b699ddb8a5bb26808f72682",
+  "asOfTimestampMs": 1790020746000,
+  "matureUniverseLaunchCount": 564865,
+  "matureLaunchUniverseEvidenceDigest": "631817b8f8c4e9ea3fe566a149ad36891dc735a17fcd6f6add77a1968a67ad5f",
+  "launchIndexSha256": "00af1e630831ccdd3658559627964ca4d1c5b64b488f1aca5a429b28323eb5eb",
+  "launchDiscoveryHeadBlock": "69066763",
+  "cohortTargetCount": 96,
+  "selectedLaunchCount": 96,
+  "cohortSelection": "SYSTEMATIC_ORDINAL_SAMPLE_OVER_COMPLETE_MATURE_FACTORY_UNIVERSE_V1",
+  "featurePacketCount": 96,
+  "outcomePacketCount": 57,
+  "baselineStatusCounts": {
+    "COMPLETE": 57,
+    "UNVERIFIED": 39
+  },
+  "outcomeStatusCounts": {
+    "COMPLETE": 57,
+    "UNVERIFIED": 0,
+    "ABSENT_BASELINE_UNVERIFIED": 39
+  },
+  "manifestId": "df295570ddf168a5394a3fae71bf3f99aeebad2fbe1d3abb530c34ec62d89dce",
+  "originEvidenceDigest": "31dd06dca9555954c2ca4546c8e75a9f3a2e9db33062c56076928b16919761ce",
+  "boundaries": {
+    "readOnly": true,
+    "signer": false,
+    "wallet": false,
+    "transactionConstruction": false,
+    "broadcast": false,
+    "liveMoneyAuthority": false,
+    "modelPromotionAuthority": false,
+    "mergeAuthority": false,
+    "edge": "UNPROVEN"
+  }
+}
