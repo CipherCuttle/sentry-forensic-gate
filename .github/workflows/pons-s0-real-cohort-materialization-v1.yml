@@ -162,15 +162,23 @@ jobs:
             test -s "cohort-plan/mini-index-shard-${padded}.json"
           done
 
+      - name: Upload preparation diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-s0-preparation-diagnostics
+          path: |
+            prepare.log
+            prepare-progress.log
+            pons-s0-rpc-proxy.log
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload cohort plan
         uses: actions/upload-artifact@v4
         with:
           name: pons-s0-cohort-plan
-          path: |
-            cohort-plan/
-            prepare.log
-            prepare-progress.log
-            pons-s0-rpc-proxy.log
+          path: cohort-plan/
           if-no-files-found: error
           retention-days: 30
 
@@ -255,14 +263,24 @@ jobs:
           wait "${proxy_pid}" 2>/dev/null || true
           trap - EXIT
 
+      - name: Upload shard diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-s0-shard-${{ matrix.shard }}-diagnostics
+          path: |
+            shard.log
+            shard-progress.log
+            pons-s0-rpc-proxy-shard-*.log
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload shard fragments
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: pons-s0-shard-${{ matrix.shard }}
-          path: |
-            shard-output/
-            shard-progress.log
+          path: shard-output/
           if-no-files-found: error
           retention-days: 30
 
@@ -294,7 +312,7 @@ jobs:
       - name: Download all shard fragments
         uses: actions/download-artifact@v4
         with:
-          pattern: pons-s0-shard-*
+          pattern: 'pons-s0-shard-[0-9]*'
           path: ${{ github.workspace }}/shards
 
       - uses: actions/setup-node@v4

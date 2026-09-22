@@ -55,7 +55,7 @@ const shardReceipts = [];
 const fragments = [];
 for (let shard = 1; shard <= shardCount; shard += 1) {
   const padded = String(shard).padStart(2, '0');
-  const dir = `${fragmentsDir}/pons-s0-shard-${padded}`;
+  const dir = `${fragmentsDir}/pons-s0-shard-${shard}`;
   const receipt = JSON.parse(
     await readFile(`${dir}/shard-receipt.json`, 'utf8')
   );
