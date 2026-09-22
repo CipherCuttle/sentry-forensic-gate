@@ -142,7 +142,7 @@ jobs:
           cp harness/scripts/pons-s0-cohort-lib.mjs source/scripts/
           cp harness/scripts/pons-s0-prepare-cohort-plan.mjs source/scripts/
           cd source
-          PONS_S0_PLAN_OUTPUT_DIR="${GITHUB_WORKSPACE}/cohort-plan"           PONS_S0_LAUNCH_LOGS_PATH="${GITHUB_WORKSPACE}/pons-launch-index.json"           node scripts/pons-s0-prepare-cohort-plan.mjs 2> "${GITHUB_WORKSPACE}/prepare-progress.log" | tee "${GITHUB_WORKSPACE}/prepare.log"
+          PONS_S0_PLAN_OUTPUT_DIR="${GITHUB_WORKSPACE}/cohort-plan"           PONS_S0_LAUNCH_LOGS_PATH="${GITHUB_WORKSPACE}/pons-launch-index.json"           node scripts/pons-s0-prepare-cohort-plan.mjs 2>&1 | tee "${GITHUB_WORKSPACE}/prepare.log"
 
           kill "${proxy_pid}"
           wait "${proxy_pid}" 2>/dev/null || true
@@ -249,7 +249,7 @@ jobs:
           cp harness/scripts/pons-s0-cohort-lib.mjs source/scripts/
           cp harness/scripts/pons-s0-materialize-shard.mjs source/scripts/
           cd source
-          PONS_S0_PLAN_PATH="${GITHUB_WORKSPACE}/cohort-plan/plan.json"           PONS_S0_SHARD_OUTPUT_DIR="${GITHUB_WORKSPACE}/shard-output"           node scripts/pons-s0-materialize-shard.mjs 2> "${GITHUB_WORKSPACE}/shard-progress.log" | tee "${GITHUB_WORKSPACE}/shard.log"
+          PONS_S0_PLAN_PATH="${GITHUB_WORKSPACE}/cohort-plan/plan.json"           PONS_S0_SHARD_OUTPUT_DIR="${GITHUB_WORKSPACE}/shard-output"           node scripts/pons-s0-materialize-shard.mjs 2>&1 | tee "${GITHUB_WORKSPACE}/shard.log"
 
           kill "${proxy_pid}"
           wait "${proxy_pid}" 2>/dev/null || true
@@ -257,6 +257,7 @@ jobs:
 
       - name: Upload shard fragments
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: pons-s0-shard-${{ matrix.shard }}
           path: |
@@ -320,7 +321,7 @@ jobs:
           cp harness/scripts/pons-s0-cohort-lib.mjs source/scripts/
           cp harness/scripts/pons-s0-assemble-cohort.mjs source/scripts/
           cd source
-          PONS_S0_PLAN_PATH="${GITHUB_WORKSPACE}/cohort-plan/plan.json"           PONS_S0_FRAGMENTS_DIR="${GITHUB_WORKSPACE}/shards"           PONS_S0_OUTPUT_DIR="${GITHUB_WORKSPACE}/cohort"           node scripts/pons-s0-assemble-cohort.mjs 2> "${GITHUB_WORKSPACE}/assemble-progress.log" | tee "${GITHUB_WORKSPACE}/assemble.log"
+          PONS_S0_PLAN_PATH="${GITHUB_WORKSPACE}/cohort-plan/plan.json"           PONS_S0_FRAGMENTS_DIR="${GITHUB_WORKSPACE}/shards"           PONS_S0_OUTPUT_DIR="${GITHUB_WORKSPACE}/cohort"           node scripts/pons-s0-assemble-cohort.mjs 2>&1 | tee "${GITHUB_WORKSPACE}/assemble.log"
 
       - name: Verify exact origin binding and separation
         shell: bash
