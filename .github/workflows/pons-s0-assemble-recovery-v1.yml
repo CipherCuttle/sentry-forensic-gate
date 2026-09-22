@@ -1,0 +1,164 @@
+name: Pons S0 Recover Frozen Assembly V1
+
+# One-shot recovery of successful, immutable artifacts from run 35771895172.
+# A new workflow file avoids retriggering the 16-shard materialization workflow.
+on:
+  push:
+    branches:
+      - agent/pons-s0-real-cohort-materialization-v1
+    paths:
+      - .github/workflows/pons-s0-assemble-recovery-v1.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pons-s0-frozen-assembly-recovery-v1
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    name: Assemble existing frozen artifacts only
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PONS_S0_SOURCE_COMMIT: '493c85b8d84565cedf6e936063549edfa02edf3a'
+      PONS_S0_SHARD_COUNT: '16'
+      PONS_S0_RPC_MIN_INTERVAL_MS: '250'
+      PONS_S0_FROZEN_DISCOVERY_RUN_ID: '35648177392'
+      PONS_S0_FROZEN_DISCOVERY_ARTIFACT_ID: '10669670502'
+    steps:
+      - name: Checkout existing harness without altering reviewed source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+
+      - name: Checkout exact reviewed SENTRY scientific source
+        uses: actions/checkout@v4
+        with:
+          ref: 493c85b8d84565cedf6e936063549edfa02edf3a
+          path: source
+          persist-credentials: false
+
+      - name: Reuse exact successful cohort plan from run 35771895172
+        uses: actions/download-artifact@v4
+        with:
+          name: pons-s0-cohort-plan
+          path: ${{ github.workspace }}/cohort-plan
+          github-token: ${{ github.token }}
+          repository: CipherCuttle/sentry-forensic-gate
+          run-id: 35771895172
+
+      - name: Reuse all 16 successful shards from run 35771895172
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'pons-s0-shard-[0-9]*'
+          path: ${{ github.workspace }}/shards
+          github-token: ${{ github.token }}
+          repository: CipherCuttle/sentry-forensic-gate
+          run-id: 35771895172
+
+      - name: Verify frozen plan and all artifact identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(sha256sum cohort-plan/plan.json | awk '{print $1}')" = "$(jq -r '.planFileSha256' cohort-plan/prepare-receipt.json)"
+          jq -e '
+            .schemaVersion == "PONS_S0_COHORT_PLAN_V1" and
+            .selectedLaunchCount == 96 and
+            .shardCount == 16 and
+            .asOf.block == "69066751" and
+            .source.repositoryCommit == "493c85b8d84565cedf6e936063549edfa02edf3a" and
+            .launchIndexSha256 == "00af1e630831ccdd3658559627964ca4d1c5b64b488f1aca5a429b28323eb5eb" and
+            .targetPerformanceInspectedForSelection == false
+          ' cohort-plan/plan.json >/dev/null
+          for shard in $(seq 1 16); do
+            dir="shards/pons-s0-shard-$shard"
+            test -s "$dir/shard-receipt.json"
+            test -s "$dir/fragments.jsonl"
+            test "$(jq -r '.shard' "$dir/shard-receipt.json")" = "$shard"
+            test "$(sha256sum "$dir/fragments.jsonl" | awk '{print $1}')" = "$(jq -r '.fragmentsFileSha256' "$dir/shard-receipt.json")"
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build exact reviewed SENTRY source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$PONS_S0_SOURCE_COMMIT"
+          corepack enable
+          (cd source && pnpm install --no-frozen-lockfile && pnpm build)
+          test "$(git -C source rev-parse HEAD)" = "$PONS_S0_SOURCE_COMMIT"
+
+      - name: Recover assembly without rematerializing any launch
+        shell: bash
+        env:
+          PONS_S0_HARNESS_COMMIT: ${{ github.sha }}
+          PONS_S0_PLAN_PATH: ${{ github.workspace }}/cohort-plan/plan.json
+          PONS_S0_FRAGMENTS_DIR: ${{ github.workspace }}/shards
+          PONS_S0_OUTPUT_DIR: ${{ github.workspace }}/cohort
+        run: |
+          set -euo pipefail
+          for script in pons-s0-cohort-lib.mjs pons-s0-prepare-cohort-plan.mjs pons-s0-materialize-shard.mjs pons-s0-assemble-cohort.mjs; do
+            cp "harness/scripts/$script" "source/scripts/$script"
+          done
+          (cd source && node scripts/pons-s0-assemble-cohort.mjs) 2>&1 | tee assemble.log
+
+      - name: Verify immutable origin and separation before commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s cohort/features.jsonl
+          test -f cohort/outcomes.jsonl
+          test -s cohort/manifest.json
+          test -s cohort/origin-receipt.json
+          test -s cohort/summary.json
+          jq -e --arg source "$PONS_S0_SOURCE_COMMIT" --arg harness "$GITHUB_SHA" '
+            .source.repositoryCommit == $source and
+            .materialization.harnessCommit == $harness and
+            .frozenAuthority.selectedLaunchCount == 96 and
+            .frozenAuthority.targetPerformanceInspectedForSelection == false and
+            .materialization.launchIndexSha256 == "00af1e630831ccdd3658559627964ca4d1c5b64b488f1aca5a429b28323eb5eb" and
+            .artifacts.featurePacketCount == 96 and
+            .boundaries.readOnly == true and
+            .boundaries.signer == false and
+            .boundaries.broadcast == false and
+            .boundaries.liveMoneyAuthority == false and
+            .boundaries.modelPromotionAuthority == false and
+            .boundaries.mergeAuthority == false and
+            .boundaries.edge == "UNPROVEN"
+          ' cohort/origin-receipt.json >/dev/null
+          test "$(sha256sum cohort/features.jsonl | awk '{print $1}')" = "$(jq -r '.artifacts.featureStreamSha256' cohort/origin-receipt.json)"
+          test "$(sha256sum cohort/outcomes.jsonl | awk '{print $1}')" = "$(jq -r '.artifacts.outcomeStreamSha256' cohort/origin-receipt.json)"
+          test "$(sha256sum cohort/manifest.json | awk '{print $1}')" = "$(jq -r '.artifacts.manifestFileSha256' cohort/origin-receipt.json)"
+          jq -e '.verdict == "REAL_COHORT_READY_FOR_QNTYLAB" and .featurePacketCount == 96 and .scientificState == "EDGE_UNPROVEN"' cohort/summary.json >/dev/null
+          sha256sum cohort/features.jsonl cohort/outcomes.jsonl cohort/manifest.json cohort/origin-receipt.json cohort/summary.json > cohort/SHA256SUMS
+
+      - name: Commit only immutable evidence to existing harness branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest=harness/docs/evidence/pons-s0-real-cohort-v1
+          test ! -e "$dest"
+          mkdir -p "$dest"
+          cp cohort/features.jsonl cohort/outcomes.jsonl cohort/manifest.json cohort/origin-receipt.json cohort/summary.json cohort/SHA256SUMS "$dest/"
+          git -C harness config user.name 'github-actions[bot]'
+          git -C harness config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C harness add docs/evidence/pons-s0-real-cohort-v1
+          git -C harness commit -m 'Recover frozen Pons S0 cohort evidence without rerunning shards [skip ci]'
+          git -C harness push origin HEAD:agent/pons-s0-real-cohort-materialization-v1
+
+      - name: Upload recovered cohort and assembly diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-s0-recovered-cohort-v1
+          path: |
+            cohort/
+            assemble.log
+          if-no-files-found: warn
+          retention-days: 30
