@@ -862,13 +862,12 @@ function sha256Bytes(value) {
 function pacedClient(rawClient, minIntervalMs) {
   let tail = Promise.resolve();
   let lastStartedAt = 0;
+  const historicalCache = new Map();
+  const cacheable = new Set(['getBytecode', 'getStorageAt', 'readContract', 'call']);
 
   const paced = (operation) => {
     const run = tail.then(async () => {
-      const waitMs = Math.max(
-        0,
-        lastStartedAt + minIntervalMs - Date.now()
-      );
+      const waitMs = Math.max(0, lastStartedAt + minIntervalMs - Date.now());
       if (waitMs > 0) await sleep(waitMs);
       lastStartedAt = Date.now();
       return operation();
@@ -880,26 +879,28 @@ function pacedClient(rawClient, minIntervalMs) {
   return new Proxy(rawClient, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver);
+      const method = String(property);
       if (
         typeof value !== 'function' ||
-        ![
-          'getChainId',
-          'getBlockNumber',
-          'getBlock',
-          'getBytecode',
-          'getLogs',
-          'getStorageAt',
-          'readContract',
-          'call'
-        ].includes(String(property))
+        !['getChainId','getBlockNumber','getBlock','getBytecode','getLogs','getStorageAt','readContract','call'].includes(method)
       ) {
         return typeof value === 'function' ? value.bind(target) : value;
       }
-      return (...args) => paced(() => value.apply(target, args));
+      return (...args) => {
+        if (!cacheable.has(method)) return paced(() => value.apply(target, args));
+        const key = method + ':' + JSON.stringify(args, (_key, item) =>
+          typeof item === 'bigint' ? item.toString() : item
+        );
+        const existing = historicalCache.get(key);
+        if (existing) return existing;
+        const run = paced(() => value.apply(target, args));
+        historicalCache.set(key, run);
+        run.catch(() => historicalCache.delete(key));
+        return run;
+      };
     }
   });
 }
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
