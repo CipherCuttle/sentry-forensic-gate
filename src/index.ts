@@ -56,3 +56,4 @@ export * from './runtime/executableBaseline.js';
 export * from './runtime/forwardOutcomes.js';
 export * from './runtime/creatorSignalEval.js';
 export * from './research/ponsS0ResearchExport.js';
+export * from './autonomy/ponsS0Autonomy.js';

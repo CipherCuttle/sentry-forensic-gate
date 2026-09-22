@@ -1,0 +1,73 @@
+name: pons-s0-autonomy-disabled-v1
+
+on:
+  push:
+    branches:
+      - agent/pons-s0-autonomy-disabled-scaffold-v1
+    paths:
+      - 'src/autonomy/ponsS0Autonomy.ts'
+      - 'scripts/pons-s0-autonomy-disabled-check.mjs'
+      - 'docs/PONS_S0_AUTONOMY_DISABLED_SCAFFOLD_V1.md'
+      - 'src/index.ts'
+      - 'package.json'
+      - '.github/workflows/pons-s0-autonomy-disabled-v1.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pons-s0-autonomy-disabled-v1
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PONS_E0_LIVE: ''
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E2_LIVE: ''
+      PONS_E2_PRIVATE_KEY: ''
+      PONS_E2_BROADCAST_AUTHORITY: ''
+      PONS_E3B_LIVE: ''
+      PONS_E3B_PRIVATE_KEY: ''
+      PONS_E3B_BROADCAST_AUTHORITY: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS dependencies without native postinstall
+        run: npm install --package-lock=false --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify disabled autonomy contracts
+        run: npm run ponss0autonomycheck
+
+      - name: Enforce no execution authority in autonomy module
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -E 'privateKey|sendRawTransaction|broadcastExact|writeContract|PONS_E0_LIVE|PONS_E2_LIVE|PONS_E3B_LIVE' src/autonomy/ponsS0Autonomy.ts
+          grep -q "INDEPENDENT_PROBE_CAPACITY_NOT_SIZING_AUTHORITY" src/autonomy/ponsS0Autonomy.ts
+          grep -q "liveMoneyAuthority: false" src/autonomy/ponsS0Autonomy.ts
+          echo "PONS_S0_AUTONOMY_NO_EXECUTION_AUTHORITY=PASS"
+
+      - name: Assert CI has no live authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${PONS_E0_LIVE}"
+          test -z "${PONS_E0_PRIVATE_KEY}"
+          test -z "${PONS_E2_LIVE}"
+          test -z "${PONS_E2_PRIVATE_KEY}"
+          test -z "${PONS_E2_BROADCAST_AUTHORITY}"
+          test -z "${PONS_E3B_LIVE}"
+          test -z "${PONS_E3B_PRIVATE_KEY}"
+          test -z "${PONS_E3B_BROADCAST_AUTHORITY}"
+          echo "PONS_S0_AUTONOMY_CI_NO_LIVE_AUTHORITY=PASS"
