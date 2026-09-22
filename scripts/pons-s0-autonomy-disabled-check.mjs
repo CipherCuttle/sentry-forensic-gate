@@ -21,6 +21,8 @@ const artifactInput = {
   trainingManifestId: 'manifest-test',
   trainingOriginEvidenceDigest: '1'.repeat(64),
   qntylabSourceCommit: '2'.repeat(40),
+  qntylabFreezeCommit: '3'.repeat(40),
+  qntylabFreezeReceiptDigest: 'a'.repeat(64),
   runtimeIdentity: { node: '20', evaluator: 'NONE_DISABLED_SCAFFOLD' },
   decisionRule: { policy: 'TEST_ONLY' },
   strategyPayload: { kind: 'CONTROL', policy: 'TEST_ONLY' },
@@ -75,10 +77,10 @@ assert.equal(witness.liveMoneyAuthority, false);
 const sequential = await buildPonsS0SequentialCapacityEvidence({
   launchId: 'launch-a',
   observationBlock: 200n,
-  observationBlockHash: '0x' + '3'.repeat(64),
+  observationBlockHash: '0x' + '9'.repeat(64),
   maxEntryUsdMicros: 1_000_000n,
   methodVersion: 'TEST_SEQUENTIAL_V1',
-  sourceEvidenceDigest: '4'.repeat(64)
+  sourceEvidenceDigest: 'a'.repeat(64)
 });
 
 const config = {
@@ -137,10 +139,10 @@ const allocation = await allocatePonsS0ShadowReservations({
       sequentialCapacity: await buildPonsS0SequentialCapacityEvidence({
         launchId: 'launch-b',
         observationBlock: 201n,
-        observationBlockHash: '0x' + '5'.repeat(64),
+        observationBlockHash: '0x' + '9'.repeat(64),
         maxEntryUsdMicros: 1_000_000n,
         methodVersion: 'TEST_SEQUENTIAL_V1',
-        sourceEvidenceDigest: '6'.repeat(64)
+        sourceEvidenceDigest: 'a'.repeat(64)
       })
     },
     {
@@ -162,10 +164,10 @@ const allocation = await allocatePonsS0ShadowReservations({
       sequentialCapacity: await buildPonsS0SequentialCapacityEvidence({
         launchId: 'launch-c',
         observationBlock: 202n,
-        observationBlockHash: '0x' + '7'.repeat(64),
+        observationBlockHash: '0x' + '9'.repeat(64),
         maxEntryUsdMicros: 1_000_000n,
         methodVersion: 'TEST_SEQUENTIAL_V1',
-        sourceEvidenceDigest: '8'.repeat(64)
+        sourceEvidenceDigest: 'a'.repeat(64)
       })
     }
   ]
