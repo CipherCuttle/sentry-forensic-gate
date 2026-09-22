@@ -135,12 +135,15 @@ const firstImmaturePoint = await findPortableFirstBlockAtOrAfterTimestamp(
   forwardAdapter,
   CURRENT_PONS_V2_AUTHORITY.fromBlock,
   asOfBlock,
-  maturityCutoffTimestampMs
+  maturityCutoffTimestampMs + 1
 );
-assert.ok(firstImmaturePoint, 'PONS_S0_MATURITY_POINT_NOT_FOUND');
+assert.ok(
+  firstImmaturePoint,
+  'PONS_S0_MATURITY_BOUNDARY_NOT_FOUND_AT_FROZEN_AS_OF'
+);
 assert.ok(
   firstImmaturePoint.blockNumber > CURRENT_PONS_V2_AUTHORITY.fromBlock,
-  'PONS_S0_MATURITY_BOUNDARY_BEFORE_AUTHORITY_EPOCH'
+  'PONS_S0_NO_MATURE_FACTORY_EPOCH_AT_FROZEN_AS_OF'
 );
 const matureThroughBlock = firstImmaturePoint.blockNumber - 1n;
 const matureThroughPoint = await forwardAdapter.getBlockPoint(
@@ -148,11 +151,11 @@ const matureThroughPoint = await forwardAdapter.getBlockPoint(
 );
 assert.ok(
   matureThroughPoint.timestampMs <= maturityCutoffTimestampMs,
-  'PONS_S0_MATURE_BOUNDARY_NOT_MATURE'
+  'PONS_S0_MATURE_THROUGH_TIMESTAMP_AFTER_CUTOFF'
 );
 assert.ok(
   firstImmaturePoint.timestampMs > maturityCutoffTimestampMs,
-  'PONS_S0_IMMATURE_BOUNDARY_NOT_IMMATURE'
+  'PONS_S0_FIRST_IMMATURE_TIMESTAMP_NOT_AFTER_CUTOFF'
 );
 
 const launchIndex = await loadIndexedLaunchLogs({
