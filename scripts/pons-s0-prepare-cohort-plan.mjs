@@ -284,7 +284,7 @@ const planCore = {
     repositoryCommit: EXPECTED_SOURCE_COMMIT
   },
   chainId: ROBINHOOD_CHAIN_ID,
-  factory,
+  factory: CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase(),
   authorityFromBlock: CURRENT_PONS_V2_AUTHORITY.fromBlock.toString(),
   asOf: {
     block: asOfBlock.toString(),
