@@ -13,13 +13,19 @@ It does **not** choose C0, C1, M1 or M2 and contains no concrete model evaluator
 
 The scaffold provides:
 
-- a content-addressed frozen-strategy artifact envelope;
+- a content-addressed frozen-strategy artifact envelope that must bind an exact
+  QntyLab freeze commit and freeze-receipt digest;
 - immutable one-shot prospective decision receipts;
 - a prospective witness contract whose stop-rule values must be supplied
   explicitly (there are no default success thresholds);
 - a separately named sequential-capacity evidence envelope;
 - a deterministic finite-capital shadow reservation governor;
 - fail-closed health / reconciliation states.
+
+The SENTRY-side artifact helper is a deterministic codec/verifier only. A
+production artifact is not authoritative unless its QntyLab freeze commit and
+freeze-receipt digest are externally frozen and matched by the prospective
+witness contract.
 
 The governor explicitly rejects
 `INDEPENDENT_PROBE_CAPACITY_NOT_SEQUENTIAL` as sizing authority.
