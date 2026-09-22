@@ -61,9 +61,14 @@ assert.equal(
 assert.equal(plan.shardCount, shardCount);
 
 const perShard = Math.ceil(plan.selectedRawLogs.length / shardCount);
+const shardStartOffset = (shardIndex - 1) * perShard;
 const assigned = plan.selectedRawLogs.slice(
-  (shardIndex - 1) * perShard,
+  shardStartOffset,
   Math.min(shardIndex * perShard, plan.selectedRawLogs.length)
+);
+assert.ok(
+  assigned.length > 0,
+  'PONS_S0_EMPTY_SHARD_NOT_ALLOWED'
 );
 progress('SHARD_PLAN', {
   shard: shardIndex,
@@ -134,7 +139,13 @@ assert.equal(
 );
 
 const assignedByBlock = new Map();
-for (const [offset, log] of assigned.entries()) {
+for (const [localOffset, log] of assigned.entries()) {
+  const offset = shardStartOffset + localOffset;
+  assert.equal(
+    plan.selectedRawLogs[offset],
+    log,
+    'PONS_S0_SHARD_GLOBAL_OFFSET_MISMATCH'
+  );
   const blockKey = BigInt(log.blockNumber).toString();
   let bucket = assignedByBlock.get(blockKey);
   if (!bucket) {
