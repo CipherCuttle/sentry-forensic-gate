@@ -275,6 +275,20 @@ export async function buildPonsS0FrozenStrategyArtifact(
 export async function assertPonsS0FrozenStrategyArtifact(
   artifact: PonsS0FrozenStrategyArtifact
 ): Promise<void> {
+  if (
+    artifact.schemaVersion !== PONS_S0_FROZEN_STRATEGY_ARTIFACT_V1 ||
+    artifact.featureSchema !== PONS_S0_FEATURE_PACKET_V1 ||
+    artifact.executionPersonaParity !== PONS_S0_EXECUTION_PERSONA_PARITY ||
+    artifact.noAutoRetrain !== true ||
+    artifact.mode !== 'SHADOW_ONLY' ||
+    artifact.liveMoneyAuthority !== false ||
+    artifact.signingAuthority !== false ||
+    artifact.broadcastAuthority !== false ||
+    artifact.modelPromotionAuthority !== false ||
+    artifact.edge !== 'UNPROVEN'
+  ) {
+    throw new Error('PONS_S0_FROZEN_ARTIFACT_BOUNDARY_MISMATCH');
+  }
   const rebuilt = await buildPonsS0FrozenStrategyArtifact({
     strategyId: artifact.strategyId,
     strategyKind: artifact.strategyKind,
