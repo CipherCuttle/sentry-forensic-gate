@@ -3,6 +3,7 @@ import {
   PONS_S0_CAPACITY_SEMANTICS,
   PONS_S0_EXECUTION_PERSONA_PARITY,
   allocatePonsS0ShadowReservations,
+  assertPonsS0FrozenStrategyArtifact,
   buildPonsS0FrozenStrategyArtifact,
   buildPonsS0ProspectiveWitnessContract,
   buildPonsS0SequentialCapacityEvidence,
@@ -32,6 +33,13 @@ assert.equal(artifactA.artifactId, artifactB.artifactId);
 assert.equal(artifactA.evidenceDigest, artifactB.evidenceDigest);
 assert.equal(artifactA.liveMoneyAuthority, false);
 assert.equal(artifactA.noAutoRetrain, true);
+await assert.rejects(
+  assertPonsS0FrozenStrategyArtifact({
+    ...artifactA,
+    liveMoneyAuthority: true
+  }),
+  /PONS_S0_FROZEN_ARTIFACT_BOUNDARY_MISMATCH/
+);
 
 await assert.rejects(
   buildPonsS0ProspectiveWitnessContract({
