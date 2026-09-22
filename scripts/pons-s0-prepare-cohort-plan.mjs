@@ -21,6 +21,7 @@ import {
   EXPECTED_SOURCE_COMMIT,
   HORIZON_MS,
   assertReviewedSourceCheckout,
+  encodeJson,
   launchLogKey,
   loadIndexedLaunchLogs,
   pacedClient,
