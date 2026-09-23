@@ -67,8 +67,8 @@ assert.ok(process.env.PONS_S1_RPC_URL?.startsWith('https://'),
 assert.equal(process.env.PONS_S1_DISCOVERY_RPC_URL,
   'https://rpc.mainnet.chain.robinhood.com',
   'PONS_S1_OFFICIAL_DISCOVERY_RPC_REQUIRED');
-assert.notEqual(process.env.PONS_S1_RPC_URL,
-  process.env.PONS_S1_DISCOVERY_RPC_URL,
+assert.notEqual(new URL(process.env.PONS_S1_RPC_URL).hostname,
+  new URL(process.env.PONS_S1_DISCOVERY_RPC_URL).hostname,
   'PONS_S1_INDEPENDENT_ARCHIVE_SOURCE_REQUIRED');
 assert.ok(process.env.PONS_S1_OUTPUT_FILE, 'PONS_S1_OUTPUT_FILE_REQUIRED');
 

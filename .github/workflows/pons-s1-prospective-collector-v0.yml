@@ -30,8 +30,9 @@ jobs:
           node-version: '20'
       - name: Test fail-closed prospective selection and sealing boundaries
         run: node scripts/pons-s1-collector-check.mjs
-      - name: Check syntax of quarantined historical materializers
+      - name: Check syntax of collector and quarantined historical materializers
         run: |
+          node --check scripts/pons-s1-prospective-collector.mjs
           node --check scripts/pons-s0-cohort-lib.mjs
           node --check scripts/pons-s0-real-cohort-materialize.mjs
       - name: Guard collector against active execution

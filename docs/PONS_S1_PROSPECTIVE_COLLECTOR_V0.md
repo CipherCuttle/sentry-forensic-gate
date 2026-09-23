@@ -112,3 +112,26 @@ and synthetic/real sequential execution divergence.
 
 **Current verdict: IMPLEMENTATION IN REVIEW; no actual prospective
 enrollment or economic verdict.**
+
+## Bounded adversarial self-review — implementation, not independent sign-off
+
+Reviewed the current draft against direct/indirect network access, one-provider
+log omission, cross-provider block disagreement, duplicate native launches,
+intra-block cursor continuation, reorgs, late selection, late or forged seal,
+missing entry and cost evidence, and accidental signer/wallet authority.
+
+The independent provider-log agreement, exact canonical factory code proof,
+strict token uniqueness and partial-block cursor revalidation were implemented
+and added to the fixture suite. The inherited historical process escape was
+removed without granting generic rule exceptions; archival evidence remains
+referenced by its original reviewed commit. This is a **self-review**, not
+an independent external security review.
+
+**Activation-blocking work outside this draft remains:** canonical externally
+attested activation identity and source-tree ancestry; an actual append-only
+immutable release publisher and separate GitHub API asset verifier; verified
+prospective polling/catch-up reliability under the five-minute deadline;
+proven archive-state availability; and a conservative complete-path cost
+model. Until those gates pass, every measurement has no promotion authority,
+and unattended spending is forbidden. A separate independent hostile review
+of the exact implementation is still required.
