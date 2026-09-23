@@ -22,6 +22,8 @@ const allowedExactFiles = new Set([
   'docs/evidence/pons-s0-real-cohort-v1/SHA256SUMS',
   'docs/evidence/pons-s0-real-cohort-v1/features.jsonl',
   'docs/evidence/pons-s0-real-cohort-v1/outcomes.jsonl',
+  // Pinned, read-only archive RPC proxy used by the frozen 16-shard cohort materializer.
+  'scripts/pons-s0-rpc-proxy.py',
 ]);
 const skippedDirs = new Set(['.git', 'node_modules', 'dist']);
 
