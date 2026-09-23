@@ -39,9 +39,8 @@ The frozen pilot enrolls the earliest 96 native-pair Pons launches or those
 within the first 24h. If all 96 are selected only at the end, the earliest
 five-minute outcomes may already be known. The collector therefore selects at
 most **four native launches per batch**, scanning no more than **16 confirmed
-blocks per invocation**. Each scan emits its event order, ignored non-native
-identity, cursor (including log index if interrupted in a block), block hashes,
-predecessor digest and a pending batch digest. It refuses stale selections
+blocks per invocation**. Each scan emits its event order, a digest of the complete factory event set (including non-native pairs), cursor (including log index if interrupted in a block), block hashes,
+predecessor digest and a pending batch digest. Both the pinned official Robinhood log source and an independent archive-state provider must agree on **every factory event** and the canonical end-block hash, with an explicit factory-runtime check; missing or disagreed logs fail closed. It refuses stale selections
 where the earliest new primary outcomes already exist. Every batch, including
 an empty checkpoint, must be externally sealed before the next invocation.
 

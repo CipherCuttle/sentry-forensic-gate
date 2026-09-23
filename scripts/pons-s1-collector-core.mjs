@@ -127,6 +127,17 @@ export function normalizeLog(log, factory) {
 }
 const cmp = (a, b) => BigInt(a.blockNumber) < BigInt(b.blockNumber) ? -1 :
   BigInt(a.blockNumber) > BigInt(b.blockNumber) ? 1 : a.logIndex - b.logIndex;
+export function assertProviderParity(officialLogs, archiveLogs, factory) {
+  const norm = logs => logs.map(log => normalizeLog(log, factory)).sort(cmp);
+  const first = norm(officialLogs), second = norm(archiveLogs);
+  assert.ok(first.every((item, i) => i === 0 || item.eventKey !== first[i - 1].eventKey),
+    'PONS_S1_OFFICIAL_DUPLICATE_LOG');
+  assert.ok(second.every((item, i) => i === 0 || item.eventKey !== second[i - 1].eventKey),
+    'PONS_S1_ARCHIVE_DUPLICATE_LOG');
+  assert.deepEqual(second, first, 'PONS_S1_INDEPENDENT_PROVIDER_LOG_DISAGREEMENT');
+  return { logs: officialLogs, count: first.length, allFactoryLogsDigest: digest(first),
+    nonNativeCount: first.filter(item => !item.nativePair).length };
+}
 export function checkBatch(batch) {
   assert.equal(batch.schemaVersion, BATCH_SCHEMA);
   assert.equal(batch.phase, 'PENDING_EXTERNAL_IMMUTABLE_SEAL');
@@ -135,6 +146,10 @@ export function checkBatch(batch) {
   assert.ok(batch.newEvents.length <= MAX_NATIVE_PER_BATCH);
   assert.deepEqual(batch.newEvents, [...batch.newEvents].sort(cmp), 'PONS_S1_BATCH_UNSORTED');
   assert.ok(new Set(batch.newEvents.map(e => e.eventKey)).size === batch.newEvents.length);
+  assert.ok(new Set(batch.enrolledTokenAddresses ?? []).size === batch.selectionCount,
+    'PONS_S1_DUPLICATE_ENROLLED_TOKEN');
+  assert.equal(batch.enrolledEventKeys.length, batch.selectionCount);
+  assert.equal(batch.enrolledTokenAddresses.length, batch.selectionCount);
   const { batchDigest, ...payload } = batch;
   assert.equal(batchDigest, digest(payload), 'PONS_S1_BATCH_DIGEST_MISMATCH');
   return batchDigest;
@@ -202,7 +217,10 @@ export function freezeNextBatch(input) {
   }
   assert.equal(cursor.blockNumber, String(from));
   const older = new Set(prior?.batch.enrolledEventKeys ?? []);
+  const olderTokens = new Set(prior?.batch.enrolledTokenAddresses ?? []);
   const enrolled = [...(prior?.batch.enrolledEventKeys ?? [])];
+  const enrolledTokens = [...(prior?.batch.enrolledTokenAddresses ?? []];
+  assert.equal(enrolled.length, enrolledTokens.length, 'PONS_S1_PREVIOUS_IDENTITY_COUNT_MISMATCH');
   const newEvents = [];
   const limit = Math.min(MAX_NATIVE_PER_BATCH, 96 - enrolled.length);
   let lastProcessed = null, scannedNative = 0, stoppedForWindow = false;
@@ -214,12 +232,15 @@ export function freezeNextBatch(input) {
     if (point.timestampMs >= windowEnd) { stoppedForWindow = true; break; }
     if (log.nativePair) {
       assert.ok(!older.has(log.eventKey), 'PONS_S1_PREVIOUS_EVENT_REPLAY');
+      assert.ok(!olderTokens.has(log.token), 'PONS_S1_DUPLICATE_TOKEN_LAUNCH');
       if (point.timestampMs + FIVE_MINUTES_MS <= capturedAtMs ||
           point.timestampMs + FIVE_MINUTES_MS <= confirmedHead.timestampMs) {
         throw new Error('PONS_S1_SELECTION_TOO_LATE_FOR_FIVE_MINUTE_OUTCOME');
       }
       newEvents.push({ ...log, launchTimestampMs: point.timestampMs });
       enrolled.push(log.eventKey);
+      enrolledTokens.push(log.token);
+      olderTokens.add(log.token);
       scannedNative++;
     }
     lastProcessed = log;
@@ -257,6 +278,10 @@ export function freezeNextBatch(input) {
     capturedAtMs,
     newEvents,
     enrolledEventKeys: enrolled,
+    enrolledTokenAddresses: enrolledTokens,
+    observedFactoryEventCount: normalized.length,
+    rawFactoryEventDigest: digest(normalized),
+    nonNativeEventCount: normalized.filter(log => !log.nativePair).length,
     selectionCount: enrolled.length,
     scannedNativeCount: scannedNative,
     nextCursor,

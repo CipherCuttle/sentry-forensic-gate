@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, open, readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { createPublicClient, defineChain, http } from 'viem';
+import { createPublicClient, defineChain, http, keccak256 } from 'viem';
 import {
   CURRENT_PONS_V2_AUTHORITY,
   CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
@@ -23,7 +23,7 @@ import {
 } from '../dist/index.js';
 import {
   MAX_SCAN_BLOCKS, assertActivated, assertExternalSeal, assertOrigin,
-  canonical, checkBatch, digest, freezeNextBatch, sha256Bytes
+  assertProviderParity, canonical, checkBatch, digest, freezeNextBatch, sha256Bytes
 } from './pons-s1-collector-core.mjs';
 
 const ROOT = new URL('../', import.meta.url);
@@ -52,6 +52,10 @@ const checkoutSha = (await readFile(new URL('../.git/HEAD', import.meta.url), 'u
 assert.match(checkoutSha, /^[0-9a-f]{40}$/i, 'PONS_S1_CANONICAL_CHECKOUT_MUST_BE_DETACHED');
 const scriptSha = hexSha256(await readFile(new URL(import.meta.url)));
 assert.equal(activation.reviewedSourceCommit, EXPECTED_SOURCE);
+assert.equal(String(activation.factory).toLowerCase(),
+  CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase(), 'PONS_S1_FACTORY_PIN_MISMATCH');
+assert.equal(spec.prospective.launchAuthority,
+  CURRENT_PONS_V2_AUTHORITY.authorityId, 'PONS_S1_AUTHORITY_ID_MISMATCH');
 const ctx = assertActivated(spec, activation,
   { collectorImplementationSha: scriptSha, checkoutSha });
 assert.ok(BigInt(activation.originFromBlock) > 69066751n,
@@ -60,6 +64,12 @@ assert.equal(process.env.PONS_S1_COLLECTION_MODE, 'READ_ONLY_EXPLICIT_CANONICAL_
   'PONS_S1_COLLECTION_MODE_DISABLED');
 assert.ok(process.env.PONS_S1_RPC_URL?.startsWith('https://'),
   'PONS_S1_EXPLICIT_READ_ONLY_RPC_REQUIRED');
+assert.equal(process.env.PONS_S1_DISCOVERY_RPC_URL,
+  'https://rpc.mainnet.chain.robinhood.com',
+  'PONS_S1_OFFICIAL_DISCOVERY_RPC_REQUIRED');
+assert.notEqual(process.env.PONS_S1_RPC_URL,
+  process.env.PONS_S1_DISCOVERY_RPC_URL,
+  'PONS_S1_INDEPENDENT_ARCHIVE_SOURCE_REQUIRED');
 assert.ok(process.env.PONS_S1_OUTPUT_FILE, 'PONS_S1_OUTPUT_FILE_REQUIRED');
 
 const chain = defineChain({
@@ -67,11 +77,17 @@ const chain = defineChain({
   nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},
   rpcUrls:{default:{http:[process.env.PONS_S1_RPC_URL]}}
 });
+const discovery = createPublicClient({
+  chain,transport:http(process.env.PONS_S1_DISCOVERY_RPC_URL,
+    {retryCount:2,retryDelay:1000,timeout:30000})
+});
 const client = createPublicClient({
   chain, transport:http(process.env.PONS_S1_RPC_URL,
     {retryCount:2,retryDelay:1000,timeout:30000})
 });
 assert.equal(await client.getChainId(),4663,'PONS_S1_RPC_CHAIN_ID_MISMATCH');
+assert.equal(await discovery.getChainId(),4663,
+  'PONS_S1_DISCOVERY_CHAIN_ID_MISMATCH');
 const rpcHead = await client.getBlockNumber();
 assert.ok(rpcHead >= 12n,'PONS_S1_RPC_HEAD_BEFORE_CONFIRMATIONS');
 const confirmedBlock = rpcHead - 12n;
@@ -134,10 +150,27 @@ if (mode==='enroll') {
   await launch.assertAuthority(to);
   // Strict event decoding selects the exact Pons factory; never use token
   // names, market outcomes, liquidity or later price to determine membership.
-  const rawLogs=await client.getLogs({
+  const readFactoryLogs = source => source.getLogs({
     address:CURRENT_PONS_V2_AUTHORITY.factory,
     event:ponsV2TokenLaunchedEvent,fromBlock:from,toBlock:to,strict:true
   });
+  const [officialLogs,archiveLogs] = await Promise.all([
+    readFactoryLogs(discovery),readFactoryLogs(client)
+  ]);
+  const parity=assertProviderParity(officialLogs,archiveLogs,activation.factory);
+  const rawLogs=parity.logs;
+  const [officialHead,officialEnd,officialRuntime] = await Promise.all([
+    discovery.getBlockNumber(),
+    discovery.getBlock({blockNumber:to}),
+    discovery.getBytecode({address:CURRENT_PONS_V2_AUTHORITY.factory,blockNumber:to})
+  ]);
+  assert.ok(officialHead>=confirmedBlock,'PONS_S1_DISCOVERY_BEHIND_CONFIRMED_HEAD');
+  assert.equal(keccak256(officialRuntime??'0x').toLowerCase(),
+    CURRENT_PONS_V2_AUTHORITY.factoryRuntimeCodeHash.toLowerCase(),
+    'PONS_S1_OFFICIAL_FACTORY_RUNTIME_DRIFT');
+  const archiveEnd=await getPoint(to);
+  assert.equal(officialEnd.hash?.toLowerCase(),archiveEnd.hash,
+    'PONS_S1_INDEPENDENT_END_BLOCK_HASH_DISAGREEMENT');
   assert.ok(rawLogs.length<=4096,'PONS_S1_LOG_CHUNK_TOO_LARGE_FAIL_CLOSED');
   const blockSet=new Set([String(to),...rawLogs.map(log=>String(log.blockNumber))]);
   const blocks={};
@@ -153,6 +186,8 @@ if (mode==='enroll') {
   const endRecheck=await getPoint(to);
   assert.equal(endRecheck.hash,result.scannedThroughBlockHash,
     'PONS_S1_REORG_BETWEEN_LOGS_AND_FREEZE');
+  assert.equal(result.rawFactoryEventDigest,parity.allFactoryLogsDigest);
+  assert.equal(result.observedFactoryEventCount,parity.count);
   checkBatch(result);
   await persistExclusive(process.env.PONS_S1_OUTPUT_FILE,result);
 }

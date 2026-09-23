@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   ACTIVATION_SCHEMA, BATCH_SCHEMA, SEAL_SCHEMA, assertActivated, assertExternalSeal,
-  assertFrozenSpec, checkBatch, digest, freezeNextBatch, normalizeLog
+  assertFrozenSpec, checkBatch, digest, freezeNextBatch, normalizeLog, assertProviderParity
 } from './pons-s1-collector-core.mjs';
 import { readFile } from 'node:fs/promises';
 
@@ -34,7 +34,7 @@ const point=(n,ms,hashPrefix)=>({number:String(n),timestampMs:ms,hash:h(hashPref
 const origin={block:point(100,originMs,'3'),predecessor:point(99,originMs-3000,'2')};
 const raw=(n,index,pair='0')=>({
   blockNumber:BigInt(n),blockHash:h('3'),transactionHash:'0x'+String(index+1).padStart(64,'0'),
-  logIndex:index,removed:false,args:{token:a('4'),curve:a('5'),deployer:a('6'),
+  logIndex:index,removed:false,args:{token:a(String.fromCharCode(97+index)),curve:a('5'),deployer:a('6'),
   pairToken:a(pair),launchConfigId:1n,graduationThreshold:1000n}
 });
 const common={spec,activation,origin,previous:null,scanFrom:100n,scanThrough:101n,
@@ -42,10 +42,16 @@ const common={spec,activation,origin,previous:null,scanFrom:100n,scanThrough:101
   blocks:{'100':point(100,originMs,'3'),'101':point(101,originMs+2000,'8')},
   logs:[raw(100,2),raw(100,1,'1'),raw(100,3)],
   capturedAtMs:originMs+60_000};
+assert.equal(assertProviderParity(common.logs,[...common.logs].reverse(),activation.factory).count,3);
+assert.throws(()=>assertProviderParity(common.logs,common.logs.slice(0,2),activation.factory),
+  /PONS_S1_INDEPENDENT_PROVIDER_LOG_DISAGREEMENT/);
 const first=freezeNextBatch(common);
 checkBatch(first);
 assert.equal(first.schemaVersion,BATCH_SCHEMA);
 assert.equal(first.selectionCount,2);
+assert.equal(first.observedFactoryEventCount,3);
+assert.equal(first.nonNativeEventCount,1);
+assert.equal(first.enrolledTokenAddresses.length,2);
 assert.deepEqual(first.newEvents.map(x=>x.logIndex),[2,3]);
 assert.equal(first.nextCursor.blockNumber,'102');
 assert.equal(first.nextCursor.logIndex,-1);
@@ -94,4 +100,4 @@ assert.throws(()=>checkBatch(forged));
 assert.throws(()=>normalizeLog({...raw(100,1),removed:true},activation.factory),
 /PONS_S1_REMOVED_REORG_LOG/);
 console.log(JSON.stringify({verdict:'PONS_S1_OFFLINE_COLLECTOR_CORE_PASS',
-  cases:18, originalS0Unchanged:true, realCollection:false, liveAuthority:false}));
+  cases:23, originalS0Unchanged:true, realCollection:false, liveAuthority:false}));
