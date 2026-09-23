@@ -1,0 +1,42 @@
+name: Pons S1 Prospective Collector Offline Qualification
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-prospective-collector-v0.yml'
+      - 'scripts/pons-s1-collector-core.mjs'
+      - 'scripts/pons-s1-collector-check.mjs'
+      - 'scripts/pons-s1-prospective-collector.mjs'
+      - 'scripts/pons-s0-cohort-lib.mjs'
+      - 'scripts/pons-s0-real-cohort-materialize.mjs'
+      - 'docs/PONS_S1_PROSPECTIVE_COLLECTOR_V0.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PONS_E0_LIVE: ''
+      PONS_E0_PRIVATE_KEY: ''
+      PONS_E2_LIVE: ''
+      PONS_E2_PRIVATE_KEY: ''
+      PONS_E3B_LIVE: ''
+      PONS_E3B_PRIVATE_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Test fail-closed prospective selection and sealing boundaries
+        run: node scripts/pons-s1-collector-check.mjs
+      - name: Check syntax of quarantined historical materializers
+        run: |
+          node --check scripts/pons-s0-cohort-lib.mjs
+          node --check scripts/pons-s0-real-cohort-materialize.mjs
+      - name: Guard collector against active execution
+        run: |
+          set -euo pipefail
+          test ! -e authority/pons-s1-activation-v0.json
+          ! grep -E 'privateKey|sendRawTransaction|writeContract|walletClient|broadcastExact' scripts/pons-s1-prospective-collector.mjs
+          test -z "$PONS_E0_LIVE$PONS_E0_PRIVATE_KEY$PONS_E2_LIVE$PONS_E2_PRIVATE_KEY$PONS_E3B_LIVE$PONS_E3B_PRIVATE_KEY"
