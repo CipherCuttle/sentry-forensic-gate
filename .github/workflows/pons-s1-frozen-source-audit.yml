@@ -1,0 +1,24 @@
+name: Pons S1 Frozen S0 Source Audit
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-frozen-source-audit.yml'
+      - 'docs/PONS_S1_FIVE_MINUTE_FEASIBILITY_PREREG_V0.md'
+      - 'docs/experiments/pons-s1-five-minute-feasibility-v0.json'
+      - 'docs/evidence/pons-s0-real-cohort-v1/**'
+      - 'scripts/pons-s1-feasibility-check.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  immutable-s0-source-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify inert S1 proposal against immutable S0
+        run: node scripts/pons-s1-feasibility-check.mjs
