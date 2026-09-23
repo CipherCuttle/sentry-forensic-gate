@@ -56,7 +56,7 @@ assert.deepEqual(first.newEvents.map(x=>x.logIndex),[2,3]);
 assert.equal(first.nextCursor.blockNumber,'102');
 assert.equal(first.nextCursor.logIndex,-1);
 assert.ok(first.newEvents.every(x=>x.nativePair));
-assert.throws(()=>checkBatch({...first,selectionCount:1}), /PONS_S1_BATCH_DIGEST_MISMATCH/);
+assert.throws(()=>checkBatch({...first,selectionCount:1}), /PONS_S1_DUPLICATE_ENROLLED_TOKEN/);
 assert.throws(()=>freezeNextBatch({...common,logs:[raw(100,2),raw(100,2)]}),/PONS_S1_DUPLICATE_EVENT/);
 assert.throws(()=>freezeNextBatch({...common,logs:[{...raw(100,3),blockHash:h('4')}]}),
  /PONS_S1_LOG_REORG_OR_UNPROVED_HASH/);
@@ -94,10 +94,33 @@ assert.throws(()=>freezeNextBatch({...common,previous:{batch:first,seal},scanFro
  scanThrough:103n,confirmedHead:{...common.confirmedHead,blockNumber:103n,
  rpcHeadBlock:115n,hash:h('b')},blocks:{'103':point(103,originMs+6000,'b')},logs:[]}),
 /PONS_S1_CURSOR_REWIND_OR_GAP/);
+// A capped batch can stop in the middle of one block. The next invocation
+// must re-read that exact block and resume at the recorded log index.
+const five=[1,2,3,4,5].map(i=>raw(100,i));
+const sameBlock={...common,scanThrough:100n,
+  confirmedHead:{...common.confirmedHead,blockNumber:100n,rpcHeadBlock:112n,
+    timestampMs:originMs,hash:h('3')},
+  blocks:{'100':point(100,originMs,'3')},
+  logs:five};
+const capped=freezeNextBatch(sameBlock);
+assert.equal(capped.selectionCount,4);
+assert.equal(capped.nextCursor.blockNumber,'100');
+assert.equal(capped.nextCursor.logIndex,4);
+const capSeal={...seal,batchDigest:capped.batchDigest,
+ assetSha256:createHash('sha256').update(Buffer.from(JSON.stringify(
+   (await import('./pons-s1-collector-core.mjs')).canonical(capped))+'\n')).digest('hex')};
+const resumed=freezeNextBatch({...sameBlock,previous:{batch:capped,seal:capSeal},
+ capturedAtMs:originMs+120_000});
+assert.equal(resumed.selectionCount,5);
+assert.equal(resumed.newEvents[0].logIndex,5);
+assert.equal(resumed.nextCursor.blockNumber,'101');
+assert.throws(()=>freezeNextBatch({...sameBlock,previous:{batch:capped,seal:capSeal},
+ logs:five.slice(4)}),/PONS_S1_RESUME_CURSOR_MISSING_FROM_CANONICAL_LOGS/);
+
 const forged=structuredClone(second);
 forged.newEvents.push({eventKey:'new'});
 assert.throws(()=>checkBatch(forged));
 assert.throws(()=>normalizeLog({...raw(100,1),removed:true},activation.factory),
 /PONS_S1_REMOVED_REORG_LOG/);
 console.log(JSON.stringify({verdict:'PONS_S1_OFFLINE_COLLECTOR_CORE_PASS',
-  cases:23, originalS0Unchanged:true, realCollection:false, liveAuthority:false}));
+  cases:29, originalS0Unchanged:true, realCollection:false, liveAuthority:false}));
