@@ -31,7 +31,7 @@ assert.throws(() => assertActivated(spec,{...activation,originEarliestTimestampM
 assert.throws(() => assertActivated(spec,activation,{...context,checkoutSha:'b'.repeat(40)}),
   /PONS_S1_NOT_CANONICAL_ACTIVATION_SHA/);
 const point=(n,ms,hashPrefix)=>({number:String(n),timestampMs:ms,hash:h(hashPrefix)});
-const origin={block:point(100,originMs,'1'),predecessor:point(99,originMs-2000,'2')};
+const origin={block:point(100,originMs,'3'),predecessor:point(99,originMs-3000,'2')};
 const raw=(n,index,pair='0')=>({
   blockNumber:BigInt(n),blockHash:h('3'),transactionHash:'0x'+String(index+1).padStart(64,'0'),
   logIndex:index,removed:false,args:{token:a('4'),curve:a('5'),deployer:a('6'),
@@ -84,7 +84,9 @@ assert.equal(second.batchIndex,1);
 assert.equal(second.previousBatchDigest,first.batchDigest);
 assert.equal(second.selectionCount,2);
 assert.equal(second.nextCursor.blockNumber,'103');
-assert.throws(()=>freezeNextBatch({...common,previous:{batch:first,seal},scanFrom:103n}),
+assert.throws(()=>freezeNextBatch({...common,previous:{batch:first,seal},scanFrom:103n,
+ scanThrough:103n,confirmedHead:{...common.confirmedHead,blockNumber:103n,
+ rpcHeadBlock:115n,hash:h('b')},blocks:{'103':point(103,originMs+6000,'b')},logs:[]}),
 /PONS_S1_CURSOR_REWIND_OR_GAP/);
 const forged=structuredClone(second);
 forged.newEvents.push({eventKey:'new'});

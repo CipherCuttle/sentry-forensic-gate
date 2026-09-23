@@ -5,8 +5,8 @@
 This is a **manual, read-only implementation on a stacked draft branch**.
 It does **not** activate a prospective campaign, schedule collection, issue
 authority, sign, broadcast, merge, promote a model or move funds. The canonical
-activation file \`authority/pons-s1-activation-v0.json\` intentionally does
-not exist and the S1 prereg remains \`DRAFT_REVIEW_ONLY_NOT_ACTIVE\`.
+activation file `authority/pons-s1-activation-v0.json` intentionally does
+not exist and the S1 prereg remains `DRAFT_REVIEW_ONLY_NOT_ACTIVE`.
 Both must change through a separately reviewed future canonical activation;
 CLI flags alone cannot activate this version.
 
@@ -16,17 +16,17 @@ is historical context and is forbidden as S1 prospective validation.
 
 ## Code ownership / reuse
 
-- \`scripts/pons-s1-collector-core.mjs\`: deterministic, dependency-light
+- `scripts/pons-s1-collector-core.mjs`: deterministic, dependency-light
   canonical batch selection, 12-confirmation and reorg guards, chained cursor,
   strict origin proof, chronology and outcome-availability seal gates.
-- \`scripts/pons-s1-prospective-collector.mjs\`: a read-only viem public client
+- `scripts/pons-s1-prospective-collector.mjs`: a read-only viem public client
   and the existing reviewed Pons launch, USD, baseline and forward-outcome
   adapters. Its only write is a new exclusive/fsynced local JSON file.
-- \`scripts/pons-s1-collector-check.mjs\`: fixture-only negative-path
+- `scripts/pons-s1-collector-check.mjs`: fixture-only negative-path
   regressions. It uses no provider and makes no network call.
-- \`.github/workflows/pons-s1-prospective-collector-v0.yml\`: PR qualification
-  only, \`contents: read\`, no schedule and no manual collection.
-- \`scripts/pons-s0-cohort-lib.mjs\` and the superseded single-process historical
+- `.github/workflows/pons-s1-prospective-collector-v0.yml`: PR qualification
+  only, `contents: read`, no schedule and no manual collection.
+- `scripts/pons-s0-cohort-lib.mjs` and the superseded single-process historical
   materializer replace process spawning with an exact detached Git HEAD read;
   they still require the original PR-A source SHA. This unblocks CI without
   suppressing ast-grep or modifying the immutable historical 2026-09-22
@@ -52,10 +52,10 @@ provider timeouts or missing RPC data make a run late, **safe stop**.
 
 ## Two distinct CLI operations after future activation
 
-\`enroll\` uses only pinned factory events and canonical timestamps. It
+`enroll` uses only pinned factory events and canonical timestamps. It
 requires 12-block-confirmed head state and revalidates the exact factory
 runtime via the reviewed launch adapter. Output is a fresh immutable-intended,
-local-only \`PENDING_EXTERNAL_IMMUTABLE_SEAL\` JSON document. No outcome RPC
+local-only `PENDING_EXTERNAL_IMMUTABLE_SEAL` JSON document. No outcome RPC
 operation is called in this mode.
 
 A separately authorized **canonical** release publisher must anchor
@@ -68,7 +68,7 @@ but self-reported JSON metadata alone is **not independent external
 attestation**; an activation workflow must verify against GitHub's API. A
 GitHub-hosted PR workflow must not carry release-write permissions.
 
-\`measure\` is also behind the missing activation file. It requires a batch
+`measure` is also behind the missing activation file. It requires a batch
 and seal, re-proves block hashes, materializes the reviewed Pons launch,
 reconstructs the launch+2 baseline on the exact historical block, applies
 frozen C0/C1 deterministic comparators with missing creator history explicit,
@@ -84,7 +84,7 @@ non-entry and pending outcomes. Reconstructed full execution costs,
 sequential buy/sell price impact, live-wallet persona parity and
 quote-to-inclusion latency remain **UNVERIFIED** unless separately evidenced.
 No economic winner, profitable-strategy or model artifact is produced.
-\`measure\` marks its own seal verification as non-independent until a later
+`measure` marks its own seal verification as non-independent until a later
 canonical read-only GitHub API witness verifies it.
 
 ## Future activation preflight — NOT DONE in this PR
@@ -92,12 +92,12 @@ canonical read-only GitHub API witness verifies it.
 1. Independently review this exact collector SHA and the frozen S1 contract.
 2. On a separately authorized canonical activation commit, install a
    content-addressed activation receipt identifying the exact source,
-   collector file SHA-256, merged-at UTC time and origin \`merge + 6h\`.
+   collector file SHA-256, merged-at UTC time and origin `merge + 6h`.
 3. Independently revalidate the canonical checkout, reviewed source code
    subtree, pinned Pons factory, archive RPC capability, immutable release
    storage and no-backfill polling reliability **before** activation.
 4. Use a controlled external append-only release writer and an independently
-   verified release witness between \`enroll\` and \`measure\`. Do not place
+   verified release witness between `enroll` and `measure`. Do not place
    GitHub release write permission in the draft PR workflow.
 5. The pilot remains exploratory until its predeclared full denominator,
    cost and exit-feasibility gates close. The live execution grant, autonomous
@@ -105,8 +105,8 @@ canonical read-only GitHub API witness verifies it.
 
 ## Verification
 
-\`node scripts/pons-s1-collector-check.mjs\` is fixture-only; then
-\`pnpm test\` on the exact PR head. One bounded hostile review should focus on
+`node scripts/pons-s1-collector-check.mjs` is fixture-only; then
+`pnpm test` on the exact PR head. One bounded hostile review should focus on
 the activation receipt's trust root, immutable publication race, intra-block
 cursor continuity, archived point-in-time state, missing-data denominators,
 and synthetic/real sequential execution divergence.

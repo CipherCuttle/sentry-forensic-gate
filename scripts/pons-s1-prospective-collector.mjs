@@ -54,8 +54,8 @@ const scriptSha = hexSha256(await readFile(new URL(import.meta.url)));
 assert.equal(activation.reviewedSourceCommit, EXPECTED_SOURCE);
 const ctx = assertActivated(spec, activation,
   { collectorImplementationSha: scriptSha, checkoutSha });
-assert.ok(BigInt(activation.originFromBlock) > BigInt(spec.source.immutableS0EvidenceCommit ?
-  69066751 : 69066751), 'PONS_S1_PROSPECTIVE_ORIGIN_NOT_NEW');
+assert.ok(BigInt(activation.originFromBlock) > 69066751n,
+  'PONS_S1_PROSPECTIVE_ORIGIN_NOT_NEW');
 assert.equal(process.env.PONS_S1_COLLECTION_MODE, 'READ_ONLY_EXPLICIT_CANONICAL_ACTIVATION',
   'PONS_S1_COLLECTION_MODE_DISABLED');
 assert.ok(process.env.PONS_S1_RPC_URL?.startsWith('https://'),

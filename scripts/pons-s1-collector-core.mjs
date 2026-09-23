@@ -179,6 +179,10 @@ export function freezeNextBatch(input) {
     blockHashAt.set(block, hash(point.hash));
   }
   assert.ok(blockHashAt.has(String(through)), 'PONS_S1_SCAN_END_HASH_MISSING');
+  if (blockHashAt.has(String(originNumber))) {
+    assert.equal(blockHashAt.get(String(originNumber)), hash(origin.block.hash),
+      'PONS_S1_ORIGIN_BLOCK_HASH_MISMATCH');
+  }
   let lastKey = '';
   for (const log of normalized) {
     const bn = BigInt(log.blockNumber);
