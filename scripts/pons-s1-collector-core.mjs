@@ -161,7 +161,7 @@ export function freezeNextBatch(input) {
     assert.equal(prior.seal?.schemaVersion, SEAL_SCHEMA, 'PONS_S1_PREVIOUS_BATCH_UNSEALED');
     assert.equal(prior.seal.batchDigest, state.batchDigest);
     assert.equal(prior.seal.immutable, true);
-    assert.equal(prior.seal.externalVerification, 'INDEPENDENT_GITHUB_RELEASE_API');
+    assertExternalSeal(prior.batch, prior.seal);
     assert.equal(state.specSha256, specSha256);
     assert.equal(state.activationDigest, digest(activation));
     assert.equal(from.toString(), state.nextCursor.blockNumber, 'PONS_S1_CURSOR_REWIND_OR_GAP');
@@ -191,6 +191,11 @@ export function freezeNextBatch(input) {
     lastKey = log.eventKey;
   }
   const cursor = prior?.batch.nextCursor ?? { blockNumber: String(from), logIndex: -1 };
+  if (prior && cursor.logIndex >= 0) {
+    assert.ok(normalized.some(log => log.blockNumber === cursor.blockNumber &&
+      log.logIndex === cursor.logIndex && log.eventKey === cursor.eventKey),
+      'PONS_S1_RESUME_CURSOR_MISSING_FROM_CANONICAL_LOGS');
+  }
   assert.equal(cursor.blockNumber, String(from));
   const older = new Set(prior?.batch.enrolledEventKeys ?? []);
   const enrolled = [...(prior?.batch.enrolledEventKeys ?? [])];
@@ -218,12 +223,13 @@ export function freezeNextBatch(input) {
   }
   const targetCountReached = enrolled.length === 96;
   const endPoint = blocks[String(through)];
-  const windowClosed = stoppedForWindow ||
-    (endPoint.timestampMs >= windowEnd && !targetCountReached);
   const stoppedMidRange = lastProcessed !== null &&
     newEvents.length === limit && limit > 0 && !targetCountReached;
+  const windowClosed = stoppedForWindow ||
+    (!stoppedMidRange && endPoint.timestampMs >= windowEnd && !targetCountReached);
   const nextCursor = stoppedMidRange ?
-    { blockNumber: lastProcessed.blockNumber, logIndex: lastProcessed.logIndex } :
+    { blockNumber: lastProcessed.blockNumber, logIndex: lastProcessed.logIndex,
+      eventKey: lastProcessed.eventKey } :
     { blockNumber: String(through + 1n), logIndex: -1 };
   if (prior && lastProcessed === null && !windowClosed &&
       prior.batch.nextCursor.logIndex >= 0) {
