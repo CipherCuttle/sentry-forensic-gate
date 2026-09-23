@@ -79,10 +79,13 @@ const actual = {
   verifiedFullCostCount: outcomes.filter(row => row.costProjection?.status === 'COMPLETE').length,
   allOutcomesHorizonMs: 86400000
 };
-assertHistoricalFingerprint(actual, spec.historicalS0);
+// QntyLab owns the screen verdict; it cannot be inferred from SENTRY outcome rows.
+const { conclusion: recordedExternalScreenConclusion, ...expectedS0Counts } = spec.historicalS0;
+assert.equal(recordedExternalScreenConclusion, 'NO_VALID_EMBARGOED_FOLDS_EDGE_UNPROVEN');
+assertHistoricalFingerprint(actual, expectedS0Counts);
 // Negative test: in-memory tampering must be rejected. No evidence file changes.
 assert.throws(
-  () => assertHistoricalFingerprint({ ...actual, unverifiedBaselines: actual.unverifiedBaselines - 1 }, spec.historicalS0),
+  () => assertHistoricalFingerprint({ ...actual, unverifiedBaselines: actual.unverifiedBaselines - 1 }, expectedS0Counts),
   /historical fingerprint drift/
 );
 console.log(JSON.stringify({
