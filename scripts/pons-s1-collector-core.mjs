@@ -219,7 +219,7 @@ export function freezeNextBatch(input) {
   const older = new Set(prior?.batch.enrolledEventKeys ?? []);
   const olderTokens = new Set(prior?.batch.enrolledTokenAddresses ?? []);
   const enrolled = [...(prior?.batch.enrolledEventKeys ?? [])];
-  const enrolledTokens = [...(prior?.batch.enrolledTokenAddresses ?? []];
+  const enrolledTokens = [...(prior?.batch.enrolledTokenAddresses ?? [])];
   assert.equal(enrolled.length, enrolledTokens.length, 'PONS_S1_PREVIOUS_IDENTITY_COUNT_MISMATCH');
   const newEvents = [];
   const limit = Math.min(MAX_NATIVE_PER_BATCH, 96 - enrolled.length);
