@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "PONS_S1_FIVE_MINUTE_FEASIBILITY_PREREG_V0",
+  "state": "DRAFT_REVIEW_ONLY_NOT_ACTIVE",
+  "hypothesisOrigin": "REGISTERED_AFTER_INSPECTION_OF_FAILED_S0_24H_OUTCOMES",
+  "source": {
+    "evidenceRepository": "CipherCuttle/sentry-forensic-gate",
+    "immutableS0EvidenceCommit": "d711943a25693baee504d2bfe89ae398b75a690a",
+    "targetBlindReviewCommit": "0adda7e83ada7d7283fdc015df0b7a3591bffef3",
+    "reviewedExportSourceCommit": "493c85b8d84565cedf6e936063549edfa02edf3a",
+    "scientificResult": "https://github.com/CipherCuttle/QntyLab/blob/agent/pons-s0-real-screen-v1/experiments/research/pons_s0_real_screen_v1/scientific-verdict.md",
+    "s0OriginEvidenceDigest": "31dd06dca9555954c2ca4546c8e75a9f3a2e9db33062c56076928b16919761ce",
+    "status": "HISTORICAL_CONTEXT_ONLY_NEVER_REUSED_AS_CONFIRMATORY_S1"
+  },
+  "historicalS0": {
+    "selectedLaunches": 96,
+    "featurePackets": 96,
+    "complete24hOutcomes": 57,
+    "unverifiedBaselines": 39,
+    "outcomeClassCounts": {
+      "CATASTROPHIC_LOSS": 29,
+      "EXIT_FAILURE": 24,
+      "LIQUIDITY_COLLAPSE": 3,
+      "NORMAL_LOSS": 1,
+      "NORMAL_WIN": 0
+    },
+    "outcomeReasonCounts": {
+      "NONE": 30,
+      "PONS_V2_CURVE_INSUFFICIENT_REAL_QUOTE": 27
+    },
+    "executableExitCount": 30,
+    "nonExecutableExitCount": 27,
+    "verifiedFullCostCount": 0,
+    "allOutcomesHorizonMs": 86400000,
+    "conclusion": "NO_VALID_EMBARGOED_FOLDS_EDGE_UNPROVEN"
+  },
+  "prospective": {
+    "studyId": "PONS_S1_EARLY_EXIT_FEASIBILITY_PILOT_V0",
+    "chainId": 4663,
+    "launchAuthority": "ROBINHOOD_PONS_V2_FACTORY_2026_08_03_R1",
+    "activation": "SEPARATE_FUTURE_EXPLICIT_REVIEW_AND_ACTIVATION_REQUIRED",
+    "origin": "FIRST_CONFIRMED_BLOCK_AT_OR_AFTER_CANONICAL_ACTIVATION_MERGE_UTC_PLUS_6_HOURS",
+    "forbiddenHistoricalReuse": true,
+    "windowHours": 24,
+    "maxUniqueNativePairLaunches": 96,
+    "enrollment": "FIRST_96_CANONICAL_NATIVE_PAIR_TOKENLAUNCHED_EVENTS_BY_BLOCK_AND_LOG_INDEX_OR_ALL_WITHIN_24H_WHICHEVER_FIRST",
+    "noOutcomeBasedSampling": true,
+    "noResamplingForMissingBaselines": true,
+    "decisionDelayBlocks": 2,
+    "confirmations": 12,
+    "entryNotionalUsdMicros": 1000000,
+    "mechanicalGate": "C0_BUY_EVERY_EXECUTABLE_AT_DECISION_BLOCK_WITH_BIDIRECTIONAL_INDEPENDENT_PROBE",
+    "shadowPersona": "FROZEN_REVIEWED_SENTRY_PONS_SHADOW_RECIPIENT_LIVE_WALLET_PARITY_UNVERIFIED",
+    "primaryExit": {
+      "horizonMs": 300000,
+      "anchor": "CANONICAL_LAUNCH_BLOCK_TIMESTAMP",
+      "action": "FULL_C0_HYPOTHETICAL_ACQUIRED_BALANCE_FIXED_EXIT",
+      "prohibitConditionalExitTiming": true,
+      "quoteToInclusionLag": "MEASURE_SEPARATELY_NEVER_ASSUME_ZERO"
+    },
+    "diagnosticHorizonMs": [
+      60000,
+      1800000,
+      7200000,
+      86400000
+    ],
+    "diagnosticsNotEligibleForPrimaryReranking": true,
+    "independentSameStateReverseIsNotSequentialPnL": true,
+    "comparator": "C1_FAST_VET_R1_ON_SAME_ENTRY_ANCHOR_AND_SAME_5M_EXIT",
+    "comparatorNonDivergence": "REPORT_NO_DISCRIMINATORY_COMPARISON",
+    "outcomeForRejectedAndUnverified": true,
+    "fullExecutionCostModel": "BOUNDED_OBSERVED_E0_GAS_USAGE_PLUS_HISTORICAL_GAS_PRICES_PLUS_APPROVAL_AND_EXIT_AND_SLIPPAGE_WITH_EXPLICIT_MODEL_RISK",
+    "costSemantics": "MODELED_NET_NOT_VERIFIED_REALIZED_PNL",
+    "unavailableCost": "UNKNOWN_NOT_ZERO",
+    "uncertainty": "NO_CLAIM_OF_PROFITABILITY_WITHOUT_REALIZED_EXPLICITLY_AUTHORIZED_VALIDATION",
+    "minimumPrimaryOutcomeCoverageBps": 8000,
+    "minimumConservativeCostCoverageBps": 8000,
+    "exitFeasibilityFloorBps": 9000,
+    "maxEvaluationBeforeMaturation": false,
+    "learningOrModelFitting": false,
+    "pilotSampleIsNotConfirmatory": true,
+    "stopLaw": "FREEZE_96_OR_24H;_WAIT_FOR_PREDECLARED_OUTCOMES;REPORT_EVEN_IF_INSUFFICIENT",
+    "decisionLaw": "IF_COVERAGE_OR_COST_FAIL_STOP;_IF_ALL_MODELED_NET_NONPOSITIVE_STOP_FOR_THIS_PILOT;_OTHERWISE_PROPOSE_SEPARATE_LARGER_PROSPECTIVE_TEST_NO_AUTOPROMOTION",
+    "primaryExitSuccessDenominator": "ALL_MECHANICALLY_C0_ADMISSIBLE_INCLUDING_UNKNOWN_OUTCOME",
+    "conservativeCostCoverageDenominator": "ALL_MECHANICALLY_C0_ADMISSIBLE_INCLUDING_UNKNOWN_OUTCOME_OR_EXIT",
+    "unverifiedExitTreatment": "DENOMINATOR_INCLUDED_NOT_PROVED_SUCCESS"
+  },
+  "authority": {
+    "dataCollectionAuthorized": false,
+    "executionAuthorized": false,
+    "liveMoneyAuthorized": false,
+    "signerAuthorized": false,
+    "broadcasterAuthorized": false,
+    "modelPromotionAuthorized": false,
+    "mergeAuthorized": false,
+    "unattendedOperationAuthorized": false
+  }
+}
