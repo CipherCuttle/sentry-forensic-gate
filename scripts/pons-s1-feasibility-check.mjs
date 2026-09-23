@@ -65,12 +65,14 @@ assert.ok(outcomes.every(row => row.horizonMs === 86400000), 'Unexpected histori
 assert.ok(outcomes.every(row => row.costProjection?.status === 'UNVERIFIED_EXECUTION_COST'), 'Misrepresented verified cost coverage');
 assert.equal(new Set(outcomes.map(row => row.launchId)).size, outcomes.length, 'Duplicate outcome launch');
 
+const outcomeClassCounts = countBy(outcomes, row => row.classification);
+outcomeClassCounts.NORMAL_WIN ??= 0; // A zero-count registered class is absent from raw rows, not unknown.
 const actual = {
   selectedLaunches: summary.selectedLaunchCount,
   featurePackets: features.length,
   complete24hOutcomes: outcomes.length,
   unverifiedBaselines: features.filter(row => row.baseline?.status === 'UNVERIFIED').length,
-  outcomeClassCounts: countBy(outcomes, row => row.classification),
+  outcomeClassCounts,
   outcomeReasonCounts: countBy(outcomes, row => row.reason),
   executableExitCount: outcomes.filter(row => row.exitExecutable === true).length,
   nonExecutableExitCount: outcomes.filter(row => row.exitExecutable === false).length,
