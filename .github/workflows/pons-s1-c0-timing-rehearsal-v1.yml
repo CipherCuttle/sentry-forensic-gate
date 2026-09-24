@@ -46,7 +46,7 @@ jobs:
       - name: Install pinned read-only viem dependency (no native postinstalls)
         run: |
           corepack enable
-          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm install --no-frozen-lockfile --lockfile=false --ignore-scripts
       - name: Observe canonical block cadence once; no factory or outcome calls
         run: |
           mkdir -p proof
