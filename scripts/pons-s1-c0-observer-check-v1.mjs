@@ -47,12 +47,15 @@ assert.deepEqual(replayStoredC0Observation(JSON.parse(JSON.stringify({
 assert.equal(replayStoredC0Observation(JSON.parse(JSON.stringify(x))).independentLiveCaptureAttested,false);
 let negative=0;
 const bad=(name,patch,re)=>{assert.throws(()=>buildC0Observation({...input,...patch}),re,name);negative++};
-bad('provider disagreement',{archiveLog:{...log,args:{...log.args,token:A('9')}}},/C0_SOURCE_LOG_DISAGREEMENT/);
+bad('provider disagreement',{archiveLog:{...log,args:{...log.args,token:A('9')}}},/SELECTED_ARCHIVE_EVENT_NOT_IN_FULL_CENSUS/);
 bad('runtime disagreement',{archiveRuntimeHash:H('9')},/C0_FACTORY_RUNTIME_SOURCE_DISAGREEMENT/);
 bad('wrong launch token',{launch:{...launch,token:A('9')}},/Expected values to be strictly equal/);
 bad('decision mismatch',{decisionBlock:{number:'103',hash:H('c'),timestampMs:launchTs+20_000}},
-  /C0_DECISION_BLOCK_MISMATCH/);
-bad('insufficient confirmation',{observedHead:{number:'103',hash:H('d'),timestampMs:launchTs+30_000}},
+  /DECISION_BLOCK_POINT_DRIFT/);
+bad('insufficient confirmation',{
+  observedHead:{number:'103',hash:H('d'),timestampMs:launchTs+30_000},
+  officialPoints:{...points,observed:{number:'103',hash:H('d'),timestampMs:launchTs+30_000}},
+  archivePoints:{...points,observed:{number:'103',hash:H('d'),timestampMs:launchTs+30_000}}},
   /C0_CONFIRMATIONS_NOT_OBSERVED/);
 bad('capture before observed block',{capturedAtMs:launchTs+30_000},/C0_CAPTURE_BEFORE_OBSERVED_HEAD/);
 bad('capture after five minutes',{capturedAtMs:launchTs+300_000},/C0_CAPTURE_AFTER_5M/);
@@ -67,7 +70,8 @@ bad('spoofed event time',{event:{...event,launchTimestampMs:launchTs+1000}},
 bad('disagreeing decision blocks',{archivePoints:{...points,
   decision:{...points.decision,hash:H('9')}}},/decision_POINT_SOURCE_DISAGREEMENT/);
 bad('reorged census log',{officialFactoryBlockLogs:[{...log,removed:true}],
-  archiveFactoryBlockLogs:[{...log,removed:true}]},/REMOVED_CENSUS_LOG_FORBIDDEN/);
+  archiveFactoryBlockLogs:[{...log,removed:true}],officialLog:{...log,removed:true},
+  archiveLog:{...log,removed:true}},/REMOVED_CENSUS_LOG_FORBIDDEN/);
 bad('baseline observed after capture',{baseline:{...baseline,observedAtMs:now+1000}},
   /BASELINE_OBSERVATION_TIME_INVALID/);
 bad('control policy mismatch',{control:{...control,policyVersion:'OTHER_CONTROL'}},
@@ -82,7 +86,8 @@ assert.throws(()=>replayStoredC0Observation({...x,
   evidence:{...x.evidence,sourceKind:'FABRICATED'}}),
   /STORED_SOURCE_EVIDENCE_OR_C0_RECEIPT_TAMPERED/);negative++;
 const unknown=buildC0Observation({...input,baseline:{...baseline,status:'UNVERIFIED'},
-  control:{...control,decision:'NO_DECISION',hypotheticalAction:'WOULD_SKIP'}});
+  control:{...control,decision:'NO_DECISION',hypotheticalAction:'WOULD_SKIP',
+    capacityUsdMicros:null}});
 assert.equal(unknown.receipt.action,'UNKNOWN_PREOUTCOME_C0');
 assert.equal(unknown.receipt.evidence.reason,'BASELINE_OR_CONTROL_UNVERIFIED');
 const reject=buildC0Observation({...input,

@@ -109,8 +109,10 @@ export function buildC0Observation(input){
     assert.equal(control.decision,expected,'C0_CONTROL_BASELINE_CONTRADICTION');
     assert.equal(control.capacityUsdMicros===null?null:String(control.capacityUsdMicros),
       expected==='ELIGIBLE'?prefix.at(-1):null,'C0_CONTROL_CAPACITY_CONTRADICTION');
-  } else assert.equal(control.decision,'NO_DECISION',
-    'UNVERIFIED_C0_BASELINE_MUST_BE_UNKNOWN');
+  } else {
+    assert.equal(control.decision,'NO_DECISION','UNVERIFIED_C0_BASELINE_MUST_BE_UNKNOWN');
+    assert.equal(control.capacityUsdMicros,null,'UNVERIFIED_C0_CAPACITY_MUST_BE_NULL');
+  }
 
   assert.equal(control.liveMoneyAuthority,false);
   assert.equal(control.mode,'SHADOW_ONLY');
