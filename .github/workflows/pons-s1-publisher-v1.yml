@@ -1,0 +1,200 @@
+name: Pons S1 paired immutable batch publisher V1 — disabled pending authority
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-publisher-v1.yml'
+      - 'scripts/pons-s1-publisher-*.mjs'
+      - 'docs/PONS_S1_PUBLISHER_V1.md'
+      - 'docs/experiments/pons-s1-single-protocol-decision-v1.json'
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: 'Successful approved main-only V1 collector run, not PR/historical fixture'
+        type: string
+        required: true
+      batch_digest:
+        description: 'Exact frozen V1 batch digest'
+        type: string
+        required: true
+      activation_sha:
+        description: 'Exact separately approved canonical activation commit'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pons-s1-v1-single-exclusive-batch-publication
+  cancel-in-progress: false
+
+jobs:
+  offline-qualification:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Synthetic batch, authority, lineage and release negatives
+        run: |
+          node --check scripts/pons-s1-publisher-core-v1.mjs
+          node --check scripts/pons-s1-publisher-v1.mjs
+          node --check scripts/pons-s1-publisher-check-v1.mjs
+          node scripts/pons-s1-publisher-check-v1.mjs
+
+  manually-authorized-main-only-publication:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'CipherCuttle/sentry-forensic-gate' && inputs.activation_sha == github.sha && false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PONS_S1_ACTIVATION_SHA: ${{ inputs.activation_sha }}
+      BATCH_DIGEST: ${{ inputs.batch_digest }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # Deliberately hard-disabled pending a NEW explicit approval, a reviewed
+      # activation commit, independent source qualification and trusted witness.
+      # Never execute a user-supplied checkout SHA with release-write token.
+      - name: Fail closed unless separately authorized canonical files are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_REPOSITORY" = CipherCuttle/sentry-forensic-gate
+          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$BATCH_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$PONS_S1_ACTIVATION_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -f authority/pons-s1-publish-v1.json
+          test -f .github/workflows/pons-s1-prospective-collector-v1.yml
+          test -f docs/experiments/pons-s1-single-protocol-decision-v1.json
+          mkdir -p proof
+          cp authority/pons-s1-publish-v1.json proof/authority.json
+          cp docs/experiments/pons-s1-single-protocol-decision-v1.json proof/protocol.json
+          # These authority and active-protocol files DO NOT EXIST in this draft.
+          # Their separate approval, canonical review, merge and activation are
+          # mandatory. Merely dispatching cannot unlock publication.
+      - name: Fetch canonical commit, approved merge, ancestry and source-run proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="repos/$GITHUB_REPOSITORY"
+          merge_pr="$(jq -er '.reviewedMergePr' proof/authority.json)"
+          [[ "$merge_pr" =~ ^[1-9][0-9]{0,9}$ ]]
+          gh api "$repo/commits/$PONS_S1_ACTIVATION_SHA" > proof/activation-commit.json
+          gh api "$repo/pulls/$merge_pr" > proof/merge-pr.json
+          gh api "$repo/compare/$PONS_S1_ACTIVATION_SHA...main" > proof/activation-to-main.json
+          gh api "$repo/actions/runs/$SOURCE_RUN_ID" > proof/source-run.json
+          # Approved detached commit is required to be a main ancestor.
+          test "$(jq -r '.sha' proof/activation-commit.json)" = "$PONS_S1_ACTIVATION_SHA"
+          test "$(jq -r '.head_sha' proof/source-run.json)" = "$PONS_S1_ACTIVATION_SHA"
+      - name: Acquire the exact frozen artifact from the verified source run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "pons-s1-frozen-batch-$BATCH_DIGEST" --dir proof
+          test -s proof/batch.json
+          test "$(jq -er '.batchDigest' proof/batch.json)" = "$BATCH_DIGEST"
+          prior_index="$(jq -er '.batchIndex' proof/batch.json)"
+          [[ "$prior_index" =~ ^(0|[1-9][0-9]*)$ ]]
+          if [ "$prior_index" -gt 0 ]; then
+            prior_digest="$(jq -er '.previous.batchDigest' proof/batch.json)"
+            prior_release_id="$(jq -er '.previous.releaseId' proof/batch.json)"
+            prior_asset_id="$(jq -er '.previous.assetId' proof/batch.json)"
+            [[ "$prior_digest" =~ ^[0-9a-f]{64}$ ]]
+            [[ "$prior_release_id" =~ ^[1-9][0-9]{0,14}$ ]]
+            [[ "$prior_asset_id" =~ ^[1-9][0-9]{0,14}$ ]]
+            prior_tag="pons-s1-paired-v1-batch-$prior_digest"
+            repo="repos/$GITHUB_REPOSITORY"
+            gh api "$repo/releases/$prior_release_id" > proof/prior-release.json
+            gh api "$repo/releases/assets/$prior_asset_id" > proof/prior-asset.json
+            gh api "$repo/git/ref/tags/$prior_tag" > proof/prior-tag.json
+            mkdir -p proof/prior
+            gh release download "$prior_tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern "$prior_tag.json" --dir proof/prior
+            mv "proof/prior/$prior_tag.json" proof/prior-batch.json
+          fi
+      - name: Independent API-source and exact-byte publication preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/pons-s1-publisher-v1.mjs prepare proof proof/frozen-plan.json
+          test "$(jq -er '.batchDigest' proof/frozen-plan.json)" = "$BATCH_DIGEST"
+          asset_name="$(jq -er '.assetName' proof/frozen-plan.json)"
+          tag="$(jq -er '.tag' proof/frozen-plan.json)"
+          [[ "$asset_name" = "$tag.json" ]]
+          # Explicitly prevent even an existing draft/tag from being reused.
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+            echo "DUPLICATE_TAG_STOP"; exit 1
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "DUPLICATE_RELEASE_STOP"; exit 1
+          fi
+          cp proof/batch.json "proof/$asset_name"
+          cmp -s proof/batch.json "proof/$asset_name"
+      - name: Exact activation tag, draft, singleton exact-byte asset, publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$(jq -er '.tag' proof/frozen-plan.json)"
+          asset_name="$(jq -er '.assetName' proof/frozen-plan.json)"
+          # A duplicate from a concurrent external publisher fails atomically.
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$tag" -f sha="$PONS_S1_ACTIVATION_SHA" >/dev/null
+          # Recheck the wall-clock budget before starting the write sequence.
+          node scripts/pons-s1-publisher-v1.mjs prepare proof proof/last-moment-plan.json
+          cmp -s proof/frozen-plan.json proof/last-moment-plan.json
+          gh release create "$tag" "proof/$asset_name" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease --latest=false \
+            --verify-tag --title "PONS S1 frozen paired pre-outcome batch" \
+            --notes "Pre-outcome enrollment evidence only. Not an outcome, forecast, trade, or verified economic edge."
+          # Do not publish a draft once pre-outcome budget has expired.
+          node scripts/pons-s1-publisher-v1.mjs prepare proof proof/prepublish-plan.json
+          cmp -s proof/frozen-plan.json proof/prepublish-plan.json
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --latest=false
+      - name: Own API read-back and strict GitHub publication timestamp gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$(jq -er '.tag' proof/frozen-plan.json)"
+          asset_name="$(jq -er '.assetName' proof/frozen-plan.json)"
+          repo="repos/$GITHUB_REPOSITORY"
+          gh api "$repo/releases/tags/$tag" > proof/release.json
+          release_id="$(jq -er '.id' proof/release.json)"
+          asset_id="$(jq -er '.assets[0].id' proof/release.json)"
+          gh api "$repo/releases/assets/$asset_id" > proof/asset.json
+          gh api "$repo/git/ref/tags/$tag" > proof/tag.json
+          mkdir -p proof/readback
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$asset_name" --dir proof/readback
+          mv "proof/readback/$asset_name" proof/downloaded-batch.json
+          cmp -s proof/batch.json proof/downloaded-batch.json
+          node scripts/pons-s1-publisher-v1.mjs verify proof proof/publisher-self-readback.json
+          echo "Publisher read-back only; separate trusted main-only V1 witness still required."
+      - name: Preserve source, publication and failed/late partial state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-s1-v1-publication-attempt-${{ github.run_id }}
+          path: proof/
+          if-no-files-found: warn
+          retention-days: 30
