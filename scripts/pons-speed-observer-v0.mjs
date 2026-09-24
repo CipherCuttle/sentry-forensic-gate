@@ -218,4 +218,9 @@ main().catch(error => {
   // Provider exceptions may embed credential-bearing URLs. Do NOT log error.message or the endpoint.
   print({ type: 'BENCHMARK_BLOCKED', errorClass: shortError(error), noTransactions: true });
   process.exitCode = 1;
+}).finally(() => {
+  // The viem RPC WebSocket may retain an idle socket after unwatch resolves.
+  // Every observation and verification is already complete: drain JSONL to disk,
+  // then explicitly terminate this finite, read-only CLI. Never call exit from onLogs.
+  process.stdout.write('', () => process.exit(process.exitCode ?? 0));
 });
