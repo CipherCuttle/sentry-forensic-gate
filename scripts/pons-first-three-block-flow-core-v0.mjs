@@ -116,7 +116,7 @@ export function buildPonsV2FirstThreeBlockFlow({opening,blocks,curveLogs,transfe
   for(const [recipient,amount] of expectedOpening) {
     requireTrue(observedOpening.get(recipient)===amount,'OPENING_RECEIPT_TRADE_MISMATCH');
   }
-  requireTrue(boughtTokens<=supply,'THREE_BLOCK_BUYS_EXCEED_LAUNCH_SUPPLY');
+  // Repeated buys after sells can exceed total supply: gross turnover is NOT holdings.
 
   let mintEvents=0,burnEvents=0,otherTransferEvents=0,transferVolume=0n;
   const tSeen=new Set();
@@ -135,7 +135,7 @@ export function buildPonsV2FirstThreeBlockFlow({opening,blocks,curveLogs,transfe
     byAddress(a,b):a.boughtTokens>b.boughtTokens?-1:1);
   const topBuyRecipients=ranked.slice(0,10).map(x=>({
     recipient:x.address,boughtTokens:x.boughtTokens.toString(),buyEvents:x.buyEvents,
-    boughtSupplyShareBpsFloor:Number(x.boughtTokens*10_000n/supply),
+    grossBuyTurnoverBpsFloor:Number(x.boughtTokens*10_000n/supply),
     knownDeclaredExemption:x.knownDeclaredExemption
   }));
   return {
@@ -147,14 +147,14 @@ export function buildPonsV2FirstThreeBlockFlow({opening,blocks,curveLogs,transfe
     coverage:{blocks:blocks.map(x=>({number:x.number.toString(),hash:x.hash})),
       curveLogs:curveLogs.length,tokenTransferLogs:transferLogs.length,
       unknownCurveEvents,atomicOpeningReconciled:true},
-    buyerFlow:{buyEvents,uniqueTransactionSendersObserved:buyers.size,
+    buyerFlow:{buyEvents,uniqueCurveBuyersObserved:buyers.size,
       uniqueTokenRecipients:recipients.size,knownExemptRecipientBuyEvents:exemptBuyEvents,
       grossTokensOut:boughtTokens.toString(),grossQuoteIn:totalQuoteIn.toString(),
       feeIncludesBaseAndPossibleSnipe:basePlusSnipeBuyFee.toString(),
       creatorTax:creatorBuyTax.toString(),
       knownDeclaredExemptRecipientGrossTokensOut:boughtByKnownExempt.toString(),
-      boughtSupplyShareBpsFloor:Number(boughtTokens*10_000n/supply),
-      knownExemptRecipientBoughtSupplyShareBpsFloor:Number(boughtByKnownExempt*10_000n/supply),
+      grossBuyTurnoverBpsFloor:Number(boughtTokens*10_000n/supply),
+      knownExemptRecipientGrossBuyTurnoverBpsFloor:Number(boughtByKnownExempt*10_000n/supply),
       topBuyRecipients},
     sellerFlow:{sellEvents,uniqueSellers:sellers.size,uniqueQuoteRecipients:sellRecipients.size,
       grossTokensIn:soldTokens.toString(),grossQuoteOut:totalQuoteOut.toString(),
@@ -165,7 +165,7 @@ export function buildPonsV2FirstThreeBlockFlow({opening,blocks,curveLogs,transfe
       note:'Transfer events overlap with curve trades and mint. Never add transfer and trade volume or infer actual wallet balances.'},
     eventRows:events,
     interpretation:[
-      'Gross buys/sells in exactly three canonical source-bound blocks; NOT holder balances or realized profits.',
+      'Gross buys/sells in exactly three canonical source-bound blocks; turnover may exceed total supply through re-trading. NOT holder balances or realized profits.',
       'Buyer and recipient may differ. Exemption checks apply to declared recipient only; other wallet common ownership is unknown.',
       'A CurveBuy fee event folds base fee and opening snipe tax together; cannot derive sniper tax from this field.',
       'A low exemption allocation does not prove independence of other buyers or token safety.',
