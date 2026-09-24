@@ -1,0 +1,89 @@
+name: Pons S1 real-chain timing rehearsal — PR-only read-only
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-c0-timing-rehearsal-v1.yml'
+      - 'scripts/pons-s1-c0-*timing-*.mjs'
+      - 'docs/PONS_S1_C0_SOURCE_WITNESS_AND_TIMING_V1.md'
+      - 'package.json'
+
+permissions:
+  contents: read
+  actions: read
+
+# One bounded public-RPC observation and separate GitHub artifact timestamp.
+# NO TOKEN SEARCH, NO C0 QUOTES, NO TRADING, NO RELEASE CREATION.
+jobs:
+  offline-timing-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Pure timing arithmetic and adversarial boundary tests
+        run: |
+          node --check scripts/pons-s1-c0-timing-core-v1.mjs
+          node --check scripts/pons-s1-c0-real-timing-rehearsal-v1.mjs
+          node --check scripts/pons-s1-c0-timing-artifact-witness-v1.mjs
+          node scripts/pons-s1-c0-timing-check-v1.mjs
+
+  real-chain-read-only-rehearsal:
+    needs: offline-timing-contract
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions: {contents: read,actions: read}
+    env:
+      PONS_S1_TIMING_REHEARSAL: ONE_READ_ONLY_BLOCK_PROBE
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Observe canonical block cadence once; no factory or outcome calls
+        run: |
+          mkdir -p proof
+          node scripts/pons-s1-c0-real-timing-rehearsal-v1.mjs proof/timing.json
+          test -s proof/timing.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pons-s1-timing-rehearsal-${{ github.run_id }}
+          path: proof/timing.json
+          if-no-files-found: error
+          retention-days: 14
+
+  independent-github-artifact-timestamp:
+    needs: real-chain-read-only-rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions: {contents: read,actions: read}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PONS_S1_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Independently download this PR rehearsal artifact by exact run/name
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/original
+          repo="repos/$GITHUB_REPOSITORY"
+          gh api "$repo/actions/runs/$GITHUB_RUN_ID" > proof/workflow-run.json
+          gh api "$repo/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" > proof/artifacts.json
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "pons-s1-timing-rehearsal-$GITHUB_RUN_ID" --dir proof/original
+          test "$(find proof/original -type f | wc -l)" -eq 1
+          test -s proof/original/timing.json
+      - name: Independently verify GitHub artifact metadata and conservative timestamp
+        run: node scripts/pons-s1-c0-timing-artifact-witness-v1.mjs proof proof/timing-artifact-witness.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pons-s1-timing-witness-${{ github.run_id }}
+          path: proof/timing-artifact-witness.json
+          if-no-files-found: error
+          retention-days: 14

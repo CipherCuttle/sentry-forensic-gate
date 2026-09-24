@@ -1,0 +1,112 @@
+name: Pons S1 C0 independent external source seal — inert candidate
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-c0-source-witness-v1.yml'
+      - 'scripts/pons-s1-c0-source-witness-*.mjs'
+      - 'scripts/pons-s1-c0-observer-core-v1.mjs'
+      - 'docs/PONS_S1_C0_SOURCE_WITNESS_AND_TIMING_V1.md'
+      - 'package.json'
+  workflow_dispatch:
+    inputs:
+      source_digest: {description: 'Pinned C0 source digest',required: true,type: string}
+      source_run_id: {description: 'Canonical main collector run ID',required: true,type: string}
+      source_artifact_id: {description: 'Original Actions artifact ID',required: true,type: string}
+      release_id: {description: 'Existing immutable source release ID',required: true,type: string}
+      asset_id: {description: 'Existing release source asset ID',required: true,type: string}
+      activation_sha: {description: 'Separately approved activation SHA',required: true,type: string}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  synthetic-qualification:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Exact-byte C0 source seal with adversarial metadata
+        run: |
+          node --check scripts/pons-s1-c0-source-witness-core-v1.mjs
+          node --check scripts/pons-s1-c0-source-witness-v1.mjs
+          node scripts/pons-s1-c0-source-witness-check-v1.mjs
+
+  # Main-only candidate currently fails on absent canonical authority/protocol.
+  # It can read but NEVER create or publish a release or activate collection.
+  independent-main-only-source-witness:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'CipherCuttle/sentry-forensic-gate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {contents: read,actions: read}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PONS_S1_C0_SOURCE_DIGEST: ${{ inputs.source_digest }}
+      PONS_S1_SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      PONS_S1_SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+      PONS_S1_SOURCE_RELEASE_ID: ${{ inputs.release_id }}
+      PONS_S1_SOURCE_RELEASE_ASSET_ID: ${{ inputs.asset_id }}
+      PONS_S1_ACTIVATION_SHA: ${{ inputs.activation_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Require separately approved main-only canonical authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_REPOSITORY" = CipherCuttle/sentry-forensic-gate
+          [[ "$PONS_S1_C0_SOURCE_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$PONS_S1_SOURCE_RUN_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$PONS_S1_SOURCE_ARTIFACT_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$PONS_S1_SOURCE_RELEASE_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$PONS_S1_SOURCE_RELEASE_ASSET_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$PONS_S1_ACTIVATION_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -f authority/pons-s1-publish-v1.json
+          test -f docs/experiments/pons-s1-single-protocol-decision-v1.json
+          jq -e '.status == "CANONICAL_SEPARATELY_APPROVED" and .collectionAuthorized == true and .publicationAuthorized == true and .liveMoneyAuthorized == false' authority/pons-s1-publish-v1.json
+          jq -e '.status == "CANONICAL_FROZEN_ACTIVE" and .timing.syntheticInclusionRule == "OBSERVED_C0_COMPLETION_HEAD_PLUS_TWO_CANONICAL_BLOCKS_V1"' docs/experiments/pons-s1-single-protocol-decision-v1.json
+          mkdir -p proof/original
+          cp authority/pons-s1-publish-v1.json proof/authority.json
+          cp docs/experiments/pons-s1-single-protocol-decision-v1.json proof/protocol.json
+      - name: Independently fetch existing source release and source-run artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="repos/$GITHUB_REPOSITORY"
+          tag="pons-s1-c0-source-v1-$PONS_S1_C0_SOURCE_DIGEST"
+          original="pons-s1-c0-source-$PONS_S1_C0_SOURCE_DIGEST"
+          merge_pr="$(jq -er '.reviewedMergePr' proof/authority.json)"
+          [[ "$merge_pr" =~ ^[1-9][0-9]{0,9}$ ]]
+          gh api "$repo/commits/$PONS_S1_ACTIVATION_SHA" > proof/activation-commit.json
+          gh api "$repo/pulls/$merge_pr" > proof/merge-pr.json
+          gh api "$repo/compare/$PONS_S1_ACTIVATION_SHA...main" > proof/activation-to-main.json
+          gh api "$repo/actions/runs/$PONS_S1_SOURCE_RUN_ID" > proof/source-run.json
+          gh api "$repo/actions/runs/$PONS_S1_SOURCE_RUN_ID/artifacts?per_page=100" > proof/source-artifacts.json
+          gh api "$repo/releases/$PONS_S1_SOURCE_RELEASE_ID" > proof/source-release.json
+          gh api "$repo/releases/assets/$PONS_S1_SOURCE_RELEASE_ASSET_ID" > proof/source-asset.json
+          gh api "$repo/git/ref/tags/$tag" > proof/source-tag.json
+          gh run download "$PONS_S1_SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$original" --dir proof/original
+          test "$(find proof/original -type f | wc -l)" -eq 1
+          test -s proof/original/source.json
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$tag.json" --dir proof
+          test -s "proof/$tag.json"
+          mv "proof/$tag.json" proof/source.json
+          cmp -s proof/original/source.json proof/source.json
+      - name: Independently replay exact source bytes and external timestamps
+        run: node scripts/pons-s1-c0-source-witness-v1.mjs proof proof/witness-receipt.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pons-s1-c0-external-source-witness-${{ inputs.source_digest }}
+          path: proof/witness-receipt.json
+          if-no-files-found: error
+          retention-days: 30
