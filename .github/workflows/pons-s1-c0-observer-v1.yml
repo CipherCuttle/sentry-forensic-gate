@@ -1,0 +1,36 @@
+name: Pons S1 C0 observer V1 — inert qualification
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-c0-observer-v1.yml'
+      - 'scripts/pons-s1-c0-*.mjs'
+      - 'docs/PONS_S1_C0_OBSERVER_V1.md'
+      - 'docs/reviews/PONS_S1_C0_OBSERVER_V1_HOSTILE_SELF_REVIEW.md'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+# Intentionally no workflow_dispatch, push trigger, or schedule.
+# No actual C0 observation is performed by this qualification workflow.
+jobs:
+  offline-qualification:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Offline C0 core, binder and gated runner syntax
+        run: |
+          node --check scripts/pons-s1-c0-observer-core-v1.mjs
+          node --check scripts/pons-s1-c0-source-bind-v1.mjs
+          node --check scripts/pons-s1-c0-observer-v1.mjs
+          node --check scripts/pons-s1-c0-observer-check-v1.mjs
+          node scripts/pons-s1-c0-observer-check-v1.mjs
