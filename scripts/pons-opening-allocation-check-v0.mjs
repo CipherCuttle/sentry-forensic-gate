@@ -6,7 +6,8 @@ import {
 } from 'viem';
 import {
   attestPonsV2OpeningAllocation, PONS_V2_DIRECT_LAUNCH_ABI,
-  PONS_V2_FORWARDER_LAUNCH_ABI, PONS_V2_CURVE_BUY_EVENT
+  PONS_V2_FORWARDER_LAUNCH_ABI, PONS_V2_CURVE_BUY_EVENT,
+  PONS_V2_TOKEN_LAUNCHED_EVENT
 } from './pons-opening-allocation-core-v0.mjs';
 
 const addr = digit => getAddress('0x' + digit.repeat(40));
@@ -19,7 +20,16 @@ const params={
   creatorFeeRecipient:feeRecipient,creatorTaxBps:0,buybackEnabled:false,
   expectedEconomics:'0x'+'c'.repeat(64),salt:'0x'+'d'.repeat(64)
 };
+const launchTopics=encodeEventTopics({
+  abi:[PONS_V2_TOKEN_LAUNCHED_EVENT],eventName:'TokenLaunched',
+  args:{token,curve,deployer:launcher}
+});
+const launchData=encodeAbiParameters([
+  {name:'pairToken',type:'address'}, {name:'launchConfigId',type:'uint256'},
+  {name:'graduationThreshold',type:'uint256'}
+],[pair,1n,100n]);
 const event={address:factory,blockNumber:500n,blockHash,transactionHash:txHash,logIndex:0,
+  topics:launchTopics,data:launchData,
   args:{token,curve,deployer:launcher,pairToken:pair,launchConfigId:1n,graduationThreshold:100n}};
 const record={exists:true,token,curve,deployer:launcher,creatorFeeRecipient:feeRecipient,pairToken:pair};
 const directTx={hash:txHash,blockNumber:500n,from:launcher,to:factory,
@@ -78,7 +88,15 @@ assert.throws(()=>evidence(directTx,{...mkReceipt([]),status:'reverted'}),
 assert.throws(()=>evidence(directTx,mkReceipt([]),{launchLog:{...event,blockHash:'0x'+'e'.repeat(64)}}),
   /LAUNCH_LOG_BLOCK_MISMATCH/);
 assert.throws(()=>evidence(directTx,mkReceipt([]),{launchLog:{...event,logIndex:5}}),
-  /LAUNCH_LOG_NOT_IN_RECEIPT/);
+  /LAUNCH_LOG_NOT_UNIQUE_IN_RECEIPT/);
+assert.throws(()=>evidence(directTx,mkReceipt([]),{
+  launchLog:{...event,args:{...event.args,token:addr('9')}}
+}), /CALLER_EVENT_ARGS_MISMATCH/);
+assert.throws(()=>evidence(directTx,mkReceipt([]),{
+  launchLog:{...event,data:'0xdeadbeef'}
+}), /CALLER_EVENT_BYTES_MISMATCH/);
+assert.throws(()=>evidence(directTx,{...mkReceipt([]),logs:[{...event,data:'0xdeadbeef'}]}),
+  /CALLER_EVENT_BYTES_MISMATCH/);
 const overLimit=Array.from({length:33},()=>extra);
 const tooMany={...directTx,input:encodeFunctionData({
   abi:PONS_V2_DIRECT_LAUNCH_ABI,functionName:'launchToken',args:[params,1n,pair,overLimit]
