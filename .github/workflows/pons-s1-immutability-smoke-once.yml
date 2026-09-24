@@ -1,0 +1,147 @@
+name: Pons S1 immutable-release one-shot smoke (no cohort)
+on:
+  push:
+    branches:
+      - ops/pons-s1-immutability-smoke-v0
+    paths:
+      - .github/workflows/pons-s1-immutability-smoke-once.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pons-s1-release-immutability-smoke
+  cancel-in-progress: false
+
+jobs:
+  publish-and-verify-once:
+    if: github.repository == 'CipherCuttle/sentry-forensic-gate' && github.ref == 'refs/heads/ops/pons-s1-immutability-smoke-v0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Exact run scope and existing-release guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "CipherCuttle/sentry-forensic-gate"
+          test "$GITHUB_REF" = "refs/heads/ops/pons-s1-immutability-smoke-v0"
+          test "$GITHUB_EVENT_NAME" = "push"
+          tag="pons-s1-immutability-smoke-v0-$(printf '%.12s' "$GITHUB_SHA")"
+          echo "SMOKE_TAG=$tag" >> "$GITHUB_ENV"
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name | startswith("pons-s1-immutability-smoke-v0-")) | .tag_name')"
+          if test -n "$existing"; then
+            echo "A PONS S1 immutability smoke release already exists. One-shot guard stopped publication."
+            exit 1
+          fi
+      - name: Create one harmless source-bound dummy asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('node:fs');
+          const crypto=require('node:crypto');
+          const payload={
+            schemaVersion:'PONS_S1_IMMUTABILITY_SMOKE_V0',
+            content:'DUMMY_DATA_ONLY_NO_CHAIN_DATA',
+            sourceCommit:process.env.GITHUB_SHA,
+            authority:'NO_COLLECTION_NO_MERGE_NO_TRADE_NO_SIGNING_NO_BROADCAST',
+            scientificResult:'NONE'
+          };
+          const data=Buffer.from(JSON.stringify(payload)+'\n','utf8');
+          fs.writeFileSync('pons-s1-immutability-smoke-v0.json',data,{flag:'wx'});
+          console.log('LOCAL_SHA256='+crypto.createHash('sha256').update(data).digest('hex'));
+          NODE
+      - name: Create exact-source lightweight test tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$SMOKE_TAG" -f sha="$GITHUB_SHA" > /dev/null
+      - name: Create draft and upload exact dummy asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$SMOKE_TAG" ./pons-s1-immutability-smoke-v0.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft --prerelease --latest=false --verify-tag \
+            --title "PONS S1 immutable release smoke — no experiment data" \
+            --notes "One harmless test asset to verify repository release immutability. NOT a PONS S1 cohort, strategy, deployment, token launch or trading authorization."
+      - name: Publish populated draft exactly once
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$SMOKE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+      - name: Fetch GitHub REST release, asset and canonical tag independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$SMOKE_TAG" > smoke-release.json
+          asset_id="$(node -p "JSON.parse(require('fs').readFileSync('smoke-release.json','utf8')).assets[0]?.id")"
+          [[ "$asset_id" =~ ^[1-9][0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > smoke-asset.json
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$SMOKE_TAG" > smoke-tag.json
+          mkdir -p smoke-download
+          gh release download "$SMOKE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern pons-s1-immutability-smoke-v0.json --dir smoke-download
+          cmp -s pons-s1-immutability-smoke-v0.json smoke-download/pons-s1-immutability-smoke-v0.json
+      - name: Fail closed on any release, tag, checksum or byte mismatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('node:fs'), assert=require('node:assert/strict');
+          const crypto=require('node:crypto');
+          const release=JSON.parse(fs.readFileSync('smoke-release.json','utf8'));
+          const asset=JSON.parse(fs.readFileSync('smoke-asset.json','utf8'));
+          const tag=JSON.parse(fs.readFileSync('smoke-tag.json','utf8'));
+          const bytes=fs.readFileSync('pons-s1-immutability-smoke-v0.json');
+          const dl=fs.readFileSync('smoke-download/pons-s1-immutability-smoke-v0.json');
+          const expected=crypto.createHash('sha256').update(bytes).digest('hex');
+          const expectedTag=process.env.SMOKE_TAG, api='https://api.github.com/repos/'+process.env.GITHUB_REPOSITORY;
+          assert.equal(process.env.GITHUB_REPOSITORY,'CipherCuttle/sentry-forensic-gate');
+          assert.equal(release.tag_name,expectedTag);
+          assert.equal(release.url,api+'/releases/'+release.id);
+          assert.equal(release.draft,false);
+          assert.equal(release.prerelease,true);
+          assert.equal(release.immutable,true,'GITHUB_REPOSITORY_IMMUTABILITY_NOT_PROVED');
+          assert.ok(Date.parse(release.published_at)>0);
+          assert.equal(release.assets.length,1);
+          assert.equal(release.assets[0].id,asset.id);
+          assert.equal(asset.state,'uploaded');
+          assert.equal(asset.name,'pons-s1-immutability-smoke-v0.json');
+          assert.equal(asset.size,bytes.length);
+          assert.equal(asset.digest,'sha256:'+expected,'GITHUB_ASSET_DIGEST_MISMATCH');
+          assert.equal(release.assets[0].digest,asset.digest);
+          assert.equal(asset.url,api+'/releases/assets/'+asset.id);
+          assert.ok(bytes.equals(dl));
+          assert.equal(tag.ref,'refs/tags/'+expectedTag);
+          assert.equal(tag.object.type,'commit');
+          assert.equal(tag.object.sha,process.env.GITHUB_SHA);
+          const witness={
+            verdict:'REPOSITORY_IMMUTABLE_RELEASE_SMOKE_PASS',
+            notAScientificBatch:true,noMoneyAuthority:true,
+            tag:release.tag_name,sourceCommit:process.env.GITHUB_SHA,
+            releaseId:release.id,assetId:asset.id,
+            immutable:release.immutable,publishedAtUtc:release.published_at,
+            assetSha256:expected,assetBytes:bytes.length,
+            assetApiDigest:asset.digest,downloadByteIdentical:true,
+            exactCanonicalTag:true
+          };
+          fs.writeFileSync('smoke-witness.json',JSON.stringify(witness,null,2)+'\n',{flag:'wx'});
+          console.log(JSON.stringify(witness));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '### PONS S1 repository immutability smoke: PASS\n\n'+
+            '- Release: '+release.html_url+'\n'+
+            '- GitHub REST immutable: true\n'+
+            '- Asset SHA-256: '+expected+'\n'+
+            '- Source commit: '+process.env.GITHUB_SHA+'\n'+
+            '- No scientific data, no prospective collection, no money authority.\n');
+          NODE
+      - name: Upload harmless evidence receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-s1-immutability-smoke-receipt
+          path: smoke-witness.json
+          retention-days: 30
+          if-no-files-found: error
