@@ -112,14 +112,15 @@ async function pollOnce() {
   const before = performance.now();
   const head = await httpClient.getBlockNumber();
   if (latestHead !== null && head < latestHead) {
-    scanErrors++;
     throw new Error('HTTP_HEAD_REGRESSED');
   }
   latestHead = head;
   if (cursor === null) {
     cursor = head > 1n ? head - 1n : CURRENT_PONS_V2_AUTHORITY.fromBlock;
   }
-  if (head < cursor) return;
+  // Re-read the newest one or two blocks even when head is unchanged:
+  // a provider can expose a header before it exposes every corresponding log.
+  if (head < cursor) cursor = head;
   const fromBlock = cursor > CURRENT_PONS_V2_AUTHORITY.fromBlock + 1n ?
     cursor - 1n : cursor;
   const toBlock = fromBlock + 63n < head ? fromBlock + 63n : head;
