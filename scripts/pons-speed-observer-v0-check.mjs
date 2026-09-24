@@ -66,6 +66,7 @@ assert.match(runtime, /createPublicClient/);
 assert.match(runtime, /getLogs/);
 assert.match(runtime, /watchContractEvent/);
 assert.match(runtime, /getBytecode/);
+assert.match(runtime, /source === 'HTTP' && \(result\.type === 'FIRST' \|\| result\.type === 'MATCHED'\)/);
 assert.doesNotMatch(runtime + core,
   /\b(?:createWalletClient|privateKeyToAccount|sendTransaction|signTransaction|writeContract|sendRawTransaction|child_process|node:net|node:tls)\b/);
 assert.match(runtime, /Nitro sequencer feed is NOT an eth_subscribe RPC endpoint/);
