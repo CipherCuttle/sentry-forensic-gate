@@ -75,8 +75,22 @@ export function assertActivated(spec, activation, context) {
   assert.equal(activation.chainId, 4663);
   assert.equal(activation.canonicalRef, 'refs/heads/main');
   assert.equal(activation.collectorImplementationSha, context.collectorImplementationSha);
+  // An activation receipt cannot embed its own commit SHA. Require a second
+  // canonical activation commit AFTER the reviewed collector merge, and an
+  // independently acquired GitHub proof of its parent, SHA and merged-at time.
   assert.match(activation.canonicalMergeSha, /^[0-9a-f]{40}$/);
-  assert.equal(context.checkoutSha, activation.canonicalMergeSha, 'PONS_S1_NOT_CANONICAL_ACTIVATION_SHA');
+  assert.match(context.checkoutSha ?? '', /^[0-9a-f]{40}$/,
+    'PONS_S1_DETACHED_ACTIVATION_SHA_MISSING');
+  assert.equal(context.externalProofSource, 'GITHUB_REST_CANONICAL_ACTIVATION_PROOF_V0',
+    'PONS_S1_CANONICAL_EXTERNAL_PROOF_MISSING');
+  assert.equal(context.checkoutSha, context.verifiedActivationCommitSha,
+    'PONS_S1_NOT_VERIFIED_CANONICAL_ACTIVATION');
+  assert.notEqual(context.checkoutSha, activation.canonicalMergeSha,
+    'PONS_S1_ACTIVATION_MUST_BE_POST_MERGE_COMMIT');
+  assert.equal(context.activationCommitParentSha, activation.canonicalMergeSha,
+    'PONS_S1_ACTIVATION_NOT_CHILD_OF_REVIEWED_MERGE');
+  assert.equal(context.verifiedMergedAtUtc, activation.canonicalMergedAtUtc,
+    'PONS_S1_MERGE_TIME_NOT_EXTERNALLY_VERIFIED');
   const mergedAt = Date.parse(activation.canonicalMergedAtUtc);
   assert.ok(Number.isSafeInteger(mergedAt) && mergedAt > 0, 'PONS_S1_MERGE_TIME_UNVERIFIED');
   assert.equal(activation.originEarliestTimestampMs, mergedAt + SIX_HOURS_MS);
