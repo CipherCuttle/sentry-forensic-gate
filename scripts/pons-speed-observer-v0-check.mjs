@@ -66,6 +66,7 @@ assert.match(runtime, /createPublicClient/);
 assert.match(runtime, /getLogs/);
 assert.match(runtime, /watchContractEvent/);
 assert.match(runtime, /getBytecode/);
+assert.ok(runtime.includes("process.stdout.write('', () => process.exit(process.exitCode ?? 0))"), 'finite CLI must flush and close lingering WS');
 assert.match(runtime, /source === 'HTTP' && \(result\.type === 'FIRST' \|\| result\.type === 'MATCHED'\)/);
 assert.doesNotMatch(runtime + core,
   /\b(?:createWalletClient|privateKeyToAccount|sendTransaction|signTransaction|writeContract|sendRawTransaction|child_process|node:net|node:tls)\b/);
