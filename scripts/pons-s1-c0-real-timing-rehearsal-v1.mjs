@@ -2,6 +2,7 @@
 // One PR-only public-chain timing rehearsal. No factory log scan, no tokens,
 // no quote reads, no prospective enrollment, no wallets or transactions.
 import assert from 'node:assert/strict';
+import {createPublicClient,defineChain,http} from 'viem';
 import {open} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {evaluateC0ChainTiming} from './pons-s1-c0-timing-core-v1.mjs';
@@ -12,28 +13,26 @@ assert.equal(process.env.PONS_S1_TIMING_REHEARSAL,'ONE_READ_ONLY_BLOCK_PROBE',
   'EXPLICIT_ONE_SHOT_DIAGNOSTIC_FLAG_REQUIRED');
 const target=process.argv[2];
 assert.ok(target,'USAGE: node timing-rehearsal <exclusive-output.json>');
-let nextId=1,requests=0;
-async function rpc(method,params=[]){
-  requests++;
-  assert.ok(requests<=180,'RPC_REHEARSAL_REQUEST_CAP');
-  const response=await fetch(RPC,{method:'POST',headers:{'content-type':'application/json'},
-    body:JSON.stringify({jsonrpc:'2.0',id:nextId++,method,params}),
-    signal:AbortSignal.timeout(12_000)});
-  assert.ok(response.ok,'OFFICIAL_RPC_HTTP_'+response.status);
-  const json=await response.json();
-  assert.ok(!json.error,'OFFICIAL_RPC_ERROR_'+JSON.stringify(json.error));
-  return json.result;
-}
-const height=async()=>BigInt(await rpc('eth_blockNumber'));
+// Reuse the reviewed read-only viem public-client boundary. Direct
+// fetch/RPC escape hatches are forbidden by the repository AST gate.
+const robinhood=defineChain({id:4663,name:'Robinhood Chain',
+  nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},
+  rpcUrls:{default:{http:[RPC]}}});
+const client=createPublicClient({chain:robinhood,
+  transport:http(RPC,{timeout:12000,retryCount:0})});
+let requests=0;
+function meter(){requests++;assert.ok(requests<=180,'RPC_REHEARSAL_REQUEST_CAP');}
+const height=async()=>{meter();return client.getBlockNumber();};
 async function point(h,seen=Date.now()){
-  const raw=await rpc('eth_getBlockByNumber',['0x'+h.toString(16),false]);
-  assert.ok(raw&&raw.hash&&raw.number&&raw.timestamp,'CHAIN_POINT_MISSING');
-  assert.equal(BigInt(raw.number),h,'CHAIN_POINT_HEIGHT_CHANGED');
+  meter();
+  const raw=await client.getBlock({blockNumber:h});
+  assert.ok(raw&&raw.hash&&raw.number!==null&&raw.timestamp!==null,
+    'CHAIN_POINT_MISSING');
+  assert.equal(raw.number,h,'CHAIN_POINT_HEIGHT_CHANGED');
   return {blockNumber:h.toString(),blockHash:raw.hash.toLowerCase(),
-    timestampMs:Number(BigInt(raw.timestamp))*1000,
-    firstObservedAtMs:seen};
+    timestampMs:Number(raw.timestamp)*1000,firstObservedAtMs:seen};
 }
-const chainId=Number(BigInt(await rpc('eth_chainId')));
+meter();const chainId=await client.getChainId();
 assert.equal(chainId,4663,'WRONG_PUBLIC_CHAIN');
 const startHead=await height(),startSeen=Date.now();
 const launch=await point(startHead,startSeen);
@@ -75,7 +74,7 @@ const result={...evaluation,provenance:'REAL_OFFICIAL_PUBLIC_RPC_SINGLE_PROVIDER
   observedAtUtc:new Date().toISOString(),
   firstObservedBlock:launch,decisionBlock:decision,baselineMatureBlock:mature,
   dummyCompletionHead:completed,inclusionBlock:inclusion,confirmedBlock:confirmed,
-  requests,reads:['eth_chainId','eth_blockNumber','eth_getBlockByNumber'],
+  requests,reads:['viem.getChainId','viem.getBlockNumber','viem.getBlock'],
   actualFactoryEventsRead:false,actualC0DecisionMade:false,
   anyFutureOutcomeRead:false,anyNetworkWrites:false,
   genuineProspectiveSample:false};

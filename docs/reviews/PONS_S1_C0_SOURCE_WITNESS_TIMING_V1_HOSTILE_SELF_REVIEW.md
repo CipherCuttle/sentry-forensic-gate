@@ -31,3 +31,14 @@ Internal self-review only, NOT independent scientific or security review.
 
 One hostile self-review, rectify Critical/High implementation defects,
 one targeted rereview only if necessary, then stop at engineering gate.
+
+## Targeted re-review after repository boundary failure
+
+The first exact-head full CI detected a direct fetch escape hatch in the
+PR-only timing script. Fixed in this narrow diff by routing every read through
+the existing reviewed viem public-client boundary with a pinned dependency;
+no raw fetch, network write, signer or new RPC host. The historical initial
+read-only public-chain rehearsal and independent GitHub artifact witness
+passed on the original head, but exact-head requalification of the fixed
+implementation is still mandatory. This single targeted rereview does not
+close any open source-authenticity or prospective scientific gates.
