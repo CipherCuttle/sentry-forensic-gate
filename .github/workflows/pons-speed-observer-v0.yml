@@ -1,0 +1,76 @@
+name: Pons Speed Observer V0 — Read Only
+
+on:
+  push:
+    branches:
+      - agent/pons-speed-observer-v0
+    paths:
+      - scripts/pons-speed-arrival-core.mjs
+      - scripts/pons-speed-observer-v0.mjs
+      - scripts/pons-speed-observer-v0-check.mjs
+      - docs/PONS_SPEED_OBSERVER_V0.md
+      - .github/workflows/pons-speed-observer-v0.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Syntax checks and adversarial pure-core regression
+        run: |
+          set -euo pipefail
+          node --check scripts/pons-speed-arrival-core.mjs
+          node --check scripts/pons-speed-observer-v0.mjs
+          node --check scripts/pons-speed-observer-v0-check.mjs
+          node scripts/pons-speed-observer-v0-check.mjs
+
+  public-http-availability-smoke:
+    needs: offline-qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable pinned Corepack pnpm and build
+        run: |
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false
+          pnpm build
+      - name: Optional 15-second public HTTP-only observation, never a paired speed claim
+        shell: bash
+        run: |
+          set -u
+          PONS_SPEED_DURATION_SECONDS=15 \
+          PONS_SPEED_POLL_MS=2500 \
+          PONS_SPEED_VERIFY_SAMPLES=0 \
+            node scripts/pons-speed-observer-v0.mjs > "${RUNNER_TEMP}/pons-speed-http-smoke.jsonl"
+          RC=$?
+          if [ "$RC" -ne 0 ]; then
+            echo "PUBLIC_HTTP_PROBE_INCONCLUSIVE: provider unavailable or read failed; offline qualification stands"
+          fi
+          if test -s "${RUNNER_TEMP}/pons-speed-http-smoke.jsonl"; then
+            tail -n 3 "${RUNNER_TEMP}/pons-speed-http-smoke.jsonl" |
+              jq -R 'try fromjson catch {"type":"NON_JSON_LINE"}'
+          fi
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-speed-http-availability-v0
+          path: ${{ runner.temp }}/pons-speed-http-smoke.jsonl
+          if-no-files-found: warn
+          retention-days: 7

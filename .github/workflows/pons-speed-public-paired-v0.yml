@@ -1,0 +1,91 @@
+name: Pons Speed — Public Paired HTTP and RPC WS
+
+on:
+  push:
+    branches:
+      - agent/pons-speed-observer-v0
+    paths:
+      - .github/workflows/pons-speed-public-paired-v0.yml
+      - scripts/pons-speed-observer-v0.mjs
+      - scripts/pons-speed-public-paired-probe.sh
+      - scripts/pons-speed-arrival-core.mjs
+      - scripts/pons-speed-observer-v0-check.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-paired-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PONS_SPEED_HTTP_URL: https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public
+      PONS_SPEED_WS_URL: wss://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public
+      PONS_SPEED_POLL_MS: '5000'
+      PONS_SPEED_VERIFY_SAMPLES: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Offline syntax, comparator and no-write qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/pons-speed-observer-v0.mjs
+          node --check scripts/pons-speed-arrival-core.mjs
+          node --check scripts/pons-speed-observer-v0-check.mjs
+          node scripts/pons-speed-observer-v0-check.mjs
+          bash -n scripts/pons-speed-public-paired-probe.sh
+
+      - name: Build reviewed read-only Pons adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false
+          pnpm build
+
+      - name: Qualify two public HTTP/RPC-WebSocket pairs with hard timeouts
+        id: pilot
+        shell: bash
+        run: |
+          bash scripts/pons-speed-public-paired-probe.sh "$RUNNER_TEMP" "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
+      - name: Seven-minute paired public observation, no transactions
+        if: steps.pilot.outputs.qualified == 'true'
+        shell: bash
+        run: |
+          set +e
+          if [ "${{ steps.pilot.outputs.source }}" = "ALCHEMY_DOCS_DEMO" ]; then
+            export PONS_SPEED_HTTP_URL=https://robinhood-mainnet.g.alchemy.com/v2/docs-demo
+            export PONS_SPEED_WS_URL=wss://robinhood-mainnet.g.alchemy.com/v2/docs-demo
+          fi
+          timeout -k 5s 475s env PONS_SPEED_DURATION_SECONDS=420 \
+            node scripts/pons-speed-observer-v0.mjs > "${RUNNER_TEMP}/pons-speed-paired-7min.jsonl"
+          RC=$?
+          echo "### Bounded, zero-capital paired benchmark" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RC" -ne 0 ]; then
+            echo "PROVIDER_ERRORS_OR_INCOMPLETE_OBSERVATION; no speed winner is declared" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          jq -sc '[.[] | select(.type == "BENCHMARK_VERDICT"
+            or .type == "BENCHMARK_BLOCKED")]'             "${RUNNER_TEMP}/pons-speed-paired-7min.jsonl"             | tee "${RUNNER_TEMP}/pons-speed-paired-verdict.json"
+          cat "${RUNNER_TEMP}/pons-speed-paired-verdict.json" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Preserve read-only receipts (no secrets or signing authority)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-speed-public-paired-v0
+          path: |
+            ${{ runner.temp }}/pons-speed-paired-pilot.jsonl
+            ${{ runner.temp }}/pons-speed-paired-alchemy-pilot.jsonl
+            ${{ runner.temp }}/pons-speed-paired-7min.jsonl
+            ${{ runner.temp }}/pons-speed-paired-verdict.json
+          if-no-files-found: error
+          retention-days: 7

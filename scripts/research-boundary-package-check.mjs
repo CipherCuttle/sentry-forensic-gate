@@ -18,6 +18,13 @@ const allowedExactFiles = new Set([
   'fixtures/historical-full-replay-authority-map-r1.part-003.b64',
   'fixtures/historical-full-replay-authority-map-r1.part-004.b64',
   'fixtures/historical-full-replay-authority-map-r1.part-005.b64',
+  // Frozen S0 cohort and exact read-only RPC proxy from stacked research evidence.
+  'docs/evidence/pons-s0-real-cohort-v1/SHA256SUMS',
+  'docs/evidence/pons-s0-real-cohort-v1/features.jsonl',
+  'docs/evidence/pons-s0-real-cohort-v1/outcomes.jsonl',
+  'scripts/pons-s0-rpc-proxy.py',
+  // This exact zero-credential, read-only public endpoint preflight. No generic .sh permission.
+  'scripts/pons-speed-public-paired-probe.sh',
 ]);
 const skippedDirs = new Set(['.git', 'node_modules', 'dist']);
 
