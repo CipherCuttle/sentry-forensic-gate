@@ -18,6 +18,12 @@ const allowedExactFiles = new Set([
   'fixtures/historical-full-replay-authority-map-r1.part-003.b64',
   'fixtures/historical-full-replay-authority-map-r1.part-004.b64',
   'fixtures/historical-full-replay-authority-map-r1.part-005.b64',
+  // The immutable S0 cohort is an explicitly pinned evidence payload, not a generic file-type exception.
+  'docs/evidence/pons-s0-real-cohort-v1/SHA256SUMS',
+  'docs/evidence/pons-s0-real-cohort-v1/features.jsonl',
+  'docs/evidence/pons-s0-real-cohort-v1/outcomes.jsonl',
+  // Pinned, read-only archive RPC proxy used by the frozen 16-shard cohort materializer.
+  'scripts/pons-s0-rpc-proxy.py',
 ]);
 const skippedDirs = new Set(['.git', 'node_modules', 'dist']);
 
