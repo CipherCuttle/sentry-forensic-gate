@@ -17,7 +17,7 @@ const getInt = (key, defaultValue, min, max) => {
   assert.ok(Number.isSafeInteger(value) && value >= min && value <= max, 'INVALID_' + key);
   return value;
 };
-const durationSeconds = getInt('PONS_SPEED_DURATION_SECONDS', 45, 5, 120);
+const durationSeconds = getInt('PONS_SPEED_DURATION_SECONDS', 45, 5, 600);
 const pollMs = getInt('PONS_SPEED_POLL_MS', 1_500, 750, 10_000);
 const maxVerify = getInt('PONS_SPEED_VERIFY_SAMPLES', 2, 0, 5);
 const httpUrl = process.env.PONS_SPEED_HTTP_URL ?? DEFAULT_ROBINHOOD_RPC_URL;
