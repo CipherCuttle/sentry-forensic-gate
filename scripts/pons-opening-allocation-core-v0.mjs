@@ -82,9 +82,9 @@ export function attestPonsV2OpeningAllocation({
     launchLog.topics.length === raw.topics?.length &&
     launchLog.topics.every((topic, i) => sameHex(topic, raw.topics[i])) &&
     sameHex(launchLog.data, raw.data), 'CALLER_EVENT_BYTES_MISMATCH');
-  let decoded;
+  let decodedLaunchEvent;
   try {
-    decoded = decodeEventLog({
+    decodedLaunchEvent = decodeEventLog({
       abi: [PONS_V2_TOKEN_LAUNCHED_EVENT],
       data: raw.data,
       topics: raw.topics,
@@ -93,7 +93,7 @@ export function attestPonsV2OpeningAllocation({
   } catch {
     throw new Error('PONS_OPENING_FACTORY_EVENT_ABI_MISMATCH');
   }
-  const args = decoded.args;
+  const args = decodedLaunchEvent.args;
   const claimed = launchLog.args;
   need(claimed &&
     sameAddress(args.token, claimed.token) &&
