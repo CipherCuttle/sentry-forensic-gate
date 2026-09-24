@@ -91,7 +91,8 @@ function onLogs(source, logs) {
     try {
       const result = ledger.observe(source, log, monoMs, unixMs);
       if (result.type !== 'DUPLICATE') print({ type: 'LAUNCH_ARRIVAL', ...result });
-      if (result.type === 'FIRST') maybeVerify(log);
+      // Deep-read timings use HTTP-observed logs only, never source-dependent first arrivals.
+      if (source === 'HTTP' && (result.type === 'FIRST' || result.type === 'MATCHED')) maybeVerify(log);
     } catch (error) {
       ledger.errorCount++;
       print({ type: 'EVENT_REJECTED', source, errorClass: shortError(error) });
