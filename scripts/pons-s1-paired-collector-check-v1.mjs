@@ -166,7 +166,7 @@ fails('too little outcome publication budget',
   /INSUFFICIENT_PREOUTCOME_PUBLICATION_BUDGET|BATCH_CANNOT_REACH_RELEASE/);
 fails('rewound or out-of-range origin',{fromCursor:{blockNumber:'101',logIndex:0}},
   /GENESIS_WRONG_ORIGIN|UNBOUNDED_OR_REWOUND_SCAN/);
-fails('preexisting stale predecessor',{prior:{...prior,publishedAtMs:launch+90_000},
+fails('preexisting stale predecessor',{prior:{...prior,publishedAtMs:launch+110_000},
   fromCursor:first.batch.scanned.nextCursor,captureTimeMs:launch+100_000},
   /PREVIOUS_RELEASE_AFTER_NEW_CAPTURE/);
 fails('previous cursor gap',{prior,fromCursor:{blockNumber:'100',logIndex:99}},
