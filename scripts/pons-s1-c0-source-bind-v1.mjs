@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { canon, replayStoredC0Observation } from './pons-s1-c0-observer-core-v1.mjs';
 import { checkCompleteDualFactorySources } from './pons-s1-paired-collector-core-v1.mjs';
 
-const byBlock = (rows, block) => rows.filter(r=>r.blockNumber===block);
+const byBlock = (rows, block) => rows.filter(r=>String(r.blockNumber)===String(block));
 export function bindReplayedC0SourceObservations(input,observations){
   const {officialLogs,archiveLogs,factory,points,fromCursor,throughBlock,captureTimeMs}=input;
   assert.ok(Number.isSafeInteger(captureTimeMs)&&captureTimeMs>0,'INVALID_BIND_CAPTURE_TIME');
