@@ -206,7 +206,6 @@ next.census[1].c0.evidence.observedHeadBlock='105';
 next.census[1].c0.evidence.observedC0CompletionAtMs=next.census[1].c0.decidedAtMs;
 next.census[1].c0.evidenceSha256=digest(next.census[1].c0.evidence);
 next.census[1].inclusion.blockNumber='107';
-next.census[1].inclusion.blockNumber='105';
 next.census[1].inclusion.timestampMs+=10_000;
 next.scanned.scanFromCursor={blockNumber:'101',logIndex:0};
 next.scanned.scannedThrough='101';
