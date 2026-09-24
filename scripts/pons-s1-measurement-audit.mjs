@@ -13,8 +13,7 @@ if (evidenceArg === -1 || !process.argv[evidenceArg + 1] || process.argv.length 
 }
 const evidence = process.argv[evidenceArg + 1];
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
-const parseJsonl = (bytes, label) => bytes.toString('utf8').trimEnd().split('
-').filter(Boolean).map((line, index) => {
+const parseJsonl = (bytes, label) => bytes.toString('utf8').trimEnd().split('\n').filter(Boolean).map((line, index) => {
   try { return JSON.parse(line); }
   catch { throw new Error(`${label}: malformed JSON at line ${index + 1}`); }
 });
@@ -31,8 +30,7 @@ try {
   const files = ['features.jsonl', 'outcomes.jsonl', 'manifest.json', 'origin-receipt.json', 'summary.json'];
   const fileBytes = Object.fromEntries(await Promise.all(files.map(async name => [name, await readFile(join(evidence, name))])));
   const sums = await readFile(join(evidence, 'SHA256SUMS'), 'utf8');
-  const expected = new Map(sums.trim().split('
-').map(line => {
+  const expected = new Map(sums.trim().split('\n').map(line => {
     const match = /^([a-f0-9]{64})\s+cohort\/(.+)$/.exec(line.trim());
     assert.ok(match, 'malformed SHA256SUMS line');
     return [match[2], match[1]];
