@@ -1,0 +1,78 @@
+name: Pons S1 Frozen Measurement Audit V1
+
+on:
+  push:
+    branches:
+      - agent/pons-s1-exit-prereg-measurement-v1
+    paths:
+      - scripts/pons-s1-measurement-audit.mjs
+      - docs/PONS_S0_TO_S1_ROADMAP_2026-09-24.md
+      - docs/PONS_S1_SHORT_EXIT_PREREG_V1.md
+      - .github/workflows/pons-s1-measurement-audit-v1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-measurement-audit:
+    name: Read-only, origin-bound S0 coverage and negative test
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Syntax-check only the standalone audit
+        run: node --check scripts/pons-s1-measurement-audit.mjs
+
+      - name: Audit exactly pinned frozen S0 evidence (no RPC, no writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/pons-s1-measurement-audit.mjs \
+            --evidence docs/evidence/pons-s0-real-cohort-v1 \
+            > "${RUNNER_TEMP}/pons-s1-measurement-audit-v1.json"
+          jq -e '
+            .schemaVersion == "PONS_S1_MEASUREMENT_AUDIT_V1" and
+            .source.originEvidenceDigest == "31dd06dca9555954c2ca4546c8e75a9f3a2e9db33062c56076928b16919761ce" and
+            .source.selectedLaunchCount == 96 and
+            .baseline.statusCounts.COMPLETE == 57 and
+            .baseline.statusCounts.UNVERIFIED == 39 and
+            .baseline.unsupportedBaseCount == 39 and
+            .baseline.otherUnverifiedCount == 0 and
+            .outcome24h.resolvedCount == 57 and
+            .outcome24h.verifiedNetPnlCount == 0 and
+            .outcome24h.exitRouteObservedCount == 0 and
+            .decisions.scientificEdge == "UNPROVEN" and
+            .decisions.liveMoneyAuthority == false
+          ' "${RUNNER_TEMP}/pons-s1-measurement-audit-v1.json" >/dev/null
+          cat "${RUNNER_TEMP}/pons-s1-measurement-audit-v1.json"
+
+      - name: Fail-closed tamper regression against copied evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/tampered"
+          cp docs/evidence/pons-s0-real-cohort-v1/{SHA256SUMS,features.jsonl,outcomes.jsonl,manifest.json,origin-receipt.json,summary.json} "${RUNNER_TEMP}/tampered/"
+          printf 'x' >> "${RUNNER_TEMP}/tampered/features.jsonl"
+          if node scripts/pons-s1-measurement-audit.mjs --evidence "${RUNNER_TEMP}/tampered" > "${RUNNER_TEMP}/tamper.out" 2>&1; then
+            echo 'FAIL: audit accepted tampered data'
+            exit 1
+          fi
+          grep -q 'PONS_S1_MEASUREMENT_AUDIT_FAILED_CLOSED' "${RUNNER_TEMP}/tamper.out"
+          echo 'PASS: altered frozen evidence rejected'
+
+      - name: Upload one audit receipt
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-s1-measurement-audit-v1
+          path: ${{ runner.temp }}/pons-s1-measurement-audit-v1.json
+          if-no-files-found: warn
+          retention-days: 30
