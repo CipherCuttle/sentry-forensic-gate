@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { writeSync } from 'node:fs';
+import { readFileSync, writeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   createPublicClient,
@@ -64,11 +64,12 @@ assert.equal(
   'PONS_S0_SOURCE_COMMIT must remain pinned to the reviewed PR-A head'
 );
 
-const actualSourceCommit = execFileSync(
-  'git',
-  ['rev-parse', 'HEAD'],
-  { encoding: 'utf8' }
+// Fail closed on a non-detached or wrong source tree without spawning a process.
+// The immutable S0 evidence remains bound to the already-published script hashes.
+const actualSourceCommit = readFileSync(
+  new URL('../.git/HEAD', import.meta.url), 'utf8'
 ).trim();
+assert.match(actualSourceCommit, /^[0-9a-f]{40}$/i, 'PONS_S0_REQUIRES_DETACHED_REVIEWED_SOURCE');
 assert.equal(
   actualSourceCommit,
   EXPECTED_SOURCE_COMMIT,
