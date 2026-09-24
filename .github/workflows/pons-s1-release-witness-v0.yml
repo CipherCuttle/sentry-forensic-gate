@@ -1,0 +1,76 @@
+name: Pons S1 immutable release witness — read only
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-release-witness-v0.yml'
+      - 'scripts/pons-s1-release-witness-*.mjs'
+      - 'scripts/pons-s1-collector-core.mjs'
+      - 'docs/PONS_S1_RELEASE_WITNESS_V0.md'
+  workflow_dispatch:
+    inputs:
+      batch_digest:
+        required: true
+        type: string
+      release_id:
+        required: true
+        type: string
+      asset_id:
+        required: true
+        type: string
+      activation_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/pons-s1-release-witness-check.mjs
+  independent-read-only-witness:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PONS_S1_EXPECTED_BATCH_DIGEST: ${{ inputs.batch_digest }}
+      PONS_S1_EXPECTED_RELEASE_ID: ${{ inputs.release_id }}
+      PONS_S1_EXPECTED_ASSET_ID: ${{ inputs.asset_id }}
+      PONS_S1_EXPECTED_ACTIVATION_SHA: ${{ inputs.activation_sha }}
+      GH_READ_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Independently acquire official release, asset, tag and bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PONS_S1_EXPECTED_BATCH_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$PONS_S1_EXPECTED_RELEASE_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$PONS_S1_EXPECTED_ASSET_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$PONS_S1_EXPECTED_ACTIVATION_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir -p provenance
+          api="https://api.github.com/repos/CipherCuttle/sentry-forensic-gate"
+          opts=(--fail --silent --show-error --location --retry 2 --max-time 35)
+          curl "${api}/releases/${PONS_S1_EXPECTED_RELEASE_ID}" ${opts[@]} -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_READ_TOKEN}" -o provenance/release.json
+          curl "${api}/releases/assets/${PONS_S1_EXPECTED_ASSET_ID}" ${opts[@]} -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_READ_TOKEN}" -o provenance/asset.json
+          curl "${api}/git/ref/tags/pons-s1-batch-${PONS_S1_EXPECTED_BATCH_DIGEST}" ${opts[@]} -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_READ_TOKEN}" -o provenance/tag.json
+          curl "${api}/releases/assets/${PONS_S1_EXPECTED_ASSET_ID}" ${opts[@]} -H "Accept: application/octet-stream" -H "Authorization: Bearer ${GH_READ_TOKEN}" -o provenance/batch.bin
+      - name: Validate immutable release evidence and write one receipt
+        run: |
+          node scripts/pons-s1-release-witness.mjs provenance/release.json provenance/asset.json provenance/tag.json provenance/batch.bin provenance/verified.json
+      - name: Store read-only independent witness receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-s1-immutable-release-witness
+          path: provenance/verified.json
+          if-no-files-found: error
+          retention-days: 30
