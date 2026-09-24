@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildC0Observation, replayStoredC0Observation, digest, OBS_SCHEMA } from './pons-s1-c0-observer-core-v1.mjs';
+import { buildC0Observation, buildC0TypedUnknownObservation, replayStoredC0Observation, digest, OBS_SCHEMA, UNKNOWN_SCHEMA } from './pons-s1-c0-observer-core-v1.mjs';
 import { INCLUSION_RULE } from './pons-s1-publisher-core-v1.mjs';
 import { bindReplayedC0SourceObservations } from './pons-s1-c0-source-bind-v1.mjs';
 const H=x=>'0x'+x.repeat(64),A=x=>'0x'+x.repeat(40);
@@ -95,10 +95,67 @@ const reject=buildC0Observation({...input,
   control:{...control,decision:'REJECT',hypotheticalAction:'WOULD_SKIP',capacityUsdMicros:null}});
 assert.equal(reject.receipt.action,'REJECT');
 
+
+// All C0 adapter failures must produce a deterministic, untradeable receipt.
+const typedInput={...input,failure:{stage:'BASELINE_ACQUISITION',code:'RPC_TIMEOUT'}};
+const typed=buildC0TypedUnknownObservation(typedInput);
+assert.equal(typed.evidence.schemaVersion,UNKNOWN_SCHEMA);
+assert.equal(typed.receipt.action,'UNKNOWN_PREOUTCOME_C0');
+assert.equal(typed.receipt.evidence.reason,'BASELINE_ACQUISITION:RPC_TIMEOUT');
+assert.equal(typed.evidence.baseline,null);
+assert.equal(typed.evidence.control,null);
+assert.equal(typed.evidence.launch,null);
+assert.equal(typed.evidence.noOutcomeReads,true);
+assert.equal(replayStoredC0Observation(JSON.parse(JSON.stringify(typed))).replayed,true);
+const metadataUnknown=buildC0TypedUnknownObservation({...input,
+  failure:{stage:'LAUNCH_NORMALIZATION',code:'REQUIRED_LAUNCH_METADATA_MISSING'}});
+assert.equal(metadataUnknown.receipt.action,'UNKNOWN_PREOUTCOME_C0');
+const controlUnknown=buildC0TypedUnknownObservation({...input,
+  failure:{stage:'CONTROL_EVALUATION',code:'CONTROL_ERROR'}});
+assert.equal(controlUnknown.receipt.action,'UNKNOWN_PREOUTCOME_C0');
+const failBad=(name,patch,re)=>{
+  assert.throws(()=>buildC0TypedUnknownObservation({...typedInput,...patch}),re,name);
+  negative++;
+};
+failBad('full factory transcript loss',{archiveFactoryBlockLogs:[]},
+  /FULL_LAUNCH_BLOCK_FACTORY_SOURCE_DISAGREEMENT/);
+failBad('provider decision block disagreement',
+  {archivePoints:{...points,decision:{...points.decision,hash:H('9')}}},
+  /decision_POINT_SOURCE_DISAGREEMENT/);
+failBad('cannot fabricate two confirmations',
+  {officialPoints:{...points,observed:{...points.observed,number:'103'}},
+   archivePoints:{...points,observed:{...points.observed,number:'103'}},
+   observedHead:{...input.observedHead,number:'103'}},
+  /UNKNOWN_C0_CONFIRMATIONS_NOT_OBSERVED/);
+failBad('no post-outcome backfill',{capturedAtMs:launchTs+300_000},
+  /UNKNOWN_CAPTURE_AFTER_5M/);
+failBad('unreviewed failure stage',{failure:{stage:'FUTURE_OUTCOME',code:'ADAPTER_ERROR'}},
+  /UNKNOWN_UNREVIEWED_FAILURE_STAGE/);
+failBad('raw provider secret cannot enter error code',
+  {failure:{stage:'BASELINE_ACQUISITION',code:'rpc://secret:key'}},
+  /UNKNOWN_UNREVIEWED_FAILURE_CODE/);
+failBad('normalization cannot pretend control error',
+  {failure:{stage:'LAUNCH_NORMALIZATION',code:'CONTROL_ERROR'}},
+  /UNKNOWN_NORMALIZATION_WRONG_ERROR_CODE/);
+failBad('control cannot pretend RPC timeout',
+  {failure:{stage:'CONTROL_EVALUATION',code:'RPC_TIMEOUT'}},
+  /UNKNOWN_CONTROL_WRONG_ERROR_CODE/);
+assert.throws(()=>replayStoredC0Observation({...typed,
+  receipt:{...typed.receipt,
+    evidence:{...typed.receipt.evidence,reason:'ELIGIBLE_AFTER_OUTCOME'}}}),
+  /STORED_TYPED_UNKNOWN_OR_SOURCE_EVIDENCE_TAMPERED/);negative++;
+assert.throws(()=>replayStoredC0Observation({...typed,
+  evidence:{...typed.evidence,officialFactoryBlockLogs:[]}}),
+  /EXACT_EVENT_NOT_SINGLETON_IN_OFFICIAL_CENSUS/);negative++;
 const binderInput={officialLogs:[log],archiveLogs:[structuredClone(log)],factory:A('f'),
   fromCursor:{blockNumber:'100',logIndex:0},throughBlock:'100',captureTimeMs:now,
   points:Object.fromEntries(Object.values(points).map(p=>[p.number,{...p}]))};
 const receiptMap=bindReplayedC0SourceObservations(binderInput,[x]);
+const typedMap=bindReplayedC0SourceObservations(binderInput,[typed]);
+assert.equal(typedMap[event.eventKey].action,'UNKNOWN_PREOUTCOME_C0');
+assert.equal(typedMap[event.eventKey].evidence.reason,'BASELINE_ACQUISITION:RPC_TIMEOUT');
+assert.throws(()=>bindReplayedC0SourceObservations(binderInput,[x,typed]),
+  /DUPLICATE_C0_SOURCE_OBSERVATION/);negative++;
 assert.deepEqual(Object.keys(receiptMap),[event.eventKey]);
 assert.equal(receiptMap[event.eventKey].action,'WOULD_TRADE');
 assert.throws(()=>bindReplayedC0SourceObservations(binderInput,[x,x]),
@@ -108,5 +165,5 @@ assert.throws(()=>bindReplayedC0SourceObservations(binderInput,[]),
 assert.throws(()=>bindReplayedC0SourceObservations({
   ...binderInput,captureTimeMs:now-1},[x]),/OBSERVATION_STORED_AFTER_BATCH_CAPTURE/);negative++;
 console.log(JSON.stringify({verdict:'PONS_S1_C0_OBSERVER_OFFLINE_PASS',
-  positive:4,negative,realRpc:false,outcomeReads:false,liveMoneyAuthority:false,
+  positive:7,negative,realRpc:false,outcomeReads:false,liveMoneyAuthority:false,
   independentLiveCaptureAttested:false}));

@@ -17,7 +17,7 @@ import {
   evaluateBuyEveryExecutableControl,
   ponsV2TokenLaunchedEvent
 } from '../dist/index.js';
-import { buildC0Observation, canon } from './pons-s1-c0-observer-core-v1.mjs';
+import { buildC0Observation, buildC0TypedUnknownObservation, canon } from './pons-s1-c0-observer-core-v1.mjs';
 import { INCLUSION_RULE } from './pons-s1-publisher-core-v1.mjs';
 
 const inputPath=process.argv[2], outputPath=process.argv[3];
@@ -81,21 +81,36 @@ const archiveRuntimeHash=keccak256(archiveCode).toLowerCase();
 assert.equal(officialRuntimeHash,CURRENT_PONS_V2_AUTHORITY.factoryRuntimeCodeHash.toLowerCase(),
   'OFFICIAL_FACTORY_RUNTIME_DRIFT');
 assert.equal(archiveRuntimeHash,officialRuntimeHash,'ARCHIVE_FACTORY_RUNTIME_DRIFT');
+// Failures before independent dual-source native factory identity, runtime
+// checks or the post-C0 canonical head are HARD stops, not invented UNKNOWNs.
 const launchAdapter=new ViemPonsV2LaunchAdapter({authority:CURRENT_PONS_V2_AUTHORITY,client:archive});
-const candidates=await launchAdapter.catchUp(launchBlock,launchBlock);
-const launch=candidates.find(x=>x.txHash.toLowerCase()===String(event.transactionHash).toLowerCase()&&
-  x.logIndex===event.logIndex&&x.token.toLowerCase()===String(event.token).toLowerCase());
-assert.ok(launch,'NORMALIZED_LAUNCH_MISSING');
-const quote=new ViemPonsV2CurveQuoteAdapter({authority:CURRENT_PONS_V2_AUTHORITY,
-  templateAuthority:CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,client:archive,now:Date.now});
-const usd=new ViemRobinhoodUsdCalibrationAdapter({
-  authority:CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY,client:archive});
-// Do not anchor inclusion to a block observed BEFORE potentially slow
-// point-in-time curve/USD quotes. Observe a fresh dual-source head *after*
-// the complete baseline and frozen control decision have finished.
-const baseline=await buildPortableBaselineBatch(
-  {launch:launchAdapter,marketQuotes:quote,usdCalibration:usd},launch,Date.now);
-const control=evaluateBuyEveryExecutableControl(baseline);
+let launch=null,baseline=null,control=null,failure=null;
+const failureCode=error=>{
+  const name=String(error?.name??'');
+  return /timeout/i.test(name)?'RPC_TIMEOUT':
+    /network|connection/i.test(name)?'RPC_UNAVAILABLE':'ADAPTER_ERROR';
+};
+try{
+  const candidates=await launchAdapter.catchUp(launchBlock,launchBlock);
+  launch=candidates.find(x=>x.txHash.toLowerCase()===String(event.transactionHash).toLowerCase()&&
+    x.logIndex===event.logIndex&&x.token.toLowerCase()===String(event.token).toLowerCase());
+  if(!launch)failure={stage:'LAUNCH_NORMALIZATION',code:'REQUIRED_LAUNCH_METADATA_MISSING'};
+}catch(error){failure={stage:'LAUNCH_NORMALIZATION',code:failureCode(error)};}
+if(!failure){
+  const quote=new ViemPonsV2CurveQuoteAdapter({authority:CURRENT_PONS_V2_AUTHORITY,
+    templateAuthority:CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,client:archive,now:Date.now});
+  const usd=new ViemRobinhoodUsdCalibrationAdapter({
+    authority:CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY,client:archive});
+  try{
+    baseline=await buildPortableBaselineBatch(
+      {launch:launchAdapter,marketQuotes:quote,usdCalibration:usd},launch,Date.now);
+  }catch(error){failure={stage:'BASELINE_ACQUISITION',code:failureCode(error)};}
+}
+if(!failure){
+  try{control=evaluateBuyEveryExecutableControl(baseline);}
+  catch{failure={stage:'CONTROL_EVALUATION',code:'CONTROL_ERROR'};}
+}
+// The fresh two-provider completion head is mandatory for either outcome.
 const [offHeadAfter,arcHeadAfter]=await Promise.all([
   official.getBlockNumber(),archive.getBlockNumber()]);
 const completionHead=offHeadAfter<arcHeadAfter?offHeadAfter:arcHeadAfter;
@@ -116,13 +131,18 @@ assert.ok(capturedAtMs<offLaunch.timestampMs+300_000,
   'C0_COMPLETED_TOO_LATE_FOR_FIVE_MINUTE_PROOF');
 assert.ok(capturedAtMs+90_000<offLaunch.timestampMs+300_000,
   'NO_TIME_FOR_C0_SOURCE_IMMUTABLE_WITNESS');
-const observation=buildC0Observation({event,expectedFactory:CURRENT_PONS_V2_AUTHORITY.factory,
+const source={
+  event,expectedFactory:CURRENT_PONS_V2_AUTHORITY.factory,
   officialLog,archiveLog,officialFactoryBlockLogs:officialLogs,
   archiveFactoryBlockLogs:archiveLogs,
   officialPoints:{launch:offLaunch,decision:offDecision,observed:offObserved},
   archivePoints:{launch:arcLaunch,decision:arcDecision,observed:arcObserved},
-  launch,baseline,control,decisionBlock:offDecision,observedHead:offObserved,capturedAtMs,
-  officialRuntimeHash,archiveRuntimeHash});
+  decisionBlock:offDecision,observedHead:offObserved,capturedAtMs,
+  officialRuntimeHash,archiveRuntimeHash
+};
+const observation=failure?
+  buildC0TypedUnknownObservation({...source,failure}):
+  buildC0Observation({...source,launch,baseline,control});
 const fd=await open(resolve(outputPath),'wx',0o600);
 try{await fd.writeFile(JSON.stringify(canon(observation))+'\n');await fd.sync();}finally{await fd.close();}
 console.log(JSON.stringify({verdict:'PONS_S1_C0_OBSERVATION_CAPTURED_READ_ONLY',
