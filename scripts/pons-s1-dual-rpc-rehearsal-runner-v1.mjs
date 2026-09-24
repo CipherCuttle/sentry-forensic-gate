@@ -11,7 +11,8 @@ import {
   CURRENT_ROBINHOOD_USDG_CALIBRATION_AUTHORITY as USD,
   ViemPonsV2LaunchAdapter,ViemPonsV2CurveQuoteAdapter,
   ViemRobinhoodUsdCalibrationAdapter,buildPortableBaselineBatch,
-  evaluateBuyEveryExecutableControl,ponsV2TokenLaunchedEvent
+  evaluateBuyEveryExecutableControl,ponsV2TokenLaunchedEvent,
+  ponsV2FactoryReadAbi
 } from '../dist/index.js';
 import {SCHEMA,OFFICIAL,CANDIDATE,checkProviders,
   scanRange,selectLatestNative,checkQuoteParity,validateDiagnostic}
@@ -41,7 +42,8 @@ const result={
   quoteParity:false,inclusion12:false,
   scientificProof:false,actualFill:false,independentSourceSeal:false,
   runId:process.env.GITHUB_RUN_ID??null,
-  exactPrHead:process.env.PONS_S1_PR_HEAD_SHA??null
+  exactPrHead:process.env.PONS_S1_PR_HEAD_SHA??null,
+  historicArchiveStateSample:false
 };
 let phase='CHAIN_ID';
 const started=Date.now();
@@ -100,12 +102,41 @@ try{
     FACTORY.factoryRuntimeCodeHash.toLowerCase(),
     'SECOND_FACTORY_RUNTIME_MISMATCH');
 
-  phase='DUAL_PROVIDER_COMPLETE_12_BLOCK_CENSUS';
-  const filter={address:FACTORY.factory,event:ponsV2TokenLaunchedEvent,
-    fromBlock:range.from,toBlock:range.through,strict:true};
-  const [logs1,logs2]=await Promise.all([
-    official.getLogs(filter),other.getLogs(filter)]);
+  phase='HISTORICAL_ARCHIVE_ETH_CALL_PROBE';
+  const old=FACTORY.fromBlock+1000n;
+  const [ob,ab,oc,ac,ov,av]=await Promise.all([
+    point(official,old),point(other,old),
+    official.getBytecode({address:FACTORY.factory,blockNumber:old}),
+    other.getBytecode({address:FACTORY.factory,blockNumber:old}),
+    official.readContract({address:FACTORY.factory,abi:ponsV2FactoryReadAbi,
+      functionName:'memeHook',blockNumber:old}),
+    other.readContract({address:FACTORY.factory,abi:ponsV2FactoryReadAbi,
+      functionName:'memeHook',blockNumber:old})
+  ]);
+  same(ob,ab,'HISTORICAL_ARCHIVE_BLOCK');
+  assert.ok(oc&&ac,'HISTORICAL_FACTORY_CODE_MISSING');
+  assert.equal(keccak256(oc).toLowerCase(),FACTORY.factoryRuntimeCodeHash.toLowerCase(),
+    'HISTORICAL_OFFICIAL_RUNTIME_DRIFT');
+  assert.equal(keccak256(ac).toLowerCase(),FACTORY.factoryRuntimeCodeHash.toLowerCase(),
+    'HISTORICAL_SECOND_RUNTIME_DRIFT');
+  assert.equal(String(ov).toLowerCase(),String(av).toLowerCase(),
+    'HISTORICAL_ETH_CALL_RESULT_DISAGREEMENT');
+  result.historicArchiveStateSample=true;
+  result.historicSampleBlock=String(old);
+  phase='DUAL_PROVIDER_CONTIGUOUS_256_BLOCK_CENSUS';
+  const logs1=[],logs2=[];
+  for(let from=range.from;from<=range.through;from+=16n){
+    budget();
+    const to=from+15n<=range.through?from+15n:range.through;
+    const filter={address:FACTORY.factory,event:ponsV2TokenLaunchedEvent,
+      fromBlock:from,toBlock:to,strict:true};
+    const [x,y]=await Promise.all([
+      official.getLogs(filter),other.getLogs(filter)]);
+    selectLatestNative(x,y,FACTORY.factory);
+    logs1.push(...x);logs2.push(...y);
+  }
   const full=selectLatestNative(logs1,logs2,FACTORY.factory);
+  result.contiguousScannedBlocks=256;
   result.scannedEvents=full.allCount;result.nativeEvents=full.nativeCount;
   result.fullFactoryTranscriptDigest=full.digest;
   if(!full.row)result.state='NO_NATIVE_IN_BOUNDED_WINDOW';
@@ -151,14 +182,16 @@ try{
         await pause(2500);
       }
       if(enough){
-        const [i1,i2,f1,f2,re1,re2]=await Promise.all([
+        const [i1,i2,f1,f2,re1,re2,rd1,rd2]=await Promise.all([
           point(official,inclusion),point(other,inclusion),
           point(official,confirmed),point(other,confirmed),
-          point(official,launchHeight),point(other,launchHeight)
+          point(official,launchHeight),point(other,launchHeight),
+          point(official,decisionHeight),point(other,decisionHeight)
         ]);
         same(i1,i2,'INCLUSION');same(f1,f2,'TWELVE_CONFIRMATIONS');
-        same(re1,re2,'RECHECK_LAUNCH');
+        same(re1,re2,'RECHECK_LAUNCH');same(rd1,rd2,'RECHECK_DECISION');
         assert.equal(re1.hash,l1.hash,'REORG_DURING_REHEARSAL');
+        assert.equal(rd1.hash,d1.hash,'DECISION_REORG_DURING_REHEARSAL');
         result.inclusion12=true;
         result.inclusion12ObservedAtUtc=new Date().toISOString();
       }

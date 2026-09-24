@@ -31,6 +31,7 @@ jobs:
     permissions: {contents: read}
     env:
       PONS_S1_DIAGNOSTIC: ONE_BOUNDED_PUBLIC_DUAL_RPC
+      PONS_S1_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}

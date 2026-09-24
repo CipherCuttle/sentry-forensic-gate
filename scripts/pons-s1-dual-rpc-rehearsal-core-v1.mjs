@@ -19,8 +19,9 @@ export function scanRange(officialHead,otherHead,authorityStart){
   const lag=officialHead>otherHead?officialHead-otherHead:otherHead-officialHead;
   assert.ok(lag<=128n,'SECOND_PROVIDER_HEAD_LAG');
   const low=officialHead<otherHead?officialHead:otherHead;
-  assert.ok(low>=authorityStart+16n,'NOT_ENOUGH_BLOCKS');
-  return {from:low-15n,through:low-4n,lag};
+  assert.ok(low>=authorityStart+260n,'NOT_ENOUGH_BLOCKS');
+  // Contiguous 256-block diagnostic, 16 sequential 16-block RPC ranges.
+  return {from:low-259n,through:low-4n,lag};
 }
 export function selectLatestNative(official,other,factory){
   const full=checkCompleteDualFactorySources(official,other,factory);
@@ -42,6 +43,9 @@ export function checkQuoteParity(x,y){
   assert.equal(b.status,'COMPLETE','SECOND_BASELINE_UNVERIFIED');
   assert.equal(a.legs.length,5,'OFFICIAL_NOT_FIVE_NOTIONALS');
   assert.equal(b.legs.length,5,'SECOND_NOT_FIVE_NOTIONALS');
+  const ladder=['250000','500000','1000000','2000000','5000000'];
+  assert.deepEqual(a.legs.map(x=>x.notional),ladder,'OFFICIAL_FROZEN_LADDER_DRIFT');
+  assert.deepEqual(b.legs.map(x=>x.notional),ladder,'SECOND_FROZEN_LADDER_DRIFT');
   assert.deepEqual(a,b,'FROZEN_QUOTE_PARITY_FAILURE');
   return {matchingNotionals:5,sequentialSellCapacityProven:false};
 }

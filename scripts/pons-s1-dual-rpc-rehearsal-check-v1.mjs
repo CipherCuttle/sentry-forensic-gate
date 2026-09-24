@@ -9,16 +9,18 @@ const row=(n,pair=A('0'))=>({address:A('f'),blockNumber:BigInt(n),
     launchConfigId:1n,graduationThreshold:2n}});
 assert.equal(checkProviders(OFFICIAL,CANDIDATE).backendIndependenceQualified,false);
 const range=scanRange(26900000n,26900001n,26841846n);
-assert.equal(range.from,26899985n);assert.equal(range.through,26899996n);
+assert.equal(range.from,26899741n);assert.equal(range.through,26899996n);
+assert.equal(range.through-range.from+1n,256n);
 const source=selectLatestNative([row(100),row(101,A('9'))],
   [row(100),row(101,A('9'))],A('f'));
 assert.equal(source.allCount,2);assert.equal(source.nativeCount,1);
 assert.equal(source.row.blockNumber,'100');
-const leg=x=>({notionalUsdMicros:1000000n,
-  calibration:{baseAmount:10n},entry:{executable:true,amountOut:x},
+const leg=n=>({notionalUsdMicros:n,
+  calibration:{baseAmount:10n},entry:{executable:true,amountOut:7n},
   reverse:{executable:true,amountOut:9n}});
+const ladder=[250000n,500000n,1000000n,2000000n,5000000n];
 const good={status:'COMPLETE',decisionBlock:102n,
-  decisionBlockHash:H('a'),legs:[leg(7n),leg(7n),leg(7n),leg(7n),leg(7n)]};
+  decisionBlockHash:H('a'),legs:ladder.map(leg)};
 assert.equal(checkQuoteParity(good,structuredClone(good)).matchingNotionals,5);
 const receipt={schemaVersion:SCHEMA,chainId:4663,
   secondProvider:'BLOCKREQ_PUBLIC_CANDIDATE',
@@ -36,6 +38,8 @@ bad(()=>selectLatestNative([row(100)],[],A('f')),/DISAGREEMENT/);
 bad(()=>selectLatestNative([row(100)],[row(100,A('9'))],A('f')),/DISAGREEMENT/);
 bad(()=>checkQuoteParity({...good,status:'UNVERIFIED'},good),/OFFICIAL_BASELINE_UNVERIFIED/);
 bad(()=>checkQuoteParity(good,{...good,legs:[]}),/SECOND_NOT_FIVE_NOTIONALS/);
+bad(()=>checkQuoteParity(good,{...good,legs:good.legs.map(l=>({
+  ...l,notionalUsdMicros:1000000n}))}),/SECOND_FROZEN_LADDER_DRIFT/);
 bad(()=>checkQuoteParity(good,{...good,
   legs:good.legs.map(l=>({...l,entry:{...l.entry,amountOut:8n}}))}),
   /FROZEN_QUOTE_PARITY_FAILURE/);
