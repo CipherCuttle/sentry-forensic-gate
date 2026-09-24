@@ -15,6 +15,9 @@ export const PONS_V2_FORWARDER_LAUNCH_ABI = parseAbi([
   socials, tokenParams,
   'function launchAndBuy(TokenParams params, uint256 launchConfigId, address pairToken, uint256 quoteIn, uint256 minTokensOut, address recipient, address[] snipeTaxExemptions) payable returns (address token, address curve, uint256 tokensOut)'
 ]);
+export const PONS_V2_TOKEN_LAUNCHED_EVENT = parseAbiItem(
+  'event TokenLaunched(address indexed token, address indexed curve, address indexed deployer, address pairToken, uint256 launchConfigId, uint256 graduationThreshold)'
+);
 export const PONS_V2_CURVE_BUY_EVENT = parseAbiItem(
   'event CurveBuy(address indexed buyer, address indexed recipient, uint256 quoteIn, uint256 tokensOut, uint256 fee, uint256 tax)'
 );
@@ -66,15 +69,40 @@ export function attestPonsV2OpeningAllocation({
   need(sameHex(receipt.blockHash, launchLog?.blockHash), 'LAUNCH_LOG_BLOCK_MISMATCH');
   need(sameHex(launchLog?.transactionHash, hash), 'LAUNCH_LOG_TX_MISMATCH');
   need(sameAddress(launchLog?.address, reviewedFactory), 'LAUNCH_EVENT_FACTORY_MISMATCH');
-  need(Array.isArray(receipt.logs) && receipt.logs.some(log =>
+  need(Array.isArray(receipt.logs), 'RECEIPT_LOGS_MISSING');
+  const rawMatches = receipt.logs.filter(log =>
     sameHex(log.transactionHash, hash) &&
     sameAddress(log.address, reviewedFactory) &&
     log.logIndex === launchLog.logIndex &&
     sameHex(log.blockHash, receipt.blockHash)
-  ), 'LAUNCH_LOG_NOT_IN_RECEIPT');
-
-  const args = launchLog.args;
-  need(args && typeof args === 'object', 'LAUNCH_EVENT_ARGS_MISSING');
+  );
+  need(rawMatches.length === 1, 'LAUNCH_LOG_NOT_UNIQUE_IN_RECEIPT');
+  const raw = rawMatches[0];
+  need(Array.isArray(launchLog.topics) &&
+    launchLog.topics.length === raw.topics?.length &&
+    launchLog.topics.every((topic, i) => sameHex(topic, raw.topics[i])) &&
+    sameHex(launchLog.data, raw.data), 'CALLER_EVENT_BYTES_MISMATCH');
+  let decoded;
+  try {
+    decoded = decodeEventLog({
+      abi: [PONS_V2_TOKEN_LAUNCHED_EVENT],
+      data: raw.data,
+      topics: raw.topics,
+      strict: true
+    });
+  } catch {
+    throw new Error('PONS_OPENING_FACTORY_EVENT_ABI_MISMATCH');
+  }
+  const args = decoded.args;
+  const claimed = launchLog.args;
+  need(claimed &&
+    sameAddress(args.token, claimed.token) &&
+    sameAddress(args.curve, claimed.curve) &&
+    sameAddress(args.deployer, claimed.deployer) &&
+    sameAddress(args.pairToken, claimed.pairToken) &&
+    args.launchConfigId === claimed.launchConfigId &&
+    args.graduationThreshold === claimed.graduationThreshold,
+    'CALLER_EVENT_ARGS_MISMATCH');
   const token = address(args.token, 'TOKEN');
   const curve = address(args.curve, 'CURVE');
   const initiator = address(args.deployer, 'LAUNCHER');
