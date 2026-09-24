@@ -46,7 +46,7 @@ function candidate(index = 0) {
       factoryEventsDigest:digestAll,officialEventsDigest:digestAll,
       archiveEventsDigest:digestAll},
     census,selectedEventKeys:[native.eventKey],cumulativeEligibleDecisions:1,
-    capturedAtMs:launch+30_000,outcomesRead:false};
+    capturedAtMs:launch+50_000,outcomesRead:false};
   return {...body,batchDigest:digest(body)};
 }
 const initial = candidate(), bytes = canonicalBatchBytes(initial);
@@ -105,6 +105,14 @@ mutate(b=>{b.census[1].c0.evidence.futureOutcome='profit'},
 mutate(b=>{b.census[1].c0.evidenceSha256='f'.repeat(64)},
   /C0_EVIDENCE_DIGEST_MISMATCH/);
 mutate(b=>{b.census[1].c0.decisionBlock='103'},/Expected values to be strictly equal/);
+mutate(b=>{b.capturedAtMs=launch+35_000},
+  /FUTURE_INCLUSION_LOOKAHEAD_FORBIDDEN/);
+mutate(b=>{b.census[1].inclusion.blockNumber='106'},
+  /INCLUSION_NOT_TWELVE_CONFIRMED/);
+mutate(b=>{b.scanned.nextCursor={blockNumber:'100',logIndex:0}},
+  /CURSOR_CANNOT_SKIP_OR_RESCAN_PARTIAL_RANGE|NEXT_CURSOR_REPEATS_LAST_EVENT/);
+mutate(b=>{b.scanned.scannedThroughHash=H('f')},
+  /SCANNED_THROUGH_EVENT_HASH_MISMATCH/);
 mutate(b=>{b.scanned.confirmedHeadBlock='113'},/C0_NOT_TWELVE_CONFIRMED/);
 mutate(b=>{b.scanned.officialEventsDigest='f'.repeat(64)},
   /OFFICIAL_SOURCE_DIGEST_MISMATCH/);
@@ -112,7 +120,8 @@ mutate(b=>{b.selectedEventKeys=[]},/SELECTED_MUST_MATCH_ALL_CONSECUTIVE_C0_DECIS
 mutate(b=>{b.census.pop()},/SELECTED_MUST_MATCH|FACTORY_CENSUS_DIGEST_MISMATCH/);
 mutate(b=>{b.cumulativeEligibleDecisions=2},/HIDDEN_ELIGIBLE_DECISION/);
 mutate(b=>{b.census[0].nativePair=true},/C0_OBJECT_REQUIRED/);
-mutate(b=>{b.capturedAtMs=launch+300_000},/CAPTURED_AFTER_FIRST_OUTCOME/);
+mutate(b=>{b.capturedAtMs=launch+302_000},/CAPTURED_AFTER_FIRST_OUTCOME/,
+  launch+310_000);
 rejected('late attempted publication',()=>planPublication(bytes,protocol,
   authority,A,null,launch+230_000),/INSUFFICIENT_PREOUTCOME_PUBLICATION_BUDGET/);
 rejected('mutable release',()=>verifyReadBack(plan,bytes,

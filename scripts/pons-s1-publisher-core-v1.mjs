@@ -175,6 +175,8 @@ export function validateBatch(batch, protocol, authority, activationSha,
     seenEvents.add(row.eventKey);
     assert.ok(!seenTokens.has(row.token), 'DUPLICATE_TOKEN_IN_BATCH');
     seenTokens.add(row.token);
+    if (n === through) assert.equal(row.blockHash,
+      batch.scanned.scannedThroughHash, 'SCANNED_THROUGH_EVENT_HASH_MISMATCH');
     lastBlock = n; lastLog = row.logIndex;
     assert.equal(typeof row.nativePair, 'boolean');
     pos(row.launchTimestampMs, 'LAUNCH_TIMESTAMP');
@@ -214,6 +216,10 @@ export function validateBatch(batch, protocol, authority, activationSha,
       pos(row.inclusion.timestampMs, 'INCLUSION_TIMESTAMP');
       assert.ok(row.inclusion.timestampMs >= row.launchTimestampMs,
         'INCLUSION_BEFORE_LAUNCH');
+      assert.ok(row.inclusion.timestampMs <= batch.capturedAtMs,
+        'FUTURE_INCLUSION_LOOKAHEAD_FORBIDDEN');
+      assert.ok(confirmed >= block(row.inclusion.blockNumber,'INCLUSION_BLOCK')+12n,
+        'INCLUSION_NOT_TWELVE_CONFIRMED');
       deadlines.push(row.inclusion.timestampMs + 300_000);
       eligible.push(row.eventKey);
     }
@@ -234,9 +240,12 @@ export function validateBatch(batch, protocol, authority, activationSha,
     (prior ? prior.batch.cumulativeEligibleDecisions : 0) + eligible.length,
     'HIDDEN_ELIGIBLE_DECISION');
   const nextCursor = batch.scanned.nextCursor;
+  assert.ok(next === through || next === through+1n,
+    'CURSOR_CANNOT_SKIP_OR_RESCAN_PARTIAL_RANGE');
   if (next === through + 1n) assert.equal(nextCursor.logIndex, 0);
-  if (next === through && lastBlock === through) {
-    assert.ok(nextCursor.logIndex > lastLog, 'NEXT_CURSOR_REPEATS_LAST_EVENT');
+  if (next === through) {
+    assert.equal(lastBlock, through,'SAME_BLOCK_RESUME_WITHOUT_FINAL_EVENT');
+    assert.ok(nextCursor.logIndex > lastLog,'NEXT_CURSOR_REPEATS_LAST_EVENT');
   }
   const {batchDigest, ...payload} = batch;
   assert.equal(batchDigest, digest(payload), 'BATCH_DIGEST_MISMATCH');
