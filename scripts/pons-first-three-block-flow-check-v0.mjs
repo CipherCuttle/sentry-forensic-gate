@@ -68,12 +68,12 @@ function transfer(block,hash,index,from,to,value) {
 // can be bought, resold and bought again. It is NOT insider ownership.
 const buy0=buy(blocks[0],tx0,1,launcher,privileged,100n,200_000n);
 const buy1=buy(blocks[1],tx1,0,publicBuyer,publicBuyer,200n,600_000n);
-const sell2=sell(blocks[2],tx2,0,privileged,privileged,200_000n,90n);
+const sell2=sell(blocks[2],tx2,0,publicBuyer,publicBuyer,400_000n,90n);
 const buy2=buy(blocks[2],tx2,2,publicBuyer,publicBuyer,150n,500_000n);
 const mint=transfer(blocks[0],tx0,2,zeroAddress,curve,supply);
 const xfer0=transfer(blocks[0],tx0,3,curve,privileged,200_000n);
 const xfer1=transfer(blocks[1],tx1,1,curve,publicBuyer,600_000n);
-const xfer2=transfer(blocks[2],tx2,1,privileged,curve,200_000n);
+const xfer2=transfer(blocks[2],tx2,1,publicBuyer,curve,400_000n);
 const xfer3=transfer(blocks[2],tx2,3,curve,publicBuyer,500_000n);
 const opening=attestPonsV2OpeningAllocation({
   factory,forwarder,transaction:tx,
@@ -97,7 +97,7 @@ assert.equal(out.buyerFlow.grossTokensOut,'1300000');
 assert.equal(out.buyerFlow.grossBuyTurnoverBpsFloor,13000);
 assert.equal(out.buyerFlow.knownDeclaredExemptRecipientGrossBuyTurnoverBpsFloor,2000);
 assert.equal(out.sellerFlow.sellEvents,1);
-assert.equal(out.sellerFlow.grossTokensIn,'200000');
+assert.equal(out.sellerFlow.grossTokensIn,'400000');
 assert.equal(out.tokenTransfers.mintEvents,1);
 assert.equal(out.tokenTransfers.otherTransferEvents,4);
 assert.equal(out.buyerFlow.topBuyRecipients[0].grossBuyTurnoverBpsFloor,11000);
