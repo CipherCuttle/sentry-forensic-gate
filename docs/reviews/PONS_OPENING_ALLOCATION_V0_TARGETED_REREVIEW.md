@@ -25,3 +25,12 @@ Added regressions for: modified claimed token, modified claimed event data, modi
 No inference of the true beneficial owner of other wallets; no proof of profits, rug safety, later-block selling pressure, executable exits, sequencer priority or market edge. The direct and atomic methods are only the two source-qualified Pons V2 routes. Unknown launch selectors, historical RPC gaps, proxy/forwarder mismatch and factory authority drift **STOP**, not assumed safe. No signer, wallet clients, execution grant, buy, sell, approval, broadcast, merge, scheduled collector or activation was added.
 
 Separate scientific preregistration reconciliation remains outstanding between S1 PRs #73–#75 and #76. A future first-N-block buyer census must not relabel this same-transaction observation as total insider supply.
+
+
+## Subsequent bounded real-chain source qualification (not another review loop)
+
+The optional read-only direct-launch sample **succeeded** at reviewed code/workflow head `609a4edcb7bb017967bc3f8efcfc5261ec6738ad`: [GitHub Actions run 35947248055](https://github.com/CipherCuttle/sentry-forensic-gate/actions/runs/35947248055) and its downloadable `pons-opening-one-real-transaction-v0` JSON artifact.
+
+Source: one factory launch observed independently by the seven-minute paired speed benchmark. Exact launch transaction `0xbd52317c84d90ba8912646563117fba9617056ce27cb5105b918c68367161a86`, block `71005336`, token `0x80a7e83f329be7f7ac65cef5992d0794d34491a6`. **DIRECT_FACTORY_LAUNCH** ABI, **zero declared extra exemptions**, the same wallet as launcher and creator-fee recipient, **zero same-transaction CurveBuy logs**. The token uses a **non-native custom pair**, so this proves direct-route receipt decoding and historical authority binding, **not** native-ETH economic qualification. There is no evidence here about later buys or common ownership.
+
+**Verified on real chain: direct three-argument route only. Atomic launchAndBuy remains offline-fixture-qualified but not real-chain witnessed.** This does not alter the scientific, deployment or live-capital limits above.
