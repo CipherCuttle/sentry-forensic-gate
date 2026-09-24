@@ -1,7 +1,7 @@
 // Synthetic only. Fixture does not constitute a real GitHub source release.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {buildC0Observation} from './pons-s1-c0-observer-core-v1.mjs';
+import {buildC0Observation,buildC0TypedUnknownObservation} from './pons-s1-c0-observer-core-v1.mjs';
 import {verifyIndependentC0SourceSeal,REPO} from './pons-s1-c0-source-witness-core-v1.mjs';
 import {AUTHORITY_SCHEMA,INCLUSION_RULE,canonical,digest,sha256} from './pons-s1-publisher-core-v1.mjs';
 
@@ -84,7 +84,43 @@ assert.equal(good.sourceObservationDigest,expectedSourceDigest);
 assert.equal(good.immutableAfterPublicationVerified,true);
 assert.equal(good.sourceQualified,false);
 assert.equal(good.scientificallyAdmissible,false);
+// End-to-end pure compatibility: a typed UNKNOWN is replayable by the
+// independent original-artifact + immutable-source-release witness, yet
+// remains scientifically unqualified even when both synthetic seals match.
+const typed=buildC0TypedUnknownObservation({
+  event,officialLog:log,archiveLog:structuredClone(log),
+  officialFactoryBlockLogs:[log],archiveFactoryBlockLogs:[structuredClone(log)],
+  officialPoints:points,archivePoints:structuredClone(points),
+  expectedFactory:A('f'),decisionBlock:points.decision,
+  observedHead:points.observed,capturedAtMs:completed,
+  officialRuntimeHash:H('e'),archiveRuntimeHash:H('e'),
+  failure:{stage:'BASELINE_ACQUISITION',code:'RPC_TIMEOUT'}
+});
+const typedBytes=Buffer.from(JSON.stringify(canonical(typed))+'\\n');
+const typedTag='pons-s1-c0-source-v1-'+typed.sourceObservationDigest;
+const typedAsset={...asset,name:typedTag+'.json',size:typedBytes.length,
+  digest:'sha256:'+sha256(typedBytes)};
+const typedProof={...full,
+  sourceBytes:typedBytes,originalSourceBytes:Buffer.from(typedBytes),
+  expectedSourceDigest:typed.sourceObservationDigest,
+  sourceArtifacts:{total_count:1,artifacts:[{
+    ...artifact,name:'pons-s1-c0-source-'+typed.sourceObservationDigest}]},
+  sourceRelease:{...release,tag_name:typedTag,assets:[typedAsset]},
+  sourceAsset:typedAsset,
+  sourceTagRef:{...full.sourceTagRef,ref:'refs/tags/'+typedTag}
+};
+const typedWitness=verifyIndependentC0SourceSeal(typedProof);
+assert.equal(typedWitness.c0Action,'UNKNOWN_PREOUTCOME_C0');
+assert.equal(typedWitness.sourceObservationDigest,typed.sourceObservationDigest);
+assert.equal(typedWitness.sourceQualified,false);
+assert.equal(typedWitness.scientificallyAdmissible,false);
 let negative=0;
+const poisoned=structuredClone(typed);
+poisoned.receipt.evidence.reason='WOULD_TRADE_AFTER_LOOKING_AT_OUTCOMES';
+const poisonedBytes=Buffer.from(JSON.stringify(canonical(poisoned))+'\\n');
+assert.throws(()=>verifyIndependentC0SourceSeal({...typedProof,
+  sourceBytes:poisonedBytes,originalSourceBytes:poisonedBytes}),
+  /STORED_TYPED_UNKNOWN_OR_SOURCE_EVIDENCE_TAMPERED/);negative++;
 const reject=(name,patch,pattern)=>{
   assert.throws(()=>verifyIndependentC0SourceSeal({...full,...patch}),pattern,name);negative++;
 };
@@ -132,6 +168,6 @@ reject('outcome-contaminated protocol',{protocol:{...protocol,status:'DRAFT_RECO
 reject('incorrect ancestry',{ancestry:{status:'behind',merge_base_commit:{sha:activationSha}}},
   /ACTIVATION_NOT_MAIN_ANCESTOR/);
 console.log(JSON.stringify({verdict:'PONS_S1_C0_EXTERNAL_WITNESS_OFFLINE_PASS',
-  syntheticPositive:1,adversarialNegative:negative,realGitHubRelease:false,
+  syntheticPositive:2,adversarialNegative:negative,realGitHubRelease:false,
   independentLiveCaptureAttested:false,scientificAdmissibility:'BLOCKED',
   liveMoneyAuthority:false}));
