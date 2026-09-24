@@ -1,0 +1,49 @@
+name: Pons V2 Opening Allocation V0 — Read Only
+
+on:
+  push:
+    branches:
+      - agent/pons-opening-allocation-evidence-v0
+    paths:
+      - scripts/pons-opening-allocation-core-v0.mjs
+      - scripts/pons-opening-allocation-scout-v0.mjs
+      - scripts/pons-opening-allocation-check-v0.mjs
+      - docs/PONS_OPENING_ALLOCATION_EVIDENCE_V0.md
+      - .github/workflows/pons-opening-allocation-v0.yml
+  pull_request:
+    paths:
+      - scripts/pons-opening-allocation-core-v0.mjs
+      - scripts/pons-opening-allocation-scout-v0.mjs
+      - scripts/pons-opening-allocation-check-v0.mjs
+      - docs/PONS_OPENING_ALLOCATION_EVIDENCE_V0.md
+      - .github/workflows/pons-opening-allocation-v0.yml
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build reviewed shared adapters
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false
+          pnpm build
+      - name: Pure opening-allocation decoding, evidence binding, no writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/pons-opening-allocation-core-v0.mjs
+          node --check scripts/pons-opening-allocation-scout-v0.mjs
+          node --check scripts/pons-opening-allocation-check-v0.mjs
+          node scripts/pons-opening-allocation-check-v0.mjs
