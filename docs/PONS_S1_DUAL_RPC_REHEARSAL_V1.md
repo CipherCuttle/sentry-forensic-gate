@@ -49,3 +49,14 @@ Full provider independence, original pre-outcome GitHub artifact plus
 immutable source AND paired batch release/witness timing, complete Curve/V4
 route/gas costs, independent joint power and reviewed S1 canonical
 activation remain open. EDGE_UNPROVEN. NO COLLECTION/MONEY/MERGE.
+
+## Targeted diagnostic after first expanded run
+
+The initial 256-block workflow stopped at an undifferentiated historical
+state request (PROVIDER_FAIL). The final diagnostic now checks historical
+block, code and `memeHook` on each provider separately; finite stage/category
+receipts identify which failed. It may continue a bounded recent native C0
+technical probe even if historical archive is unavailable, but labels any
+subsequent recent-only success `RECENT_C0_ARCHIVE_UNVERIFIED`. Only both
+historical responses matching can produce the stronger sampled technical
+rehearsal verdict. Neither permits scientific S1 activation.

@@ -28,3 +28,15 @@ not an external independent RPC/security/science assessment.
 
 Targeted rereview after exact-head CI and real network results only.
 No merge, trading, S1 activation, release creation or money authority.
+
+## Targeted follow-up: unqualified historical service
+
+The first expanded live test failed at the combined historical probe with
+sanitized RPC_UNAVAILABLE, hiding which public endpoint or method failed.
+Split read-only historical block, code and eth_call by provider with finite
+error-stage records. Continue a separate bounded RECENT quote diagnostic
+without promoting it as an archive-qualified observation. Pure tests require
+HISTORIC_SAMPLE_REQUIRED for the stronger technical verdict and reject
+claiming an unqualified archive as qualified. One exact-head CI and real
+network rerun is the targeted closure check; an external provider failure
+remains a documented blocker rather than triggering more review loops.

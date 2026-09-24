@@ -57,11 +57,17 @@ export function validateDiagnostic(x){
     'sourcePublished','walletUsed','outcomesRead','scientificallyAdmissible'])
     assert.equal(x[key],false,'FORBIDDEN_PROMOTION_'+key);
   assert.ok(['PROVIDER_FAIL','NO_NATIVE_IN_BOUNDED_WINDOW','QUOTE_UNVERIFIED',
-    'REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY','INCLUSION_UNVERIFIED'].includes(x.state),
+    'REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY','RECENT_C0_ARCHIVE_UNVERIFIED',
+    'INCLUSION_UNVERIFIED'].includes(x.state),
     'UNKNOWN_DIAGNOSTIC_STATE');
-  if(x.state==='REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY'){
+  if(x.state==='REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY' ||
+     x.state==='RECENT_C0_ARCHIVE_UNVERIFIED'){
     assert.equal(x.quoteParity,true,'QUOTE_PARITY_REQUIRED');
     assert.equal(x.inclusion12,true,'INCLUSION_FINALITY_REQUIRED');
   }
+  if(x.state==='REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY')
+    assert.equal(x.historicArchiveStateSample,true,'HISTORIC_SAMPLE_REQUIRED');
+  if(x.state==='RECENT_C0_ARCHIVE_UNVERIFIED')
+    assert.equal(x.historicArchiveStateSample,false,'UNQUALIFIED_ARCHIVE_MUST_REMAIN_FALSE');
   return {verdict:x.state,edge:'UNPROVEN',activationAuthority:false};
 }

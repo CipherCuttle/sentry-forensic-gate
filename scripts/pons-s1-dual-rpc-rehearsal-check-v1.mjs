@@ -27,7 +27,8 @@ const receipt={schemaVersion:SCHEMA,chainId:4663,
   backendQualified:false,studyActivated:false,cohortEnrolled:false,
   sourcePublished:false,walletUsed:false,outcomesRead:false,
   scientificallyAdmissible:false,
-  quoteParity:true,inclusion12:true,state:'REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY'};
+  quoteParity:true,inclusion12:true,historicArchiveStateSample:true,
+  state:'REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY'};
 assert.equal(validateDiagnostic(receipt).edge,'UNPROVEN');
 let neg=0;function bad(fn,pattern){assert.throws(fn,pattern);neg++;}
 bad(()=>checkProviders(CANDIDATE,OFFICIAL),/OFFICIAL_RPC_PIN/);
@@ -48,5 +49,13 @@ for(const key of ['backendQualified','studyActivated','cohortEnrolled',
   bad(()=>validateDiagnostic({...receipt,[key]:true}),/FORBIDDEN_PROMOTION/);
 bad(()=>validateDiagnostic({...receipt,quoteParity:false}),/QUOTE_PARITY_REQUIRED/);
 bad(()=>validateDiagnostic({...receipt,inclusion12:false}),/INCLUSION_FINALITY_REQUIRED/);
+bad(()=>validateDiagnostic({...receipt,historicArchiveStateSample:false}),
+  /HISTORIC_SAMPLE_REQUIRED/);
+assert.equal(validateDiagnostic({...receipt,
+  state:'RECENT_C0_ARCHIVE_UNVERIFIED',
+  historicArchiveStateSample:false}).edge,'UNPROVEN');
+bad(()=>validateDiagnostic({...receipt,
+  state:'RECENT_C0_ARCHIVE_UNVERIFIED',historicArchiveStateSample:true}),
+  /UNQUALIFIED_ARCHIVE_MUST_REMAIN_FALSE/);
 console.log(JSON.stringify({verdict:'PONS_S1_DUAL_RPC_OFFLINE_PASS',
   adversarialNegatives:neg,actualRPC:false,noMoney:true}));

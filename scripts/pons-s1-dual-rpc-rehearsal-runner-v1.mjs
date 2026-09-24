@@ -102,26 +102,42 @@ try{
     FACTORY.factoryRuntimeCodeHash.toLowerCase(),
     'SECOND_FACTORY_RUNTIME_MISMATCH');
 
-  phase='HISTORICAL_ARCHIVE_ETH_CALL_PROBE';
+  // One previous live diagnostic failed in an undifferentiated historical
+  // Promise.all. Probe each endpoint and read method separately, then still
+  // measure RECENT quote transport if historic access is unavailable.
   const old=FACTORY.fromBlock+1000n;
-  const [ob,ab,oc,ac,ov,av]=await Promise.all([
-    point(official,old),point(other,old),
-    official.getBytecode({address:FACTORY.factory,blockNumber:old}),
-    other.getBytecode({address:FACTORY.factory,blockNumber:old}),
-    official.readContract({address:FACTORY.factory,abi:ponsV2FactoryReadAbi,
-      functionName:'memeHook',blockNumber:old}),
-    other.readContract({address:FACTORY.factory,abi:ponsV2FactoryReadAbi,
-      functionName:'memeHook',blockNumber:old})
-  ]);
-  same(ob,ab,'HISTORICAL_ARCHIVE_BLOCK');
-  assert.ok(oc&&ac,'HISTORICAL_FACTORY_CODE_MISSING');
-  assert.equal(keccak256(oc).toLowerCase(),FACTORY.factoryRuntimeCodeHash.toLowerCase(),
-    'HISTORICAL_OFFICIAL_RUNTIME_DRIFT');
-  assert.equal(keccak256(ac).toLowerCase(),FACTORY.factoryRuntimeCodeHash.toLowerCase(),
-    'HISTORICAL_SECOND_RUNTIME_DRIFT');
-  assert.equal(String(ov).toLowerCase(),String(av).toLowerCase(),
-    'HISTORICAL_ETH_CALL_RESULT_DISAGREEMENT');
-  result.historicArchiveStateSample=true;
+  const historic=async(client,label)=>{
+    let stage='BLOCK';
+    try{
+      phase='HISTORIC_'+label+'_'+stage;
+      const b=await point(client,old);
+      stage='CODE';phase='HISTORIC_'+label+'_'+stage;
+      const code=await client.getBytecode({
+        address:FACTORY.factory,blockNumber:old});
+      assert.ok(code,'HISTORIC_CODE_MISSING');
+      assert.equal(keccak256(code).toLowerCase(),
+        FACTORY.factoryRuntimeCodeHash.toLowerCase(),
+        'HISTORIC_CODE_NOT_PINNED');
+      stage='ETH_CALL';phase='HISTORIC_'+label+'_'+stage;
+      const hook=await client.readContract({
+        address:FACTORY.factory,abi:ponsV2FactoryReadAbi,
+        functionName:'memeHook',blockNumber:old});
+      return {block:b,hook:String(hook).toLowerCase()};
+    }catch(err){
+      const n=String(err?.name??'');
+      result['historic'+label+'FailureStage']=stage;
+      result['historic'+label+'FailureClass']=/timeout/i.test(n)?
+        'RPC_TIMEOUT':/rpc|http|transport|network|request/i.test(n)?
+        'RPC_UNAVAILABLE':'HISTORICAL_STATE_OR_CONTRACT_INVARIANT';
+      return null;
+    }
+  };
+  const hOfficial=await historic(official,'Official');
+  const hCandidate=await historic(other,'Candidate');
+  if(hOfficial&&hCandidate){
+    same(hOfficial,hCandidate,'HISTORIC_STATE_PARITY');
+    result.historicArchiveStateSample=true;
+  }
   result.historicSampleBlock=String(old);
   phase='DUAL_PROVIDER_CONTIGUOUS_256_BLOCK_CENSUS';
   const logs1=[],logs2=[];
@@ -197,7 +213,9 @@ try{
       }
       result.remainingLaunchFiveMinuteBudgetMs=l1.timestampMs+300000-Date.now();
       result.state=result.inclusion12&&result.remainingLaunchFiveMinuteBudgetMs>90000?
-        'REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY':'INCLUSION_UNVERIFIED';
+        (result.historicArchiveStateSample?
+          'REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY':
+          'RECENT_C0_ARCHIVE_UNVERIFIED'):'INCLUSION_UNVERIFIED';
     }
     // No transcript/source batch is emitted; this is a technical probe only.
     result.observedBeforeFiveMinuteOutcomeAtSelection=
@@ -220,6 +238,11 @@ console.log(JSON.stringify({verdict:result.state,stage:phase,
   failureClass:result.failureClass??null,
   scannedEvents:result.scannedEvents??null,
   nativeEvents:result.nativeEvents??null,
+  historicArchiveStateSample:result.historicArchiveStateSample,
+  historicOfficialFailureStage:result.historicOfficialFailureStage??null,
+  historicOfficialFailureClass:result.historicOfficialFailureClass??null,
+  historicCandidateFailureStage:result.historicCandidateFailureStage??null,
+  historicCandidateFailureClass:result.historicCandidateFailureClass??null,
   actualDualRpcQuoteParity:result.quoteParity,
   inclusion12:result.inclusion12,
   providerBackendIndependenceQualified:false,
