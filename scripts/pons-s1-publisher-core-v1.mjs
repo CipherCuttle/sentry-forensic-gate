@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 
 export const BATCH_SCHEMA = 'PONS_S1_PAIRED_PREOUTCOME_DECISION_BATCH_V1';
 export const AUTHORITY_SCHEMA = 'PONS_S1_PUBLISH_AUTHORITY_V1';
+export const INCLUSION_RULE = 'OBSERVED_C0_COMPLETION_HEAD_PLUS_TWO_CANONICAL_BLOCKS_V1';
 export const REPO = 'CipherCuttle/sentry-forensic-gate';
 export const API = 'https://api.github.com/repos/' + REPO;
 export const MIN_PUBLICATION_BUDGET_MS = 90_000;
@@ -70,6 +71,8 @@ export function checkAuthority(protocol, authority, activationSha) {
   assert.equal(protocol.population.preOutcomeC0EligibilityMustBeSealed, true);
   assert.equal(protocol.evidence.preOutcomeC0DecisionReceiptsInImmutableBatchRequired, true);
   assert.equal(protocol.timing.minimumFinalityConfirmations, 12);
+  assert.equal(protocol.timing.syntheticInclusionRule,INCLUSION_RULE,
+    'UNREVIEWED_OR_CAUSALLY_INVALID_SYNTHETIC_INCLUSION_RULE');
   assert.equal(protocol.timing.targetAnchor,
     'ACTUAL_TIMESTAMP_OF_PREDETERMINED_SYNTHETIC_INCLUSION_BLOCK');
   assert.deepEqual(protocol.arms.map(a => a.fixedHorizonMs), [300000, 86400000]);
@@ -200,6 +203,16 @@ export function validateBatch(batch, protocol, authority, activationSha,
       !Array.isArray(row.c0.evidence), 'C0_POINT_IN_TIME_EVIDENCE_REQUIRED');
     assert.equal(row.c0.evidenceSha256, digest(row.c0.evidence),
       'C0_EVIDENCE_DIGEST_MISMATCH');
+    assert.equal(row.c0.evidence.syntheticInclusionRule,INCLUSION_RULE,
+      'C0_UNREVIEWED_INCLUSION_RULE');
+    assert.equal(row.c0.evidence.observedC0CompletionAtMs,row.c0.decidedAtMs,
+      'C0_OBSERVATION_TIME_NOT_BOUND');
+    const observedHead=block(row.c0.evidence.observedHeadBlock,
+      'C0_OBSERVED_HEAD_BLOCK');
+    assert.ok(observedHead>=n+4n,
+      'C0_OBSERVED_BEFORE_TWO_DECISION_CONFIRMATIONS');
+    assert.match(row.c0.evidence.observedHeadHash,BLOCK_HASH,
+      'C0_OBSERVED_HEAD_HASH_REQUIRED');
     // Opaque source evidence still requires independent collector qualification.
     assert.ok(!Object.hasOwn(row.c0.evidence, 'futureOutcome'),
       'POST_OUTCOME_EVIDENCE_FORBIDDEN');
@@ -211,11 +224,12 @@ export function validateBatch(batch, protocol, authority, activationSha,
     } else {
       exact(row.inclusion, ['blockNumber','blockHash','timestampMs'],
         'INCLUSION');
-      assert.ok(block(row.inclusion.blockNumber, 'INCLUSION_BLOCK') >= n + 2n);
+      assert.equal(block(row.inclusion.blockNumber, 'INCLUSION_BLOCK'),
+        observedHead+2n,'CAUSALLY_INVALID_INCLUSION_ANCHOR');
       assert.match(row.inclusion.blockHash, BLOCK_HASH);
       pos(row.inclusion.timestampMs, 'INCLUSION_TIMESTAMP');
-      assert.ok(row.inclusion.timestampMs >= row.launchTimestampMs,
-        'INCLUSION_BEFORE_LAUNCH');
+      assert.ok(row.inclusion.timestampMs >= row.c0.decidedAtMs,
+        'INCLUSION_TIMESTAMP_PRECEDES_C0_COMPLETION');
       assert.ok(row.inclusion.timestampMs <= batch.capturedAtMs,
         'FUTURE_INCLUSION_LOOKAHEAD_FORBIDDEN');
       assert.ok(confirmed >= block(row.inclusion.blockNumber,'INCLUSION_BLOCK')+12n,
