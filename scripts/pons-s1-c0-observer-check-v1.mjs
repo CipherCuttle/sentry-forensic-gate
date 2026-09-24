@@ -146,7 +146,7 @@ assert.throws(()=>replayStoredC0Observation({...typed,
   /STORED_TYPED_UNKNOWN_OR_SOURCE_EVIDENCE_TAMPERED/);negative++;
 assert.throws(()=>replayStoredC0Observation({...typed,
   evidence:{...typed.evidence,officialFactoryBlockLogs:[]}}),
-  /EXACT_EVENT_NOT_SINGLETON_IN_OFFICIAL_CENSUS/);negative++;
+  /FULL_LAUNCH_BLOCK_FACTORY_SOURCE_DISAGREEMENT/);negative++;
 const binderInput={officialLogs:[log],archiveLogs:[structuredClone(log)],factory:A('f'),
   fromCursor:{blockNumber:'100',logIndex:0},throughBlock:'100',captureTimeMs:now,
   points:Object.fromEntries(Object.values(points).map(p=>[p.number,{...p}]))};
