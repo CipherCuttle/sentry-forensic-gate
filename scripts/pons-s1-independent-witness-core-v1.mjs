@@ -106,8 +106,10 @@ function verifyCanonicalGitHubProof({authority,activationSha,activationCommit,
     'SOURCE_ARTIFACT_CREATED_AFTER_RELEASE_ASSET');
   assert.ok(artifactCreated.upper<deadlineMs,
     'SOURCE_ARTIFACT_CREATED_AFTER_OUTCOME');
-  assert.ok(time(sourceRun.created_at,'SOURCE_RUN_CREATED').ms<=
-    artifactCreated.ms+1000,'SOURCE_RUN_CREATED_AFTER_ARTIFACT');
+  const runCreated=time(sourceRun.created_at,'SOURCE_RUN_CREATED');
+  assert.ok(runCreated.ms>=merged.ms,'SOURCE_RUN_PREDATES_VERIFIED_MERGE');
+  assert.ok(runCreated.ms<=artifactCreated.ms+1000,
+    'SOURCE_RUN_CREATED_AFTER_ARTIFACT');
   return {sourceRunId:sourceRun.id,sourceArtifactId:artifact.id,
     sourceArtifactCreatedAt:artifact.created_at,
     activationCommitSha:activationSha,reviewedMergeSha:authority.reviewedMergeSha,

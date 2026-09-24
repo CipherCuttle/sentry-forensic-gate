@@ -139,6 +139,9 @@ rejects('source wrong activation',{sourceRun:{...sourceRun,head_sha:'c'.repeat(4
   /SOURCE_RUN_WRONG_ACTIVATION/);
 rejects('source not reviewed workflow',{sourceRun:{...sourceRun,path:'unreviewed.yml'}},
   /SOURCE_RUN_UNREVIEWED_COLLECTOR/);
+rejects('source run predates verified merge',
+  {sourceRun:{...sourceRun,created_at:'2026-09-29T23:59:59Z'}},
+  /SOURCE_RUN_PREDATES_VERIFIED_MERGE/);
 rejects('source run failed',{sourceRun:{...sourceRun,conclusion:'failure'}},
   /SOURCE_RUN_NOT_SUCCESS/);
 rejects('missing source artifact',{sourceArtifacts:{total_count:0,artifacts:[]}},
@@ -184,7 +187,78 @@ rejects('raw bytes altered',{batchBytes:Buffer.concat([bytes,Buffer.from(' ')])}
   }),/LEGACY_BATCH_FORBIDDEN/);
   negative++;
 }
+
+// Positively qualify a *real byte-identical synthetic predecessor envelope*,
+// not merely reject a missing previous pointer. Only one-hop lineage is proven.
+const next=clone(initial);
+for (const row of next.census) {
+  row.blockNumber='101';
+  row.eventKey='101:'+row.transactionHash+':'+row.logIndex;
+  row.blockHash=H('a');
+  row.launchTimestampMs+=10_000;
+}
+next.census[1].c0.decisionBlock='103';
+next.census[1].c0.decidedAtMs+=10_000;
+next.census[1].inclusion.blockNumber='105';
+next.census[1].inclusion.timestampMs+=10_000;
+next.scanned.scanFromCursor={blockNumber:'101',logIndex:0};
+next.scanned.scannedThrough='101';
+next.scanned.scannedThroughHash=H('a');
+next.scanned.nextCursor={blockNumber:'102',logIndex:0};
+next.scanned.confirmedHeadBlock='120';
+const censusDigest=digest(next.census.map(row=>({
+  eventKey:row.eventKey,blockHash:row.blockHash,
+  token:row.token,nativePair:row.nativePair
+})));
+next.scanned.factoryEventsDigest=censusDigest;
+next.scanned.officialEventsDigest=censusDigest;
+next.scanned.archiveEventsDigest=censusDigest;
+next.batchIndex=1;
+next.previous={batchDigest:initial.batchDigest,assetSha256:sha256(bytes),
+  releaseId:456,assetId:789,cumulativeEligibleDecisions:1,
+  nextCursor:initial.scanned.nextCursor};
+next.selectedEventKeys=[next.census[1].eventKey];
+next.cumulativeEligibleDecisions=2;
+next.capturedAtMs=launch+130_000;
+{const {batchDigest,...b}=next;next.batchDigest=digest(b);}
+const nextBytes=canonicalBatchBytes(next);
+const nextTag='pons-s1-paired-v1-batch-'+next.batchDigest;
+const nextAsset={...asset,id:790,url:API+'/releases/assets/790',
+  browser_download_url:'https://github.com/CipherCuttle/sentry-forensic-gate/releases/download/'+nextTag+'/'+nextTag+'.json',
+  name:nextTag+'.json',size:nextBytes.length,digest:'sha256:'+sha256(nextBytes),
+  created_at:'2026-10-01T12:02:20Z',updated_at:'2026-10-01T12:02:20Z'};
+const nextRelease={...release,id:457,url:API+'/releases/457',tag_name:nextTag,
+  published_at:'2026-10-01T12:03:00Z',assets:[nextAsset]};
+const nextTagRef={...tagRef,ref:'refs/tags/'+nextTag,
+  url:API+'/git/refs/tags/'+nextTag};
+const nextSourceRun={...sourceRun,id:877,created_at:'2026-10-01T12:02:12Z'};
+const nextSourceArtifacts={total_count:1,artifacts:[{
+  ...sourceArtifacts.artifacts[0],id:1000,url:API+'/actions/artifacts/1000',
+  name:'pons-s1-frozen-batch-'+next.batchDigest,
+  created_at:'2026-10-01T12:02:15Z',
+  workflow_run:{id:877,head_sha:A}
+}]};
+const nextProof={...pinned,batchBytes:nextBytes,sourceBatchBytes:nextBytes,
+  expectedBatchDigest:next.batchDigest,expectedReleaseId:457,expectedAssetId:790,
+  release:nextRelease,asset:nextAsset,tagRef:nextTagRef,
+  sourceRun:nextSourceRun,sourceArtifacts:nextSourceArtifacts,
+  previousBatchBytes:bytes,previousRelease:release,previousAsset:asset,
+  previousTagRef:tagRef,expectedPreviousReleaseId:456,
+  expectedPreviousAssetId:789};
+const second=buildV1IndependentWitness(nextProof);
+assert.equal(second.priorImmediateReleaseIndependentlyChecked,true);
+assert.equal(second.cumulativeEligibleDecisions,2);
+assert.equal(second.fullHistoricalLineageAttested,false);
+assert.throws(()=>buildV1IndependentWitness({
+  ...nextProof,previousRelease:{...release,published_at:'2026-10-01T12:02:15Z'}
+}),/PREVIOUS_IMMUTABLE_BATCH_PUBLISHED_AFTER_CURRENT_CAPTURE/);
+negative++;
+assert.throws(()=>buildV1IndependentWitness({
+  ...nextProof,previousTagRef:{...tagRef,object:{type:'commit',sha:'f'.repeat(40)}}
+}),/Expected values to be strictly equal/);
+negative++;
+
 console.log(JSON.stringify({verdict:'PONS_S1_V1_INDEPENDENT_WITNESS_OFFLINE_PASS',
-  positive:1,negative,noNetwork:true,realReleaseRead:false,
+  positive:2,negative,noNetwork:true,realReleaseRead:false,
   fullChainAncestry:false,sourceQualified:false,
   collectionAuthorized:false,liveMoneyAuthority:false}));
