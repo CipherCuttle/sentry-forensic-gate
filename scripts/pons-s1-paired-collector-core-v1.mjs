@@ -197,13 +197,22 @@ export function freezeV1PairedDecisionBatch(input){
     assert.equal(fromCursor.logIndex,0,'GENESIS_WRONG_LOG_INDEX');
   }
   const officialEnd=checkedPoint(points,throughBlock,'THROUGH');
-  checkedPoint(points,authority.originBlockNumber,'ORIGIN');
+  const canonicalOrigin=checkedPoint(points,authority.originBlockNumber,'ORIGIN');
+  assert.equal(canonicalOrigin.hash,authority.originBlockHash,
+    'CANONICAL_ACTIVATION_ORIGIN_HASH_DRIFT');
   const originTime=input.originTimestampMs;
   validInt(originTime,'ORIGIN_TIMESTAMP');
   assert.equal(points[authority.originBlockNumber].timestampMs,originTime,
     'ORIGIN_TIMESTAMP_MISMATCH');
-  assert.ok(officialEnd.timestampMs<originTime+604800_000,
+  assert.ok(officialEnd.timestampMs<originTime+604800_000 &&
+    captureTimeMs<originTime+604800_000,
     'SEVEN_DAY_WINDOW_ALREADY_CLOSED');
+  // A zero-event/non-native-only checkpoint has no market outcome deadline;
+  // without this bound it could be fabricated by scanning old empty blocks.
+  assert.ok(captureTimeMs>=officialEnd.timestampMs-30_000,
+    'SCAN_END_BLOCK_FROM_FUTURE');
+  assert.ok(captureTimeMs<=officialEnd.timestampMs+300_000,
+    'STALE_FACTORY_CENSUS_BACKFILL_FORBIDDEN');
   const {all,fullFactoryTranscriptDigest,identityDigest}=checkCompleteDualFactorySources(
     officialLogs,archiveLogs,factory);
   assert.ok(all.every(x=>BigInt(x.blockNumber)>=from&&

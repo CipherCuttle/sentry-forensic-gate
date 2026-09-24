@@ -48,6 +48,10 @@ signer are exposed in this module.
   unknown C0 rows, no substitution for failed modeled entries.
   Strict block/log cursor; a partial block resumes at the next log
   index. An empty factory range produces a real zero-event batch.
+  The exact approved activation-origin block hash must match both
+  captured provider block hashes. Even a zero-event/non-native scan
+  cannot backfill blocks over five minutes old or restart after the
+  seven-day prospective window has expired.
 - Include C0 action, hash of source evidence, observed head/hash and
   actual observation-completion timestamp. Missing C0 cannot be
   reconstructed after the first five-minute outcome; if captured

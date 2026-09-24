@@ -172,6 +172,16 @@ fails('preexisting stale predecessor',{prior:{...prior,publishedAtMs:launch+110_
 fails('previous cursor gap',{prior,fromCursor:{blockNumber:'100',logIndex:99}},
   /PREVIOUS_CURSOR_LOG_GAP/);
 fails('wrong factory',{factory:A('d')},/CANONICAL_FACTORY_NOT_PINNED/);
+fails('canonical activation origin block hash drift',
+  {points:{...points,'100':{...points['100'],hash:H('f'),
+    officialHash:H('f'),archiveHash:H('f')}}},
+  /CANONICAL_ACTIVATION_ORIGIN_HASH_DRIFT/);
+fails('empty scan cannot backfill stale historical denominator',
+  {captureTimeMs:launch+300_001},/STALE_FACTORY_CENSUS_BACKFILL_FORBIDDEN/,
+  input([]));
+fails('seven-day cohort cannot resume with stale empty scan',
+  {captureTimeMs:launch+604800_001},/SEVEN_DAY_WINDOW_ALREADY_CLOSED/,
+  input([]));
 assert.throws(()=>checkCompleteDualFactorySources([log(0,true),log(0,true)],
   [log(0,true)],FACTORY),/DUPLICATE_FACTORY_EVENT/);
 negative++;
