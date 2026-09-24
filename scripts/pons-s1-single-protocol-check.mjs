@@ -29,7 +29,8 @@ function valid(p) {
   assert.equal(p.population.maxWindowSeconds, 7 * 24 * 60 * 60);
   assert.equal(p.population.stopRule, 'FIRST_200_ELIGIBLE_DECISIONS_OR_7D_WHICHEVER_FIRST');
   for (const k of ['retainAllSkipsAndLaterFailures', 'neverReplaceFailedEntry',
-    'eligibilityObservedBeforeOutcomes']) assert.equal(p.population[k], true, k);
+    'eligibilityObservedBeforeOutcomes', 'preOutcomeC0EligibilityMustBeSealed',
+    'unknownEligibilityMustRemainInCensus', 'unknownEligibilityInvalidatesCompleteDenominator']) assert.equal(p.population[k], true, k);
 
   assert.equal(p.timing.origin, 'AFTER_SEPARATE_CANONICAL_ACTIVATION_RECEIPT_AND_BLOCK_HASH');
   assert.equal(p.timing.minimumFinalityConfirmations, 12);
@@ -54,7 +55,8 @@ function valid(p) {
     'immutableExternalBatchSealBeforeOutcomeRequired', 'fullCurveOrV4PhaseAndRouteRequired',
     'entryGasRequired', 'conditionalApprovalAndPermit2GasRequired',
     'exitAndRecoveryGasRequired', 'gasPriceAndUsdCalibrationRequired',
-    'slippageAndAdverseMovementRequired', 'preventQuoteFeeDoubleCount']) {
+    'slippageAndAdverseMovementRequired', 'preventQuoteFeeDoubleCount',
+    'preOutcomeC0DecisionReceiptsInImmutableBatchRequired']) {
     assert.equal(p.evidence[k], true, k);
   }
   assert.equal(p.evidence.missingCostOrRoute, 'UNVERIFIED_NEVER_ZERO');
@@ -98,6 +100,10 @@ const negatives = [
   ['old collector compatibility', p => { p.basis.legacy96In24hCollectorCompatible = true; }],
   ['hidden failed-entry exclusion', p => { p.population.neverReplaceFailedEntry = false; }],
   ['post-outcome enrollment', p => { p.population.eligibilityObservedBeforeOutcomes = false; }],
+  ['seal only event IDs, not C0', p => { p.population.preOutcomeC0EligibilityMustBeSealed = false; }],
+  ['omit unknown C0 decisions from census', p => { p.population.unknownEligibilityMustRemainInCensus = false; }],
+  ['count unknown eligibility as a complete cohort', p => { p.population.unknownEligibilityInvalidatesCompleteDenominator = false; }],
+  ['late C0 reconstruction permitted', p => { p.evidence.preOutcomeC0DecisionReceiptsInImmutableBatchRequired = false; }],
   ['no pre-outcome seal', p => { p.timing.selectionWitnessBeforeEarliestFiveMinuteOutcome = false; }],
   ['zero-latency shortcut', p => { p.timing.lagNotAssumedZero = false; }],
   ['different arm entry blocks', p => { p.timing.sameModeledEntryForBothArms = false; }],
