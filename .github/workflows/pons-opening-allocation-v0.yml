@@ -47,3 +47,60 @@ jobs:
           node --check scripts/pons-opening-allocation-scout-v0.mjs
           node --check scripts/pons-opening-allocation-check-v0.mjs
           node scripts/pons-opening-allocation-check-v0.mjs
+
+  real-chain-read-only-sample:
+    needs: read-only-qualification
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    env:
+      PONS_OPENING_TX_HASH: '0xbd52317c84d90ba8912646563117fba9617056ce27cb5105b918c68367161a86'
+      PONS_OPENING_TOKEN: '0x80a7e83f329be7f7ac65cef5992d0794d34491a6'
+      PONS_OPENING_RPC_URL: 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build audited read-only decoder
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false
+          pnpm build
+      - name: Attest one actual published launch tx from a separate read-only 7-minute source observation
+        shell: bash
+        run: |
+          set -uo pipefail
+          timeout -k 5s 65s node scripts/pons-opening-allocation-scout-v0.mjs \
+            > "${RUNNER_TEMP}/pons-opening-real-sample-v0.json"
+          rc=$?
+          if [ "$rc" -eq 0 ] &&
+             jq -e '.schemaVersion == "PONS_V2_OPENING_ALLOCATION_EVIDENCE_V0"
+               and .chainId == 4663 and
+               (.token | ascii_downcase) == "0x80a7e83f329be7f7ac65cef5992d0794d34491a6" and
+               .blockNumber == "71005336" and
+               (.launchTransactionHash | ascii_downcase) ==
+                 "0xbd52317c84d90ba8912646563117fba9617056ce27cb5105b918c68367161a86"
+             ' "${RUNNER_TEMP}/pons-opening-real-sample-v0.json" > /dev/null; then
+            echo 'LIVE_SOURCE_RECEIPT_VERIFIED: exact published launch identity; no trades.' >> "$GITHUB_STEP_SUMMARY"
+            jq '{schemaVersion,token,blockNumber,route,declaredExtraExemptions,openingSameTransactionBuyLogs,observedOpeningSupplyShareBpsFloor}' \
+              "${RUNNER_TEMP}/pons-opening-real-sample-v0.json" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'LIVE_SOURCE_RECEIPT_UNVERIFIED: public archive/ABI/route support unqualified; do not use output for live decisions.' >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' '{"schemaVersion":"PONS_OPENING_LIVE_SMOKE_V0","verdict":"UNVERIFIED","noTransactions":true}' \
+              > "${RUNNER_TEMP}/pons-opening-real-sample-v0.json"
+          fi
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-opening-one-real-transaction-v0
+          path: ${{ runner.temp }}/pons-opening-real-sample-v0.json
+          if-no-files-found: warn
+          retention-days: 7
