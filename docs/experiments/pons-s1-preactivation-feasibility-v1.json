@@ -1,6 +1,6 @@
 {
   "schemaVersion": "PONS_S1_PREACTIVATION_FEASIBILITY_V1",
-  "createdAtUtc": "2026-09-25T00:00:00Z",
+  "createdAtUtc": "2026-09-24T22:30:30Z",
   "status": "DRAFT_READ_ONLY_OUTCOME_BLIND_REVIEW_ONLY",
   "pilot": {
     "evidenceClass": "PR_ONLY_SINGLE_OFFICIAL_RPC_BLOCK_CADENCE_PROXY",
@@ -20,7 +20,7 @@
     "scientificallyAdmissible": false,
     "originalArtifactArchiveDigest": "sha256:4b6f4daca17b7a8e77adcfcd9478a0de63c7f6136fcb46c799ea6f138df09ca7",
     "witnessArtifactArchiveDigest": "sha256:376a70871be7d07890dc20a10bdf398fd65ace3813c4f4b1211d8337a6c4b8d9",
-    "provenanceNotes": "Job logs plus GitHub artifact metadata only; archive ZIP digest is not original timing JSON payload digest. One single-provider block proxy, not complete C0."
+    "provenanceNotes": "Job logs plus GitHub artifact metadata only; archive ZIP digest is not original timing JSON payload digest. One single-provider block proxy, not complete C0. Receipt creation clock corrected to original Git commit timestamp; not a data-observation timestamp."
   },
   "actualEndToEndRehearsal": null,
   "powerCalibration": {
