@@ -96,7 +96,7 @@ const typed=buildC0TypedUnknownObservation({
   officialRuntimeHash:H('e'),archiveRuntimeHash:H('e'),
   failure:{stage:'BASELINE_ACQUISITION',code:'RPC_TIMEOUT'}
 });
-const typedBytes=Buffer.from(JSON.stringify(canonical(typed))+'\\n');
+const typedBytes=Buffer.from(JSON.stringify(canonical(typed))+'\n');
 const typedTag='pons-s1-c0-source-v1-'+typed.sourceObservationDigest;
 const typedAsset={...asset,name:typedTag+'.json',size:typedBytes.length,
   digest:'sha256:'+sha256(typedBytes)};
@@ -117,7 +117,7 @@ assert.equal(typedWitness.scientificallyAdmissible,false);
 let negative=0;
 const poisoned=structuredClone(typed);
 poisoned.receipt.evidence.reason='WOULD_TRADE_AFTER_LOOKING_AT_OUTCOMES';
-const poisonedBytes=Buffer.from(JSON.stringify(canonical(poisoned))+'\\n');
+const poisonedBytes=Buffer.from(JSON.stringify(canonical(poisoned))+'\n');
 assert.throws(()=>verifyIndependentC0SourceSeal({...typedProof,
   sourceBytes:poisonedBytes,originalSourceBytes:poisonedBytes}),
   /STORED_TYPED_UNKNOWN_OR_SOURCE_EVIDENCE_TAMPERED/);negative++;
