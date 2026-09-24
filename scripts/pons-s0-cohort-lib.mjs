@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { writeSync } from 'node:fs';
+import { readFileSync, writeSync } from 'node:fs';
 import {
   CURRENT_PONS_V2_AUTHORITY,
   CURRENT_PONS_V2_CURVE_TEMPLATE_AUTHORITY,
@@ -58,11 +57,11 @@ export function assertReviewedSourceCheckout() {
     EXPECTED_SOURCE_COMMIT,
     'PONS_S0_SOURCE_COMMIT must remain pinned to the reviewed PR-A head'
   );
-  const actualSourceCommit = execFileSync(
-    'git',
-    ['rev-parse', 'HEAD'],
-    { encoding: 'utf8' }
-  ).trim();
+  // Archive-aware, process-free proof: the reviewed source checkout is detached.
+  // The already-published S0 artifact remains bound to its original script hashes.
+  const rawHead = readFileSync(new URL('../.git/HEAD', import.meta.url), 'utf8').trim();
+  assert.match(rawHead, /^[0-9a-f]{40}$/i, 'PONS_S0_REQUIRES_DETACHED_REVIEWED_SOURCE');
+  const actualSourceCommit = rawHead;
   assert.equal(
     actualSourceCommit,
     EXPECTED_SOURCE_COMMIT,

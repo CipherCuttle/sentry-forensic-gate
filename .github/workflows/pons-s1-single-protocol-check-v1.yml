@@ -1,0 +1,40 @@
+name: Pons S1 Inert Single Protocol Reconciliation V1
+
+on:
+  push:
+    branches:
+      - agent/pons-s1-single-protocol-v1
+    paths:
+      - docs/PONS_S1_ONE_PROTOCOL_RECONCILIATION_V1.md
+      - docs/experiments/pons-s1-single-protocol-decision-v1.json
+      - scripts/pons-s1-single-protocol-check.mjs
+      - .github/workflows/pons-s1-single-protocol-check-v1.yml
+  pull_request:
+    paths:
+      - docs/PONS_S1_ONE_PROTOCOL_RECONCILIATION_V1.md
+      - docs/experiments/pons-s1-single-protocol-decision-v1.json
+      - scripts/pons-s1-single-protocol-check.mjs
+      - .github/workflows/pons-s1-single-protocol-check-v1.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inert-protocol-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Standalone no-provider syntax and negative cases
+        run: |
+          node --check scripts/pons-s1-single-protocol-check.mjs
+          node scripts/pons-s1-single-protocol-check.mjs
+      - name: No live authority is introduced
+        run: |
+          node --input-type=module -e "
+            import fs from 'node:fs';
+            const p=JSON.parse(fs.readFileSync('docs/experiments/pons-s1-single-protocol-decision-v1.json','utf8'));
+            if (p.status !== 'DRAFT_RECONCILED_NOT_ACTIVE' || Object.values(p.authority).some(Boolean)) process.exit(1);
+          "
