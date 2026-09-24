@@ -163,11 +163,145 @@ export function buildC0Observation(input){
   return {evidence,receipt,sourceObservationDigest:digest(evidence)};
 }
 
+
+// A typed UNKNOWN is possible ONLY after both providers independently prove
+// the native launch and canonical point-in-time block data. No C0 execution or
+// synthetic entry is inferred from a failing adapter.
+export const UNKNOWN_SCHEMA='PONS_S1_C0_TYPED_FAILURE_SOURCE_V1';
+const FAILURE_STAGES=['LAUNCH_NORMALIZATION','BASELINE_ACQUISITION','CONTROL_EVALUATION'];
+const FAILURE_CODES=['ADAPTER_ERROR','RPC_TIMEOUT','RPC_UNAVAILABLE',
+  'REQUIRED_LAUNCH_METADATA_MISSING','INVALID_C0_BASELINE','CONTROL_ERROR'];
+export function buildC0TypedUnknownObservation(input){
+  const {event,officialLog,archiveLog,officialFactoryBlockLogs,archiveFactoryBlockLogs,
+    officialPoints,archivePoints,expectedFactory,decisionBlock,observedHead,
+    capturedAtMs,officialRuntimeHash,archiveRuntimeHash,failure}=input;
+  assert.ok(Array.isArray(officialFactoryBlockLogs)&&Array.isArray(archiveFactoryBlockLogs),
+    'FULL_LAUNCH_BLOCK_FACTORY_CENSUS_REQUIRED');
+  assert.ok(officialFactoryBlockLogs.length<=4096&&archiveFactoryBlockLogs.length<=4096,
+    'FACTORY_CENSUS_UNBOUNDED');
+  assert.deepEqual(canon(officialFactoryBlockLogs),canon(archiveFactoryBlockLogs),
+    'FULL_LAUNCH_BLOCK_FACTORY_SOURCE_DISAGREEMENT');
+  assert.ok(officialPoints&&archivePoints,'INDEPENDENT_BLOCK_POINTS_REQUIRED');
+  for(const k of ['launch','decision','observed']){
+    assert.deepEqual(officialPoints[k],archivePoints[k],k+'_POINT_SOURCE_DISAGREEMENT');
+    assert.ok(officialPoints[k]&&Number.isSafeInteger(officialPoints[k].timestampMs));
+  }
+  assert.deepEqual(officialPoints.launch,{
+    number:String(event.blockNumber),hash:String(event.blockHash).toLowerCase(),
+    timestampMs:event.launchTimestampMs},'AUTHORITATIVE_LAUNCH_TIMESTAMP_MISMATCH');
+  assert.deepEqual(officialPoints.decision,decisionBlock,'DECISION_BLOCK_POINT_DRIFT');
+  assert.deepEqual(officialPoints.observed,observedHead,'OBSERVED_HEAD_POINT_DRIFT');
+  assert.ok(officialPoints.launch.timestampMs<=officialPoints.decision.timestampMs&&
+    officialPoints.decision.timestampMs<=officialPoints.observed.timestampMs,
+    'NONMONOTONIC_CANONICAL_BLOCK_TIMESTAMPS');
+  assert.equal(addr(officialLog.address,'OFFICIAL_LOG_FACTORY'),addr(expectedFactory,'EXPECTED_FACTORY'));
+  assert.equal(addr(archiveLog.address,'ARCHIVE_LOG_FACTORY'),addr(expectedFactory,'EXPECTED_FACTORY'));
+  const logId=l=>String(l.blockNumber)+':'+String(l.transactionHash).toLowerCase()+':'+l.logIndex;
+  const matching=ls=>ls.filter(x=>logId(x)===event.eventKey);
+  assert.equal(matching(officialFactoryBlockLogs).length,1,'EXACT_EVENT_NOT_SINGLETON_IN_OFFICIAL_CENSUS');
+  assert.equal(matching(archiveFactoryBlockLogs).length,1,'EXACT_EVENT_NOT_SINGLETON_IN_ARCHIVE_CENSUS');
+  assert.deepEqual(canon(matching(officialFactoryBlockLogs)[0]),canon(officialLog),
+    'SELECTED_OFFICIAL_EVENT_NOT_IN_FULL_CENSUS');
+  assert.deepEqual(canon(matching(archiveFactoryBlockLogs)[0]),canon(archiveLog),
+    'SELECTED_ARCHIVE_EVENT_NOT_IN_FULL_CENSUS');
+  for(const l of officialFactoryBlockLogs){
+    assert.equal(addr(l.address,'FACTORY_CENSUS_LOG_FACTORY'),addr(expectedFactory,'EXPECTED_FACTORY'));
+    assert.equal(hash(l.blockHash,'FACTORY_CENSUS_LOG_BLOCK'),officialPoints.launch.hash,
+      'CENSUS_BLOCK_HASH_DRIFT');
+    assert.equal(String(l.blockNumber),String(event.blockNumber),'CENSUS_OUT_OF_LAUNCH_BLOCK');
+    assert.equal(l.removed??false,false,'REMOVED_CENSUS_LOG_FORBIDDEN');
+  }
+  assert.equal(addr(officialLog.args?.pairToken,'PAIR_TOKEN'),A_ZERO,'C0_NOT_NATIVE_FACTORY_EVENT');
+  assert.equal(addr(officialLog.args?.token,'FACTORY_TOKEN'),addr(event.token,'EVENT_TOKEN'),
+    'FACTORY_EVENT_TOKEN_MISMATCH');
+  assert.equal(event.eventKey,
+    String(event.blockNumber)+':'+String(event.transactionHash).toLowerCase()+':'+event.logIndex);
+  assert.equal(event.nativePair,true,'C0_OBSERVER_NATIVE_ONLY');
+
+  assert.equal(dec(decisionBlock.number),dec(event.blockNumber)+2n,
+    'UNKNOWN_DECISION_NOT_LAUNCH_PLUS_TWO');
+  assert.equal(hash(officialRuntimeHash,'OFFICIAL_RUNTIME'),
+    hash(archiveRuntimeHash,'ARCHIVE_RUNTIME'),'UNKNOWN_FACTORY_RUNTIME_SOURCE_DISAGREEMENT');
+  assert.ok(dec(observedHead.number)>=dec(decisionBlock.number)+2n,
+    'UNKNOWN_C0_CONFIRMATIONS_NOT_OBSERVED');
+  assert.ok(Number.isSafeInteger(capturedAtMs)&&capturedAtMs>=observedHead.timestampMs,
+    'UNKNOWN_CAPTURE_BEFORE_OBSERVED_HEAD');
+  assert.ok(capturedAtMs<event.launchTimestampMs+300_000,'UNKNOWN_CAPTURE_AFTER_5M');
+  assert.deepEqual(Object.keys(failure??{}).sort(),['code','stage'],
+    'UNKNOWN_FAILURE_EXACT_FIELDS_REQUIRED');
+  assert.ok(FAILURE_STAGES.includes(failure.stage),'UNKNOWN_UNREVIEWED_FAILURE_STAGE');
+  assert.ok(FAILURE_CODES.includes(failure.code),'UNKNOWN_UNREVIEWED_FAILURE_CODE');
+  if(failure.stage==='LAUNCH_NORMALIZATION')
+    assert.ok(['ADAPTER_ERROR','RPC_TIMEOUT','RPC_UNAVAILABLE',
+      'REQUIRED_LAUNCH_METADATA_MISSING'].includes(failure.code),
+      'UNKNOWN_NORMALIZATION_WRONG_ERROR_CODE');
+  if(failure.stage==='BASELINE_ACQUISITION')
+    assert.ok(['ADAPTER_ERROR','RPC_TIMEOUT','RPC_UNAVAILABLE',
+      'INVALID_C0_BASELINE'].includes(failure.code),
+      'UNKNOWN_BASELINE_WRONG_ERROR_CODE');
+  if(failure.stage==='CONTROL_EVALUATION')
+    assert.equal(failure.code,'CONTROL_ERROR','UNKNOWN_CONTROL_WRONG_ERROR_CODE');
+  const evidence={
+    schemaVersion:UNKNOWN_SCHEMA,
+    sourceKind:'VERIFIED_DUAL_RPC_FACTORY_C0_FAILED_AFTER_SOURCE_IDENTITY',
+    chainId:4663,eventKey:event.eventKey,
+    event:canon(event),expectedFactory:addr(expectedFactory,'EXPECTED_FACTORY'),
+    launchBlock:String(event.blockNumber),launchBlockHash:hash(event.blockHash,'LAUNCH_HASH'),
+    token:addr(event.token,'TOKEN'),
+    decisionBlock:String(decisionBlock.number),
+    decisionBlockHash:hash(decisionBlock.hash,'DECISION_HASH'),
+    observedHeadBlock:String(observedHead.number),
+    observedHeadHash:hash(observedHead.hash,'OBSERVED_HASH'),
+    observedHeadTimestampMs:observedHead.timestampMs,capturedAtMs,
+    syntheticInclusionRule:INCLUSION_RULE,
+    officialLog:canon(officialLog),archiveLog:canon(archiveLog),
+    officialFactoryBlockLogs:canon(officialFactoryBlockLogs),
+    archiveFactoryBlockLogs:canon(archiveFactoryBlockLogs),
+    officialPoints:canon(officialPoints),archivePoints:canon(archivePoints),
+    officialFactoryRuntimeHash:hash(officialRuntimeHash,'OFFICIAL_RUNTIME'),
+    archiveFactoryRuntimeHash:hash(archiveRuntimeHash,'ARCHIVE_RUNTIME'),
+    failure:canon(failure),
+    launch:null,baseline:null,control:null,
+    noOutcomeReads:true,liveMoneyAuthority:false
+  };
+  const receipt={
+    action:'UNKNOWN_PREOUTCOME_C0',decisionBlock:String(decisionBlock.number),
+    decisionHash:hash(decisionBlock.hash,'DECISION_HASH'),decidedAtMs:capturedAtMs,
+    observedHeadBlock:String(observedHead.number),
+    observedHeadHash:hash(observedHead.hash,'OBSERVED_HASH'),
+    evidence:{
+      sourceObservationDigest:digest(evidence),sourceObservationSchema:UNKNOWN_SCHEMA,
+      sourceCapturedAtMs:capturedAtMs,reason:failure.stage+':'+failure.code
+    },
+    sourceCapturedBeforeOutcome:true
+  };
+  return {evidence,receipt,sourceObservationDigest:digest(evidence)};
+}
+
 // Deterministic local replay verifies the exact source bytes against the
 // frozen policy output. It does NOT independently prove live acquisition time.
 export function replayStoredC0Observation(stored){
   assert.ok(stored&&stored.evidence&&stored.receipt,'SOURCE_OBSERVATION_MISSING');
   const e=stored.evidence;
+  if(e.schemaVersion===UNKNOWN_SCHEMA){
+    const rebuilt=buildC0TypedUnknownObservation({
+      event:e.event,expectedFactory:e.expectedFactory,
+      officialLog:e.officialLog,archiveLog:e.archiveLog,
+      officialFactoryBlockLogs:e.officialFactoryBlockLogs,
+      archiveFactoryBlockLogs:e.archiveFactoryBlockLogs,
+      officialPoints:e.officialPoints,archivePoints:e.archivePoints,
+      decisionBlock:e.officialPoints.decision,observedHead:e.officialPoints.observed,
+      capturedAtMs:e.capturedAtMs,
+      officialRuntimeHash:e.officialFactoryRuntimeHash,
+      archiveRuntimeHash:e.archiveFactoryRuntimeHash,failure:e.failure
+    });
+    assert.deepEqual(canon(stored),canon(rebuilt),
+      'STORED_TYPED_UNKNOWN_OR_SOURCE_EVIDENCE_TAMPERED');
+    return {schemaVersion:UNKNOWN_SCHEMA,
+      sourceObservationDigest:rebuilt.sourceObservationDigest,
+      replayed:true,independentLiveCaptureAttested:false,
+      scientificAdmissibility:'BLOCKED'};
+  }
   assert.equal(e.schemaVersion,OBS_SCHEMA);
   const rebuilt=buildC0Observation({
     event:e.event,expectedFactory:e.expectedFactory,

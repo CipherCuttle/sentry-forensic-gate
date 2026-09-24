@@ -22,7 +22,7 @@
     "multichaincheck": "node scripts/multichain-m1-check.mjs",
     "ponsv2check": "node scripts/pons-v2-launch-adapter-check.mjs",
     "fastvetr1check": "node scripts/fast-vet-r1-capacity-gate-check.mjs",
-    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck && pnpm historicalbaselinepolicycheck && pnpm multichaincheck && pnpm ponsv2check && pnpm ponsv2marketcheck && pnpm ponsv2quotingcheck && pnpm ponsv2usdcheck && pnpm ponsv2baselinecheck && pnpm ponsv2creatorcheck && pnpm fastvetr1check && pnpm portableoutcomecheck && pnpm ponsv2forwardcheck && pnpm ponss0exportcheck && pnpm ponss1publishercheck && pnpm ponss1independentwitnessv1check && pnpm ponss1pairedcollectorv1check && pnpm ponss1c0observerv1check && pnpm ponss1c0sourcewitnessv1check && pnpm ponss1c0timingv1check",
+    "test": "pnpm build && pnpm authoritycheck && pnpm selfcheck && pnpm truthcheck && pnpm baselinecheck && pnpm provenancecheck && pnpm creatoroutcomecheck && pnpm forwardoutcomecheck && pnpm creatorsignalcheck && pnpm historicalcompatibilitycheck && pnpm historicalbaselinepolicycheck && pnpm multichaincheck && pnpm ponsv2check && pnpm ponsv2marketcheck && pnpm ponsv2quotingcheck && pnpm ponsv2usdcheck && pnpm ponsv2baselinecheck && pnpm ponsv2creatorcheck && pnpm fastvetr1check && pnpm portableoutcomecheck && pnpm ponsv2forwardcheck && pnpm ponss0exportcheck && pnpm ponss1publishercheck && pnpm ponss1independentwitnessv1check && pnpm ponss1pairedcollectorv1check && pnpm ponss1c0observerv1check && pnpm ponss1c0sourcewitnessv1check && pnpm ponss1c0timingv1check && pnpm ponss1preactivationcheck && pnpm ponss1dualrpccheck",
     "start:truth": "node dist/cli.js",
     "start:baseline": "node dist/baselineCli.js",
     "start:creator-outcome": "node dist/creatorOutcomeCli.js",
@@ -62,7 +62,9 @@
     "ponss1pairedcollectorv1check": "node scripts/pons-s1-paired-collector-check-v1.mjs",
     "ponss1c0observerv1check": "node scripts/pons-s1-c0-observer-check-v1.mjs",
     "ponss1c0sourcewitnessv1check": "node scripts/pons-s1-c0-source-witness-check-v1.mjs",
-    "ponss1c0timingv1check": "node scripts/pons-s1-c0-timing-check-v1.mjs"
+    "ponss1c0timingv1check": "node scripts/pons-s1-c0-timing-check-v1.mjs",
+    "ponss1preactivationcheck": "node scripts/pons-s1-feasibility-check-v1.mjs",
+    "ponss1dualrpccheck": "node scripts/pons-s1-dual-rpc-rehearsal-check-v1.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",

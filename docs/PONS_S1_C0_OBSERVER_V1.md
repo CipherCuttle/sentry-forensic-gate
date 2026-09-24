@@ -95,3 +95,20 @@ reinterpret its old digest.
 `node scripts/pons-s1-c0-observer-check-v1.mjs` exercise synthetic
 native C0, REJECT, UNKNOWN, deterministic replay/binding and hostile
 tamper/census/timing tests. No real prospective sample is observed.
+
+## Typed UNKNOWN addendum (draft PR #85)
+
+After full dual-provider native-event identity and pinned factory runtime have
+been verified, a launch normalization, quote/USD baseline or control failure
+produces a versioned `UNKNOWN_PREOUTCOME_C0` source observation. Finite
+stage/code enums, exact full dual logs and rechecked canonical completion
+head are retained. No quotes, hypothetical entry or eligibility are invented.
+The unchanged binder requires a record for every native event in its window.
+Raw adapter exception strings and private RPC URLs are never serialized.
+
+Failures *before* the full dual-source factory identity is established,
+canonical head disagreement, runtime mismatch, reorg or failure to acquire
+the fresh completion head remain fatal. They cannot be quietly converted
+into UNKNOWN or treated as a complete census. Local typed receipts remain
+untrusted until independently timestamped original evidence is acquired.
+This addendum grants no cohort, source-release or money authority.

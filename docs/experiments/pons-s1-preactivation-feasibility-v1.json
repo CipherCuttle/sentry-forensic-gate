@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "PONS_S1_PREACTIVATION_FEASIBILITY_V1",
+  "createdAtUtc": "2026-09-24T22:30:30Z",
+  "status": "DRAFT_READ_ONLY_OUTCOME_BLIND_REVIEW_ONLY",
+  "pilot": {
+    "evidenceClass": "PR_ONLY_SINGLE_OFFICIAL_RPC_BLOCK_CADENCE_PROXY",
+    "chainId": 4663,
+    "githubRunId": 36024227456,
+    "headSha": "f245d67ae4ff80d63947910a834c473c74973f96",
+    "observerJobId": 107716629626,
+    "witnessJobId": 107717057238,
+    "observedConfirmationElapsedMs": 8311,
+    "confirmedSlackMs": 290826,
+    "externalArtifactWindowWithReserve": true,
+    "actualC0QuotesMeasured": false,
+    "independentArchiveRpcMeasured": false,
+    "immutableSourceReleaseMeasured": false,
+    "batchReleaseMeasured": false,
+    "independentSourceWitnessMeasured": false,
+    "scientificallyAdmissible": false,
+    "originalArtifactArchiveDigest": "sha256:4b6f4daca17b7a8e77adcfcd9478a0de63c7f6136fcb46c799ea6f138df09ca7",
+    "witnessArtifactArchiveDigest": "sha256:376a70871be7d07890dc20a10bdf398fd65ace3813c4f4b1211d8337a6c4b8d9",
+    "provenanceNotes": "Job logs plus GitHub artifact metadata only; archive ZIP digest is not original timing JSON payload digest. One single-provider block proxy, not complete C0. Receipt creation clock corrected to original Git commit timestamp; not a data-observation timestamp."
+  },
+  "actualEndToEndRehearsal": null,
+  "powerCalibration": {
+    "qualifiedProspectiveArrivalRate": null,
+    "pairedNetUsdSd": null,
+    "absoluteNetUsdSd": null,
+    "meaningfulEconomicEffectUsd": null,
+    "clusterCorrelation": null,
+    "notes": "S0 cannot qualify S1 paired net-USD variance. Illustrative ICC values are not measured."
+  },
+  "authority": {
+    "mergeAuthorized": false,
+    "collectionAuthorized": false,
+    "liveMoneyAuthorized": false
+  }
+}

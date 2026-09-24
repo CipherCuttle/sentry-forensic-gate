@@ -1,0 +1,56 @@
+name: PONS S1 bounded dual-RPC real read-only rehearsal
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-dual-rpc-rehearsal-v1.yml'
+      - 'scripts/pons-s1-dual-rpc-rehearsal-*.mjs'
+      - 'docs/PONS_S1_DUAL_RPC_REHEARSAL_V1.md'
+      - 'package.json'
+permissions:
+  contents: read
+jobs:
+  inert-offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Assert source integrity, parity and no research promotion
+        run: |
+          node --check scripts/pons-s1-dual-rpc-rehearsal-core-v1.mjs
+          node --check scripts/pons-s1-dual-rpc-rehearsal-runner-v1.mjs
+          node --check scripts/pons-s1-dual-rpc-rehearsal-check-v1.mjs
+          node scripts/pons-s1-dual-rpc-rehearsal-check-v1.mjs
+  real-public-rpc-diagnostic:
+    needs: inert-offline-contract
+    if: github.event_name == 'pull_request' && github.repository == 'CipherCuttle/sentry-forensic-gate' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/pons-s1-c0-typed-unknown-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions: {contents: read}
+    env:
+      PONS_S1_DIAGNOSTIC: ONE_BOUNDED_PUBLIC_DUAL_RPC
+      PONS_S1_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Build existing approved read-only viem adapters
+        run: |
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false --ignore-scripts
+          pnpm build
+      - name: One fixed-size recent factory census and actual two-provider C0
+        run: |
+          mkdir -p proof
+          node scripts/pons-s1-dual-rpc-rehearsal-runner-v1.mjs proof/rehearsal.json
+          test -s proof/rehearsal.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-s1-dual-rpc-diagnostic
+          path: proof/rehearsal.json
+          if-no-files-found: warn
+          retention-days: 14
