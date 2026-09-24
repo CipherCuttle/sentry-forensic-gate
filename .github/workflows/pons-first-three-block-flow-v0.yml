@@ -1,0 +1,101 @@
+name: Pons V2 First Three Block Flow V0 — Read Only
+
+on:
+  push:
+    branches: [agent/pons-first-three-block-trade-flow-v0]
+    paths:
+      - scripts/pons-first-three-block-flow-core-v0.mjs
+      - scripts/pons-first-three-block-flow-scout-v0.mjs
+      - scripts/pons-first-three-block-flow-check-v0.mjs
+      - docs/PONS_FIRST_THREE_BLOCK_FLOW_V0.md
+      - .github/workflows/pons-first-three-block-flow-v0.yml
+  pull_request:
+    paths:
+      - scripts/pons-first-three-block-flow-core-v0.mjs
+      - scripts/pons-first-three-block-flow-scout-v0.mjs
+      - scripts/pons-first-three-block-flow-check-v0.mjs
+      - docs/PONS_FIRST_THREE_BLOCK_FLOW_V0.md
+      - .github/workflows/pons-first-three-block-flow-v0.yml
+
+permissions:
+  contents: read
+
+jobs:
+  offline-qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build existing reviewed Pons adapters
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false
+          pnpm build
+      - name: Source-bounded early-trade fixture and no-write tests
+        run: |
+          set -euo pipefail
+          node --check scripts/pons-first-three-block-flow-core-v0.mjs
+          node --check scripts/pons-first-three-block-flow-scout-v0.mjs
+          node --check scripts/pons-first-three-block-flow-check-v0.mjs
+          node scripts/pons-first-three-block-flow-check-v0.mjs
+
+  optional-real-chain-readonly-witness:
+    needs: offline-qualification
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      PONS_FIRST_FLOW_TX_HASH: '0xbd52317c84d90ba8912646563117fba9617056ce27cb5105b918c68367161a86'
+      PONS_FIRST_FLOW_TOKEN: '0x80a7e83f329be7f7ac65cef5992d0794d34491a6'
+      PONS_FIRST_FLOW_RPC_URL: 'https://robinhood-mainnet-rpc.blockreq.com/v1/rpc/public'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build read-only evidence adapters
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false
+          pnpm build
+      - name: Bounded single published launch first-three-block observation
+        shell: bash
+        run: |
+          set -u
+          timeout -k 5s 100s node scripts/pons-first-three-block-flow-scout-v0.mjs \
+            > "${RUNNER_TEMP}/pons-three-block-witness-v0.json"
+          RC=$?
+          if [ "$RC" -eq 0 ] && jq -e '
+            .schemaVersion == "PONS_V2_FIRST_THREE_BLOCK_FLOW_V0" and
+            .source.chainId == 4663 and
+            (.source.token | ascii_downcase) == "0x80a7e83f329be7f7ac65cef5992d0794d34491a6" and
+            .source.launchBlockNumber == "71005336" and
+            .source.windowEndBlockNumber == "71005338" and
+            .source.primaryNativeEthPair == false and
+            .coverage.launchTransactionCurveBuysReconciled == true
+          ' "${RUNNER_TEMP}/pons-three-block-witness-v0.json" > /dev/null; then
+            echo "READ_ONLY_REAL_DIRECT_LAUNCH_THREE_BLOCK_WITNESS_PASS" >> "$GITHUB_STEP_SUMMARY"
+            jq '{source,coverage,buyerFlow,sellerFlow}' \
+              "${RUNNER_TEMP}/pons-three-block-witness-v0.json" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "INCONCLUSIVE: published source may be pruned or unsupported; offline PASS is separate" >> "$GITHUB_STEP_SUMMARY"
+            echo '{"schemaVersion":"PONS_FIRST_THREE_BLOCK_SMOKE_V0","verdict":"UNVERIFIED","noTransactions":true}' \
+              > "${RUNNER_TEMP}/pons-three-block-witness-v0.json"
+          fi
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-first-three-block-real-witness-v0
+          path: ${{ runner.temp }}/pons-three-block-witness-v0.json
+          if-no-files-found: warn
+          retention-days: 7
