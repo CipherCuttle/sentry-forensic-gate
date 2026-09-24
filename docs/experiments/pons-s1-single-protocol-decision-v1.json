@@ -24,7 +24,10 @@
     "stopRule": "FIRST_200_ELIGIBLE_DECISIONS_OR_7D_WHICHEVER_FIRST",
     "retainAllSkipsAndLaterFailures": true,
     "neverReplaceFailedEntry": true,
-    "eligibilityObservedBeforeOutcomes": true
+    "eligibilityObservedBeforeOutcomes": true,
+    "preOutcomeC0EligibilityMustBeSealed": true,
+    "unknownEligibilityMustRemainInCensus": true,
+    "unknownEligibilityInvalidatesCompleteDenominator": true
   },
   "timing": {
     "origin": "AFTER_SEPARATE_CANONICAL_ACTIVATION_RECEIPT_AND_BLOCK_HASH",
@@ -65,7 +68,8 @@
     "slippageAndAdverseMovementRequired": true,
     "preventQuoteFeeDoubleCount": true,
     "missingCostOrRoute": "UNVERIFIED_NEVER_ZERO",
-    "shadowNetReturn": "MODELED_ONLY_NOT_REALIZED"
+    "shadowNetReturn": "MODELED_ONLY_NOT_REALIZED",
+    "preOutcomeC0DecisionReceiptsInImmutableBatchRequired": true
   },
   "assessment": {
     "preOutcomePowerReviewRequired": true,
