@@ -1,0 +1,39 @@
+name: Pons S1 paired C0 collector V1 — inert offline qualification
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-prospective-collector-v1.yml'
+      - 'scripts/pons-s1-paired-collector-*.mjs'
+      - 'scripts/pons-s1-publisher-core-v1.mjs'
+      - 'scripts/pons-s1-publisher-check-v1.mjs'
+      - 'scripts/pons-s1-independent-witness-check-v1.mjs'
+      - 'docs/PONS_S1_PAIRED_COLLECTOR_V1.md'
+      - 'docs/experiments/pons-s1-single-protocol-decision-v1.json'
+      - 'package.json'
+
+# NO workflow_dispatch, schedule or autonomous prospective collector.
+# Name is reserved for the reviewed future canonical source-run identity.
+permissions:
+  contents: read
+
+jobs:
+  purely-synthetic:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Full V1 collector, paired publisher and witness adversarial fixtures
+        run: |
+          node --check scripts/pons-s1-paired-collector-core-v1.mjs
+          node --check scripts/pons-s1-paired-collector-check-v1.mjs
+          node --check scripts/pons-s1-publisher-core-v1.mjs
+          node scripts/pons-s1-paired-collector-check-v1.mjs
+          node scripts/pons-s1-publisher-check-v1.mjs
+          node scripts/pons-s1-independent-witness-check-v1.mjs

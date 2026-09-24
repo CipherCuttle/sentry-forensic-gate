@@ -2,12 +2,13 @@
 // Synthetic-only offline qualification. No provider, release, activation or money.
 import assert from 'node:assert/strict';
 import { BATCH_SCHEMA, AUTHORITY_SCHEMA, API, canonicalBatchBytes,
-  digest, planPublication, verifyReadBack, validateBatch, sha256
+  digest, planPublication, verifyReadBack, validateBatch, sha256, INCLUSION_RULE
 } from './pons-s1-publisher-core-v1.mjs';
 import { readFileSync } from 'node:fs';
 const protocol = JSON.parse(readFileSync(
   new URL('../docs/experiments/pons-s1-single-protocol-decision-v1.json', import.meta.url)));
 protocol.status = 'CANONICAL_FROZEN_ACTIVE'; // synthetic fixture ONLY
+protocol.timing.syntheticInclusionRule = INCLUSION_RULE; // NOT an approved change
 const A = 'a'.repeat(40), H = n => '0x' + n.repeat(64),
   T = n => '0x' + n.repeat(40);
 const launch = Date.parse('2026-10-01T12:00:00Z');
@@ -25,13 +26,15 @@ function candidate(index = 0) {
     blockHash:H('3'),transactionHash:H('2'),logIndex:0,
     token:T('4'),nativePair:false,launchTimestampMs:launch,c0:null,inclusion:null};
   const evidence = {schemaVersion:'SYNTHETIC_POINT_IN_TIME_C0',
-    quoteBlock:'102',control:'WOULD_TRADE',source:'OFFLINE_FIXTURE_ONLY'};
+    quoteBlock:'102',control:'WOULD_TRADE',source:'OFFLINE_FIXTURE_ONLY',
+    observedHeadBlock:'104',observedHeadHash:H('8'),
+    observedC0CompletionAtMs:launch+20_000,syntheticInclusionRule:INCLUSION_RULE};
   const native = {eventKey:'100:'+H('5')+':1',blockNumber:'100',
     blockHash:H('3'),transactionHash:H('5'),logIndex:1,
     token:T('6'),nativePair:true,launchTimestampMs:launch+1000,
     c0:{action:'WOULD_TRADE',decisionBlock:'102',decisionHash:H('7'),
       decidedAtMs:launch+20_000,evidence,evidenceSha256:digest(evidence)},
-    inclusion:{blockNumber:'104',blockHash:H('8'),timestampMs:launch+40_000}};
+    inclusion:{blockNumber:'106',blockHash:H('9'),timestampMs:launch+40_000}};
   const census = [nonnative,native];
   const identities = census.map(x=>({eventKey:x.eventKey,blockHash:x.blockHash,
     token:x.token,nativePair:x.nativePair}));
@@ -42,7 +45,7 @@ function candidate(index = 0) {
     scanned:{originBlockNumber:'100',originBlockHash:H('1'),
       scanFromCursor:{blockNumber:'100',logIndex:0},
       scannedThrough:'100',scannedThroughHash:H('3'),
-      nextCursor:{blockNumber:'101',logIndex:0},confirmedHeadBlock:'116',
+      nextCursor:{blockNumber:'101',logIndex:0},confirmedHeadBlock:'118',
       factoryEventsDigest:digestAll,officialEventsDigest:digestAll,
       archiveEventsDigest:digestAll},
     census,selectedEventKeys:[native.eventKey],cumulativeEligibleDecisions:1,
@@ -107,8 +110,8 @@ mutate(b=>{b.census[1].c0.evidenceSha256='f'.repeat(64)},
 mutate(b=>{b.census[1].c0.decisionBlock='103'},/Expected values to be strictly equal/);
 mutate(b=>{b.capturedAtMs=launch+35_000},
   /FUTURE_INCLUSION_LOOKAHEAD_FORBIDDEN/);
-mutate(b=>{b.census[1].inclusion.blockNumber='106'},
-  /INCLUSION_NOT_TWELVE_CONFIRMED/);
+mutate(b=>{b.census[1].inclusion.blockNumber='108'},
+  /CAUSALLY_INVALID_INCLUSION_ANCHOR/);
 mutate(b=>{b.scanned.nextCursor={blockNumber:'100',logIndex:0}},
   /CURSOR_CANNOT_SKIP_OR_RESCAN_PARTIAL_RANGE|NEXT_CURSOR_REPEATS_LAST_EVENT/);
 mutate(b=>{b.scanned.scannedThroughHash=H('f')},
@@ -153,11 +156,15 @@ for (const row of second.census) {
 }
 second.census[1].c0.decisionBlock='103';
 second.census[1].c0.decidedAtMs+=10_000;
+nextEvidence.observedHeadBlock='105';
+nextEvidence.observedC0CompletionAtMs=second.census[1].c0.decidedAtMs;
+second.census[1].c0.evidenceSha256=digest(nextEvidence);
+second.census[1].inclusion.blockNumber='107';
 second.census[1].inclusion.timestampMs+=10_000;
 second.scanned.scanFromCursor={blockNumber:'101',logIndex:0};
 second.scanned.scannedThrough='101';
 second.scanned.nextCursor={blockNumber:'102',logIndex:0};
-second.scanned.confirmedHeadBlock='117';
+second.scanned.confirmedHeadBlock='119';
 second.scanned.factoryEventsDigest=digest(second.census.map(x=>({
   eventKey:x.eventKey,blockHash:x.blockHash,token:x.token,nativePair:x.nativePair})));
 second.scanned.officialEventsDigest=second.scanned.factoryEventsDigest;
