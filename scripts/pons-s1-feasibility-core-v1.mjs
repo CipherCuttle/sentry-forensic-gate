@@ -45,14 +45,17 @@ export function evaluateCandidateEndToEndTiming(t){
   assert.ok(t.c0QuoteCompletedAtMs<=t.inclusionTwelveConfirmedAtMs,
     'INCLUSION_CONFIRMED_BEFORE_C0');
   const originalUpper=externalUpper(t.originalArtifactCreatedAtUtc,'ORIGINAL_ARTIFACT');
+  const sourceAssetUpper=externalUpper(t.immutableSourceAssetCreatedAtUtc,'SOURCE_ASSET');
   const sourceUpper=externalUpper(t.immutableSourceReleasePublishedAtUtc,'SOURCE_RELEASE');
+  const batchAssetUpper=externalUpper(t.immutableBatchAssetCreatedAtUtc,'BATCH_ASSET');
   const batchUpper=externalUpper(t.immutableBatchReleasePublishedAtUtc,'BATCH_RELEASE');
   const witnessUpper=externalUpper(t.independentWitnessArtifactCreatedAtUtc,'WITNESS_ARTIFACT');
   assert.ok(t.c0QuoteCompletedAtMs<=originalUpper &&
-    originalUpper<=sourceUpper && sourceUpper<=batchUpper &&
+    originalUpper<=sourceAssetUpper && sourceAssetUpper<=sourceUpper &&
+    sourceUpper<=batchAssetUpper && batchAssetUpper<=batchUpper &&
     batchUpper<=witnessUpper,'NONCAUSAL_EXTERNAL_PUBLICATION');
-  assert.ok(t.inclusionTwelveConfirmedAtMs<=batchUpper,
-    'BATCH_PUBLISHED_BEFORE_INCLUSION_FINALITY');
+  assert.ok(t.inclusionTwelveConfirmedAtMs<=batchAssetUpper,
+    'BATCH_ASSET_BEFORE_INCLUSION_FINALITY');
   const deadline=t.launchTimestampMs+EARLIEST_FIVE_MINUTE_MS;
   const completeUpper=Math.max(t.inclusionTwelveConfirmedAtMs,witnessUpper);
   const slack=deadline-completeUpper;

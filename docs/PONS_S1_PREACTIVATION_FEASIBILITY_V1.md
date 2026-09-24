@@ -25,10 +25,12 @@ the machine-readable audit receipt.
 The pure candidate end-to-end timing gate requires causal order of
 actual launch discovery, dual-provider factory verification, C0 quote
 completion, predefined completion-head+2 hypothetical inclusion, its
-12 observed confirmations, original source artifact, immutable exact-byte
-source release, full-source-sidecar-bound cohort batch release and
-independent witness artifact. It conservatively uses the END of each
-GitHub-reported timestamp interval. All required milestones must fit before
+12 observed confirmations, original source artifact, source release asset upload, immutable exact-byte
+source release, independently witnessed full-source-sidecar-bound cohort
+batch asset upload and immutable release, and independent witness artifact. It conservatively uses the END of each
+GitHub-reported timestamp interval; source/batch asset uploads must predate
+their immutable publication, and the cohort asset upload must follow
+observed inclusion finality. All required milestones must fit before
 launch chain timestamp + 300,000 ms, with strictly more than 90,000 ms
 remaining. Missing or backwards timestamps fail closed. A candidate JSON
 timeline is NEVER independent provenance or activation authority.

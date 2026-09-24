@@ -25,7 +25,9 @@ const cand={
   launchDiscoveredAtMs:t+5000,dualFactoryVerifiedAtMs:t+18000,
   c0QuoteCompletedAtMs:t+35000,inclusionTwelveConfirmedAtMs:t+90000,
   originalArtifactCreatedAtUtc:'2026-10-01T12:01:00Z',
+  immutableSourceAssetCreatedAtUtc:'2026-10-01T12:01:10Z',
   immutableSourceReleasePublishedAtUtc:'2026-10-01T12:01:20Z',
+  immutableBatchAssetCreatedAtUtc:'2026-10-01T12:01:35Z',
   immutableBatchReleasePublishedAtUtc:'2026-10-01T12:01:40Z',
   independentWitnessArtifactCreatedAtUtc:'2026-10-01T12:02:00Z'
 };
@@ -51,9 +53,18 @@ bad('publication preceding C0',{
 bad('source release preceding original',{
   immutableSourceReleasePublishedAtUtc:'2026-10-01T12:00:20Z'},
   /NONCAUSAL_EXTERNAL_PUBLICATION/);
-bad('batch before finality',{
-  immutableBatchReleasePublishedAtUtc:'2026-10-01T12:01:21Z'},
-  /BATCH_PUBLISHED_BEFORE_INCLUSION_FINALITY/);
+bad('batch asset before finality',{
+  immutableBatchAssetCreatedAtUtc:'2026-10-01T12:01:21Z',
+  immutableBatchReleasePublishedAtUtc:'2026-10-01T12:01:22Z'},
+  /BATCH_ASSET_BEFORE_INCLUSION_FINALITY/);
+bad('missing source asset',{immutableSourceAssetCreatedAtUtc:null},
+  /SOURCE_ASSET_UTC_REQUIRED/);
+bad('source upload after publication',{
+  immutableSourceAssetCreatedAtUtc:'2026-10-01T12:01:30Z'},
+  /NONCAUSAL_EXTERNAL_PUBLICATION/);
+bad('batch upload after publication',{
+  immutableBatchAssetCreatedAtUtc:'2026-10-01T12:01:45Z'},
+  /NONCAUSAL_EXTERNAL_PUBLICATION/);
 bad('witness before batch',{
   independentWitnessArtifactCreatedAtUtc:'2026-10-01T12:01:20Z'},
   /NONCAUSAL_EXTERNAL_PUBLICATION/);
