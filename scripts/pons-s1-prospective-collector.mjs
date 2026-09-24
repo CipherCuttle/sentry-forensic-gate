@@ -56,8 +56,18 @@ assert.equal(String(activation.factory).toLowerCase(),
   CURRENT_PONS_V2_AUTHORITY.factory.toLowerCase(), 'PONS_S1_FACTORY_PIN_MISMATCH');
 assert.equal(spec.prospective.launchAuthority,
   CURRENT_PONS_V2_AUTHORITY.authorityId, 'PONS_S1_AUTHORITY_ID_MISMATCH');
-const ctx = assertActivated(spec, activation,
-  { collectorImplementationSha: scriptSha, checkoutSha });
+// A locally asserted SHA is not an independent canonical activation proof.
+const proofPath = process.env.PONS_S1_EXTERNAL_CANONICAL_PROOF_PATH;
+assert.ok(proofPath, 'PONS_S1_INDEPENDENT_CANONICAL_PROOF_REQUIRED');
+const proof = await mustReadJson(proofPath,'CANONICAL_ACTIVATION_PROOF');
+assert.equal(proof.schemaVersion, 'PONS_S1_CANONICAL_ACTIVATION_PROOF_V0');
+const ctx = assertActivated(spec, activation,{
+  collectorImplementationSha:scriptSha,checkoutSha,
+  externalProofSource:proof.externalProofSource,
+  verifiedActivationCommitSha:proof.verifiedActivationCommitSha,
+  activationCommitParentSha:proof.activationCommitParentSha,
+  verifiedMergedAtUtc:proof.verifiedMergedAtUtc
+});
 assert.ok(BigInt(activation.originFromBlock) > 69066751n,
   'PONS_S1_PROSPECTIVE_ORIGIN_NOT_NEW');
 assert.equal(process.env.PONS_S1_COLLECTION_MODE, 'READ_ONLY_EXPLICIT_CANONICAL_ACTIVATION',

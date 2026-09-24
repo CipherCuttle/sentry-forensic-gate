@@ -24,12 +24,25 @@ const activation = {
   factory:a('7'),authority:{dataCollectionAuthorized:true,liveMoneyAuthorized:false,
   unattendedOperationAuthorized:false}
 };
-const context={collectorImplementationSha:'f'.repeat(40),checkoutSha:'a'.repeat(40)};
+const context={collectorImplementationSha:'f'.repeat(40),
+  checkoutSha:'b'.repeat(40),verifiedActivationCommitSha:'b'.repeat(40),
+  activationCommitParentSha:'a'.repeat(40),
+  verifiedMergedAtUtc:'2026-10-01T00:00:00Z',
+  externalProofSource:'GITHUB_REST_CANONICAL_ACTIVATION_PROOF_V0'};
 assert.equal(assertActivated(spec,activation,context).specSha256,digest(spec));
 assert.throws(() => assertActivated(spec,{...activation,originEarliestTimestampMs:originMs},context),
   /Expected values to be strictly equal/);
-assert.throws(() => assertActivated(spec,activation,{...context,checkoutSha:'b'.repeat(40)}),
-  /PONS_S1_NOT_CANONICAL_ACTIVATION_SHA/);
+assert.throws(() => assertActivated(spec,activation,{...context,checkoutSha:'c'.repeat(40)}),
+  /PONS_S1_NOT_VERIFIED_CANONICAL_ACTIVATION/);
+assert.throws(() => assertActivated(spec,activation,
+  {...context,activationCommitParentSha:'d'.repeat(40)}),
+  /PONS_S1_ACTIVATION_NOT_CHILD_OF_REVIEWED_MERGE/);
+assert.throws(() => assertActivated(spec,activation,
+  {...context,externalProofSource:'LOCAL_ASSERTION_ONLY'}),
+  /PONS_S1_CANONICAL_EXTERNAL_PROOF_MISSING/);
+assert.throws(() => assertActivated(spec,activation,
+  {...context,verifiedMergedAtUtc:'2026-10-01T00:01:00Z'}),
+  /PONS_S1_MERGE_TIME_NOT_EXTERNALLY_VERIFIED/);
 const point=(n,ms,hashPrefix)=>({number:String(n),timestampMs:ms,hash:h(hashPrefix)});
 const origin={block:point(100,originMs,'3'),predecessor:point(99,originMs-3000,'2')};
 const raw=(n,index,pair='0')=>({

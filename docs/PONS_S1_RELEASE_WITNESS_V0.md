@@ -64,3 +64,15 @@ The manual read-only witness workflow is available only after a separately
 authorized merge to `main`, and even then requires an existing immutable
 release and its exact IDs. An independent hostile review of the combined
 S1 activation + witness boundary is still required.
+
+## Activation commit circularity resolved in the contract
+
+The old activation check mistakenly required its checkout commit to equal a
+SHA named inside the activation file in that same commit. That is impossible.
+The updated contract requires a distinct post-merge activation commit. The
+receipt records its **parent reviewed merge SHA**; a separately obtained
+GitHub REST proof must establish the detached activation checkout SHA, its
+parent and the externally verified merge timestamp. A local JSON proof alone
+is not independent verification; the canonical acquisition workflow is still
+an activation-blocking deliverable. There is no activation receipt in this
+branch and the frozen S1 spec remains `DRAFT_REVIEW_ONLY_NOT_ACTIVE`.

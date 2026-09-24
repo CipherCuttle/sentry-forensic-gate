@@ -80,7 +80,7 @@ rejects({release:{...release,published_at:'2026-10-01T12:05:00+00:00'}},
 rejects({assetBytes:Buffer.from(bytes.toString('utf8')+' ')},
   /PONS_S1_ASSET_NOT_VALID_BATCH_JSON|PONS_S1_ASSET_NOT_EXACT_CANONICAL_BATCH_BYTES/);
 rejects({assetBytes:Buffer.from(bytes.toString('utf8').replace('"outcomesRead":false',
-  '"outcomesRead":true'))},/PONS_S1_ASSET_NOT_EXACT_CANONICAL_BATCH_BYTES|PONS_S1_BATCH_DIGEST_MISMATCH/);
+  '"outcomesRead":true'))},/PONS_S1_ASSET_NOT_EXACT_CANONICAL_BATCH_BYTES|PONS_S1_BATCH_DIGEST_MISMATCH|Expected values to be strictly equal/);
 rejects({expectedBatchDigest:'1'.repeat(64)},/PONS_S1_BATCH_DIGEST_NOT_OPERATOR_FROZEN/);
 const fakeOnly={...asset,url:api+'/releases/assets/988'};
 rejects({asset:fakeOnly},/PONS_S1_ASSET_REPOSITORY_MISMATCH/);
