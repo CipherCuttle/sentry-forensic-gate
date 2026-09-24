@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "PONS_S1_SINGLE_PROTOCOL_DECISION_V1",
+  "status": "DRAFT_RECONCILED_NOT_ACTIVE",
+  "basis": {
+    "primaryDraftPr": 76,
+    "primaryDraftHead": "9ca036b2ac109cd16ade8a74647734801b949f11",
+    "supersededIncompatibleDraftPrs": [
+      73,
+      74,
+      75
+    ],
+    "independentSpeedObserverPr": 77,
+    "s0Usage": "HISTORICAL_CONTEXT_ONLY_NO_S1_VALIDATION",
+    "legacy96In24hCollectorCompatible": false,
+    "legacyLaunchAnchoredExitCompatible": false
+  },
+  "population": {
+    "chainId": 4663,
+    "launchAuthority": "REVIEWED_PONS_V2_FACTORY_NATIVE_ETH_ONLY",
+    "fullFactoryCensusIncludingNonNative": true,
+    "decision": "C0_WOULD_TRADE_AT_LAUNCH_PLUS_2",
+    "maxConsecutiveEligibleDecisions": 200,
+    "maxWindowSeconds": 604800,
+    "stopRule": "FIRST_200_ELIGIBLE_DECISIONS_OR_7D_WHICHEVER_FIRST",
+    "retainAllSkipsAndLaterFailures": true,
+    "neverReplaceFailedEntry": true,
+    "eligibilityObservedBeforeOutcomes": true
+  },
+  "timing": {
+    "origin": "AFTER_SEPARATE_CANONICAL_ACTIVATION_RECEIPT_AND_BLOCK_HASH",
+    "minimumFinalityConfirmations": 12,
+    "selectionWitnessBeforeEarliestFiveMinuteOutcome": true,
+    "syntheticInclusionRule": "QUALIFY_AND_FREEZE_BEFORE_ACTIVATION_OUTCOME_BLIND",
+    "sameModeledEntryForBothArms": true,
+    "targetAnchor": "ACTUAL_TIMESTAMP_OF_PREDETERMINED_SYNTHETIC_INCLUSION_BLOCK",
+    "syntheticInclusionIsNotRealFill": true,
+    "lagNotAssumedZero": true
+  },
+  "entry": {
+    "notionalUsdMicros": 1000000,
+    "mechanicalEntry": "FROZEN_C0_AT_LAUNCH_PLUS_2",
+    "sequentialPostBuyExitCapacityRequired": true,
+    "liveWalletPersonaParityUnverified": true
+  },
+  "arms": [
+    {
+      "name": "S1_5M_R1",
+      "fixedHorizonMs": 300000,
+      "action": "FULL_BALANCE_EXIT_FIRST_CANONICAL_BLOCK_AT_OR_AFTER_ANCHOR_PLUS_HORIZON"
+    },
+    {
+      "name": "CONTROL_24H_R1",
+      "fixedHorizonMs": 86400000,
+      "action": "FULL_BALANCE_EXIT_FIRST_CANONICAL_BLOCK_AT_OR_AFTER_ANCHOR_PLUS_HORIZON"
+    }
+  ],
+  "evidence": {
+    "independentFactorySourceAgreementRequired": true,
+    "immutableExternalBatchSealBeforeOutcomeRequired": true,
+    "fullCurveOrV4PhaseAndRouteRequired": true,
+    "entryGasRequired": true,
+    "conditionalApprovalAndPermit2GasRequired": true,
+    "exitAndRecoveryGasRequired": true,
+    "gasPriceAndUsdCalibrationRequired": true,
+    "slippageAndAdverseMovementRequired": true,
+    "preventQuoteFeeDoubleCount": true,
+    "missingCostOrRoute": "UNVERIFIED_NEVER_ZERO",
+    "shadowNetReturn": "MODELED_ONLY_NOT_REALIZED"
+  },
+  "assessment": {
+    "preOutcomePowerReviewRequired": true,
+    "fullDenominatorUnresolvedBoundsRequired": true,
+    "pairedPositiveNetVersus24hRequired": true,
+    "absolutePositiveNetVersus1UsdRequired": true,
+    "timeClusteredUncertaintyRequired": true,
+    "noInterimOutcomePeek": true,
+    "noHorizonTuning": true,
+    "ifBelow200Within7d": "INSUFFICIENT_PROSPECTIVE_COHORT",
+    "ifUnderpoweredBeforeActivation": "DO_NOT_ACTIVATE_VERSION_NEW_OUTCOME_UNSEEN_SPEC_REQUIRED",
+    "ifDataIntegrityIncomplete": "INCONCLUSIVE_NOT_AN_ECONOMIC_RESULT",
+    "ifBothPositiveGatesPass": "REQUEST_SEPARATE_VALIDATION_NOT_LIVE_PROMOTION"
+  },
+  "reuse": {
+    "pr74": "REVIEWED_CENSUS_DUAL_RPC_CURSOR_BATCH_FOUNDATION_ONLY_MUST_ADAPT_AND_REQUALIFY",
+    "pr75": "EXTERNAL_IMMUTABLE_RELEASE_WITNESS_ONLY_MUST_ADAPT_AND_REQUALIFY",
+    "pr77": "READ_ONLY_ARRIVAL_LATENCY_DIAGNOSTIC_ONLY_NOT_AN_EDGE_ESTIMATE"
+  },
+  "authority": {
+    "mergeAuthorized": false,
+    "prospectiveCollectionAuthorized": false,
+    "liveMoneyAuthorized": false,
+    "signingAuthorized": false,
+    "broadcastAuthorized": false,
+    "modelPromotionAuthorized": false,
+    "unattendedTradingAuthorized": false
+  }
+}
