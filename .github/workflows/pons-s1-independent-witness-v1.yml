@@ -1,0 +1,157 @@
+name: Pons S1 V1 independent immutable release witness — read only
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pons-s1-independent-witness-v1.yml'
+      - 'scripts/pons-s1-independent-witness-*.mjs'
+      - 'scripts/pons-s1-publisher-core-v1.mjs'
+      - 'docs/PONS_S1_INDEPENDENT_WITNESS_V1.md'
+      - 'package.json'
+  workflow_dispatch:
+    inputs:
+      batch_digest:
+        description: 'Pinned frozen paired V1 batch SHA-256 digest'
+        required: true
+        type: string
+      release_id:
+        description: 'Existing immutable GitHub release ID'
+        required: true
+        type: string
+      asset_id:
+        description: 'Singleton asset ID'
+        required: true
+        type: string
+      source_run_id:
+        description: 'Original reviewed main-only frozen V1 source run ID'
+        required: true
+        type: string
+      activation_sha:
+        description: 'Approved canonical post-merge activation SHA'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  synthetic-qualification:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Inert positive and adversarial V1 witness fixtures
+        run: |
+          node --check scripts/pons-s1-independent-witness-core-v1.mjs
+          node --check scripts/pons-s1-independent-witness-v1.mjs
+          node --check scripts/pons-s1-independent-witness-check-v1.mjs
+          node scripts/pons-s1-independent-witness-check-v1.mjs
+
+  independent-read-only-witness:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'CipherCuttle/sentry-forensic-gate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PONS_S1_EXPECTED_BATCH_DIGEST: ${{ inputs.batch_digest }}
+      PONS_S1_RELEASE_ID: ${{ inputs.release_id }}
+      PONS_S1_ASSET_ID: ${{ inputs.asset_id }}
+      PONS_S1_SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      PONS_S1_ACTIVATION_SHA: ${{ inputs.activation_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Require canonical reviewed activation manifest, never activate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_REPOSITORY" = CipherCuttle/sentry-forensic-gate
+          [[ "$PONS_S1_EXPECTED_BATCH_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$PONS_S1_ACTIVATION_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PONS_S1_RELEASE_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$PONS_S1_ASSET_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          [[ "$PONS_S1_SOURCE_RUN_ID" =~ ^[1-9][0-9]{0,14}$ ]]
+          # These canonical manifests DO NOT EXIST in this draft stack.
+          # A manual dispatch does not confer publication or collection power.
+          test -f authority/pons-s1-publish-v1.json
+          test -f docs/experiments/pons-s1-single-protocol-decision-v1.json
+          mkdir -p proof
+          cp authority/pons-s1-publish-v1.json proof/authority.json
+          cp docs/experiments/pons-s1-single-protocol-decision-v1.json proof/protocol.json
+      - name: Independently acquire GitHub release, tag and canonical ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="repos/$GITHUB_REPOSITORY"
+          tag="pons-s1-paired-v1-batch-$PONS_S1_EXPECTED_BATCH_DIGEST"
+          reviewed="$(jq -er '.reviewedMergePr' proof/authority.json)"
+          [[ "$reviewed" =~ ^[1-9][0-9]{0,9}$ ]]
+          gh api "$repo/releases/$PONS_S1_RELEASE_ID" > proof/release.json
+          gh api "$repo/releases/assets/$PONS_S1_ASSET_ID" > proof/asset.json
+          gh api "$repo/git/ref/tags/$tag" > proof/tag.json
+          gh api "$repo/commits/$PONS_S1_ACTIVATION_SHA" > proof/activation-commit.json
+          gh api "$repo/pulls/$reviewed" > proof/merge-pr.json
+          gh api "$repo/compare/$PONS_S1_ACTIVATION_SHA...main" > proof/activation-to-main.json
+          gh api "$repo/actions/runs/$PONS_S1_SOURCE_RUN_ID" > proof/source-run.json
+          gh api "$repo/actions/runs/$PONS_S1_SOURCE_RUN_ID/artifacts?per_page=100" > proof/source-artifacts.json
+          # Fetch bytes separately from release metadata, not from a local seal.
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$tag.json" --dir proof
+          mv "proof/$tag.json" proof/batch.json
+          test "$(jq -er '.batchDigest' proof/batch.json)" = "$PONS_S1_EXPECTED_BATCH_DIGEST"
+      - name: Bind independently acquired raw source artifact to release bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/source
+          gh run download "$PONS_S1_SOURCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "pons-s1-frozen-batch-$PONS_S1_EXPECTED_BATCH_DIGEST" \
+            --dir proof/source
+          cmp -s proof/source/batch.json proof/batch.json
+          batch_index="$(jq -er '.batchIndex' proof/batch.json)"
+          [[ "$batch_index" =~ ^(0|[1-9][0-9]*)$ ]]
+          if [ "$batch_index" -gt 0 ]; then
+            prior_digest="$(jq -er '.previous.batchDigest' proof/batch.json)"
+            prior_release="$(jq -er '.previous.releaseId' proof/batch.json)"
+            prior_asset="$(jq -er '.previous.assetId' proof/batch.json)"
+            [[ "$prior_digest" =~ ^[0-9a-f]{64}$ ]]
+            [[ "$prior_release" =~ ^[1-9][0-9]{0,14}$ ]]
+            [[ "$prior_asset" =~ ^[1-9][0-9]{0,14}$ ]]
+            tag="pons-s1-paired-v1-batch-$prior_digest"
+            repo="repos/$GITHUB_REPOSITORY"
+            gh api "$repo/releases/$prior_release" > proof/prior-release.json
+            gh api "$repo/releases/assets/$prior_asset" > proof/prior-asset.json
+            gh api "$repo/git/ref/tags/$tag" > proof/prior-tag.json
+            mkdir -p proof/prior
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern "$tag.json" --dir proof/prior
+            mv "proof/prior/$tag.json" proof/prior-batch.json
+          fi
+      - name: Independent V1 evidence-only witness; no trading or activation
+        run: |
+          node scripts/pons-s1-independent-witness-v1.mjs proof proof/witness-v1.json
+      - name: Preserve read-only witness and independently acquired API receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-s1-v1-readonly-witness-${{ github.run_id }}
+          path: proof/
+          if-no-files-found: warn
+          retention-days: 30
