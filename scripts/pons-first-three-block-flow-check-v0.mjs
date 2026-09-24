@@ -88,7 +88,7 @@ const input={opening,blocks,curveLogs:[buy0,buy1,sell2,buy2],
   transferLogs:[mint,xfer0,xfer1,xfer2,xfer3],totalSupply:supply};
 const out=buildPonsV2FirstThreeBlockFlow(input);
 assert.equal(out.schemaVersion,'PONS_V2_FIRST_THREE_BLOCK_FLOW_V0');
-assert.equal(out.coverage.atomicOpeningReconciled,true);
+assert.equal(out.coverage.launchTransactionCurveBuysReconciled,true);
 assert.equal(out.coverage.curveLogs,4);
 assert.equal(out.buyerFlow.buyEvents,3);
 assert.equal(out.buyerFlow.uniqueCurveBuyersObserved,2);
