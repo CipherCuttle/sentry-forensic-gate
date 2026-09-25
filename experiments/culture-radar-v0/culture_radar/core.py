@@ -49,8 +49,10 @@ class Observation:
     rights: str
 
     def __post_init__(self) -> None:
-        if self.origin not in ALLOWED_ORIGINS or self.rights not in ALLOWED_RIGHTS:
-            raise ValueError("unrecognized source origin or acquisition rights")
+        expected_rights = {"rss": "PUBLISHER_FEED", "fourchan": "PUBLIC_READ_API",
+                           "jetstream": "PUBLIC_STREAM", "submission": "EXPLICIT_USER_SUBMISSION"}
+        if self.origin not in ALLOWED_ORIGINS or self.rights != expected_rights.get(self.origin):
+            raise ValueError("source origin and acquisition rights must match")
         if not (1 <= len(self.source) <= 128 and 1 <= len(self.event_id) <= MAX_EVENT_ID):
             raise ValueError("invalid source or event identity")
         if not (1 <= len(self.text) <= MAX_TEXT) or not https_url(self.url):
@@ -167,9 +169,7 @@ class Radar:
         if key in self.seen:
             self.stats.duplicate += 1
             return "DUPLICATE"
-        self.seen[key] = None
-        if len(self.seen) > self.max_seen:
-            self.seen.popitem(last=False)
+        # Rejected/promotional floods must not evict admitted event identities.
         minute = obs.observed_at_ms // 60_000
         window = (obs.source, minute)
         # Bounded memory for source-window accounting.
@@ -183,6 +183,9 @@ class Radar:
             self.stats.spam += 1
             return "LOW_QUALITY"
         self.admitted_in_window[window] += 1
+        self.seen[key] = None
+        if len(self.seen) > self.max_seen:
+            self.seen.popitem(last=False)
         f = obs.content_hash
         n = self.narratives.get(f)
         if n is None:
