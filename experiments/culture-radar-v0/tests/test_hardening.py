@@ -81,5 +81,51 @@ class HostileTests(unittest.TestCase):
             parse_feed(bad, source="rss/test", observed_at_ms=NOW)
         self.assertEqual(err.exception.failure, Failure.MALFORMED)
 
+    def test_slow_collector_does_not_hold_fast_receipt_publication(self):
+        class Slow:
+            name, platform, rights = "rss/slow", "rss", "PUBLISHER_FEED"
+            async def poll(self, now):
+                await asyncio.sleep(0.05)
+                item = receipt(1, source=self.name)
+                return [Observation(item.origin, item.source, item.event_id, item.text,
+                                    item.url, item.actor_key, now + 50,
+                                    item.published_at_ms, item.rights)]
+        class Fast:
+            name, platform, rights = "rss/fast", "rss", "PUBLISHER_FEED"
+            async def poll(self, now):
+                await asyncio.sleep(0.001)
+                item = receipt(2, source=self.name)
+                return [Observation(item.origin, item.source, item.event_id, item.text,
+                                    item.url, item.actor_key, now + 2,
+                                    item.published_at_ms, item.rights)]
+        order = []
+        status = asyncio.run(Controller([Slow(), Fast()], Radar()).tick(
+            NOW, on_receipts=lambda batch: order.extend(r["source"] for r in batch)))
+        self.assertEqual(order, ["rss/fast", "rss/slow"])
+        self.assertEqual(status["rss/fast"]["admitted"], 1)
+        self.assertEqual(status["rss/slow"]["admitted"], 1)
+
+    def test_backdated_receipt_from_adapter_is_rejected(self):
+        class Liar:
+            name, platform, rights = "rss/old", "rss", "PUBLISHER_FEED"
+            async def poll(self, now):
+                item = receipt(8, source=self.name)
+                return [Observation(item.origin, item.source, item.event_id, item.text,
+                                    item.url, item.actor_key, now - 500,
+                                    item.published_at_ms, item.rights)]
+        radar = Radar()
+        status = asyncio.run(Controller([Liar()], radar).tick(NOW))
+        self.assertEqual(status["rss/old"]["failure"], "MALFORMED")
+        self.assertEqual(radar.stats.admitted, 0)
+
+    def test_clock_marks_actual_fetch_completion_not_request_start(self):
+        from culture_radar.sources import RSSAdapter
+        feed = b"<rss><channel><item><title>New bizarre dancing pigeon meme</title><link>https://publisher.org/p</link></item></channel></rss>"
+        a = RSSAdapter(name="rss/publisher", url="https://publisher.org/feed",
+                       allowed_host="publisher.org", fetcher=lambda *_: (200, feed, {}),
+                       clock=lambda: NOW + 3456)
+        observations = asyncio.run(a.poll(NOW))
+        self.assertEqual(observations[0].observed_at_ms, NOW + 3456)
+
 if __name__ == "__main__":
     unittest.main()
