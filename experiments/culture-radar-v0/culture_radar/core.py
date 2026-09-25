@@ -10,7 +10,7 @@ import unicodedata
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Protocol
+from typing import Callable, Protocol
 from urllib.parse import urlsplit
 
 MAX_TEXT = 4096
@@ -226,6 +226,8 @@ class Controller:
     """Independent source health; no source can masquerade as another platform."""
     def __init__(self, adapters: list[Adapter], radar: Radar) -> None:
         names = [a.name for a in adapters]
+        if len(names) > 16:
+            raise ValueError("max 16 explicitly configured adapters")
         if len(names) != len(set(names)):
             raise ValueError("adapter identities must be unique")
         for a in adapters:
@@ -235,48 +237,83 @@ class Controller:
         self.radar = radar
         self.breakers = {a.name: Breaker() for a in adapters}
 
-    async def tick(self, now_ms: int) -> dict:
+    async def tick(self, now_ms: int,
+                   on_receipts: Callable[[list[dict]], None] | None = None) -> dict:
+        """Bounded concurrent acquisition; publish fast sources without waiting for
+        slower ones. The optional synchronous callback must durably persist before
+        it returns, otherwise an exception cancels the remainder of this tick.
+        """
         report: dict = {}
+        semaphore = asyncio.Semaphore(4)
         expected_origins = {"rss": "rss", "fourchan": "fourchan",
                             "bluesky": "jetstream", "user_submissions": "submission"}
-        for a in self.adapters:
+
+        async def collect(a: Adapter):
             b = self.breakers[a.name]
             if not b.available(now_ms):
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "SKIPPED",
-                                  "failure": b.last_failure}
-                continue
-            try:
-                # Independent timeout per adapter. One bad source cannot block the others.
-                batch = await asyncio.wait_for(a.poll(now_ms), timeout=10)
-                if not isinstance(batch, list) or len(batch) > 500:
-                    raise SourceError(Failure.MALFORMED, "unbounded adapter response")
-                if a.platform not in expected_origins:
-                    raise SourceError(Failure.MALFORMED, "undeclared platform")
-                # Validate every observation before mutating the radar. Bad source batches
-                # must not poison canonical evidence or impersonate another platform.
-                for obs in batch:
-                    if not isinstance(obs, Observation) or obs.source != a.name or \
-                            obs.origin != expected_origins[a.platform] or \
-                            obs.rights != a.rights or obs.observed_at_ms != now_ms:
-                        raise SourceError(Failure.MALFORMED, "inconsistent source receipt")
-                admitted = sum(self.radar.intake(obs) == "ADMITTED" for obs in batch)
-                b.success(now_ms)
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "OK",
-                                  "received": len(batch), "admitted": admitted}
-            except SourceError as e:
-                b.fail(e, now_ms)
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR",
-                                  "failure": e.failure.value}
-            except (TimeoutError, OSError):
-                b.fail(SourceError(Failure.TRANSIENT), now_ms)
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR",
-                                  "failure": "TRANSIENT"}
-            except Exception:
-                # Untrusted parser/adapter exceptions are contained. Never serialize the
-                # exception because it might contain tokens, private endpoints or PII.
-                b.fail(SourceError(Failure.MALFORMED), now_ms)
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR",
-                                  "failure": "MALFORMED"}
+                return a, None, None, True
+            async with semaphore:
+                try:
+                    batch = await asyncio.wait_for(a.poll(now_ms), timeout=10)
+                    if not isinstance(batch, list) or len(batch) > 500:
+                        raise SourceError(Failure.MALFORMED, "unbounded adapter response")
+                    if a.platform not in expected_origins:
+                        raise SourceError(Failure.MALFORMED, "undeclared platform")
+                    # Batch validation is atomic: no source can fake another
+                    # source's rights, timestamp or provenance in the same batch.
+                    for obs in batch:
+                        if (not isinstance(obs, Observation) or obs.source != a.name or
+                                obs.origin != expected_origins[a.platform] or
+                                obs.rights != a.rights or
+                                not now_ms <= obs.observed_at_ms <= now_ms + 60_000):
+                            raise SourceError(Failure.MALFORMED, "inconsistent source receipt")
+                        # Eagerly validate text encoding / content hashes before
+                        # ANY mutable admission; malformed batches remain atomic.
+                        try:
+                            _ = obs.identity, obs.content_hash
+                        except (UnicodeError, ValueError):
+                            raise SourceError(Failure.MALFORMED, "invalid receipt encoding") from None
+                    return a, batch, None, False
+                except SourceError as e:
+                    return a, None, e, False
+                except (TimeoutError, OSError):
+                    return a, None, SourceError(Failure.TRANSIENT), False
+                except Exception:
+                    # Untrusted parser exceptions must never expose raw PII or
+                    # provider credentials through error reports.
+                    return a, None, SourceError(Failure.MALFORMED), False
+
+        tasks = [asyncio.create_task(collect(a)) for a in self.adapters]
+        try:
+            for future in asyncio.as_completed(tasks):
+                a, batch, failure, skipped = await future
+                b = self.breakers[a.name]
+                if skipped:
+                    report[a.name] = {"coverage": b.coverage(now_ms),
+                                      "status": "SKIPPED", "failure": b.last_failure}
+                elif failure is not None:
+                    b.fail(failure, now_ms)
+                    report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR",
+                                      "failure": failure.failure.value}
+                else:
+                    assert batch is not None
+                    admitted = sum(self.radar.intake(obs) == "ADMITTED" for obs in batch)
+                    if on_receipts is not None:
+                        receipts = self.radar.drain_receipts()
+                        if receipts:
+                            # Propagating persistence failures is intentional.
+                            # The CLI MUST NOT checkpoint the upstream cursor.
+                            on_receipts(receipts)
+                    completion_ms = max([now_ms] + [o.observed_at_ms for o in batch])
+                    b.success(completion_ms)
+                    report[a.name] = {"coverage": b.coverage(completion_ms),
+                                      "status": "OK", "received": len(batch),
+                                      "admitted": admitted}
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
         return report
 
 @dataclass(frozen=True)
