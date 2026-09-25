@@ -159,6 +159,7 @@ class Radar:
         self.narratives: OrderedDict[str, Narrative] = OrderedDict()
         self.admitted_in_window: dict[tuple[str, int], int] = defaultdict(int)
         self.stats = IntakeStats()
+        self.accepted: list[Observation] = []
 
     def intake(self, obs: Observation) -> str:
         key = obs.identity
@@ -199,7 +200,13 @@ class Radar:
             n.references.append(obs.url)
         self.narratives.move_to_end(f)
         self.stats.admitted += 1
+        self.accepted.append(obs)
         return "ADMITTED"
+
+    def drain_receipts(self) -> list[dict]:
+        receipts = [obs.receipt() for obs in self.accepted]
+        self.accepted.clear()
+        return receipts
 
     def snapshot(self, now_ms: int) -> list[dict]:
         return [
