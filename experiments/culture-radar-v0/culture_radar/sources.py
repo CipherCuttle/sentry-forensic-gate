@@ -95,12 +95,18 @@ def timestamp(raw: str | None) -> int | None:
     return int(dt.timestamp() * 1000)
 
 def parse_feed(body: bytes, *, source: str, observed_at_ms: int) -> list[Observation]:
-    if len(body) > MAX_RESPONSE_BYTES or b"<!doctype" in body.lower() or b"<!entity" in body.lower():
+    if (len(body) > MAX_RESPONSE_BYTES or b"\\x00" in body[:128] or
+            b"<!doctype" in body.lower() or b"<!entity" in body.lower()):
         raise SourceError(Failure.MALFORMED, "unbounded or entity-bearing XML")
     try:
         root = ET.fromstring(body)
     except ET.ParseError as e:
         raise SourceError(Failure.MALFORMED, "bad RSS/Atom XML") from e
+    root_name = root.tag.rsplit("}", 1)[-1].lower() if isinstance(root.tag, str) else ""
+    if root_name not in {"rss", "feed", "rdf"}:
+        raise SourceError(Failure.MALFORMED, "unrecognized RSS/Atom root")
+    if root_name == "rss" and root.find("channel") is None:
+        raise SourceError(Failure.MALFORMED, "RSS channel missing")
     def tag_text(node: ET.Element, tag: str) -> str:
         el = node.find(tag)
         if el is None:
