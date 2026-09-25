@@ -133,9 +133,16 @@ async def main() -> int:
         ap.error("configure at least one source; no default network collection")
 
     now = millis()
-    health = await Controller(adapters, radar).tick(now)
-    receipts = radar.drain_receipts()
-    append_receipts(args.out, receipts)
+    written = 0
+
+    def persist_early(receipts: list[dict]) -> None:
+        nonlocal written
+        # Fast sources publish as soon as their independently validated batch
+        # completes. A storage failure aborts collection before cursor update.
+        append_receipts(args.out, receipts)
+        written += len(receipts)
+
+    health = await Controller(adapters, radar).tick(now, on_receipts=persist_early)
     if jet and args.state:
         # Checkpoint must happen after append_receipts succeeds.
         args.state.parent.mkdir(parents=True, exist_ok=True)
@@ -148,7 +155,7 @@ async def main() -> int:
         sync_parent_directory(args.state)
     # Bounded summarized output; no raw submitted content on stdout.
     print(json.dumps({"mode": "RESEARCH_ONLY", "network": args.network, "recovered": recovered,
-                      "new_receipts": len(receipts), "health": health,
+                      "new_receipts": written, "health": health,
                       "narratives_in_memory": len(radar.narratives),
                       "stats": vars(radar.stats)}, sort_keys=True))
     return 0
