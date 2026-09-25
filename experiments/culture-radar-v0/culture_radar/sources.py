@@ -21,7 +21,7 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from xml.etree import ElementTree as ET
 
-from .core import Failure, Observation, SourceError, https_url
+from .core import Failure, Observation, SourceError, https_url, millis
 
 MAX_RESPONSE_BYTES = 512_000
 Fetch = Callable[[str, dict[str, str]], tuple[int, bytes, dict[str, str]]]
@@ -137,6 +137,7 @@ class RSSAdapter:
     url: str
     allowed_host: str
     fetcher: Fetch | None = None
+    clock: Callable[[], int] = millis
     platform: str = "rss"
     rights: str = "PUBLISHER_FEED"
     etag: str = ""
@@ -159,7 +160,7 @@ class RSSAdapter:
             raise SourceError(Failure.TRANSIENT if status >= 500 else Failure.MALFORMED)
         self.etag = result_headers.get("ETag", self.etag)
         self.modified = result_headers.get("Last-Modified", self.modified)
-        return parse_feed(body, source=self.name, observed_at_ms=now_ms)
+        return parse_feed(body, source=self.name, observed_at_ms=self.clock())
 
 def parse_4chan(body: bytes, *, board: str, observed_at_ms: int) -> list[Observation]:
     try:
@@ -196,6 +197,7 @@ class FourChanAdapter:
     platform: str = "fourchan"
     rights: str = "PUBLIC_READ_API"
     fetcher: Fetch | None = None
+    clock: Callable[[], int] = millis
     min_interval_ms: int = 11_000
     last_attempt_ms: int = 0
 
@@ -214,7 +216,7 @@ class FourChanAdapter:
         status, body, _ = await asyncio.to_thread(f, url, {})
         if status != 200 or len(body) > MAX_RESPONSE_BYTES:
             raise SourceError(Failure.TRANSIENT if status >= 500 else Failure.MALFORMED)
-        return parse_4chan(body, board=self.board, observed_at_ms=now_ms)
+        return parse_4chan(body, board=self.board, observed_at_ms=self.clock())
 
 def parse_jetstream(record: dict, *, now_ms: int, terms: tuple[str, ...]) -> Observation | None:
     if record.get("kind") != "commit":
@@ -248,6 +250,7 @@ class JetstreamAdapter:
     endpoint: str = "wss://jetstream2.us-east.bsky.network/subscribe"
     terms: tuple[str, ...] = ("meme", "memecoin", "neet", "shitpost")
     cursor_us: int | None = None
+    clock: Callable[[], int] = millis
     max_received: int = 300
     max_observations: int = 60
     window_seconds: float = 3.0
@@ -276,7 +279,7 @@ class JetstreamAdapter:
                         time_us = event.get("time_us")
                         if isinstance(time_us, int) and time_us > 0:
                             newest = max(newest or 0, time_us)
-                        obs = parse_jetstream(event, now_ms=now_ms, terms=self.terms)
+                        obs = parse_jetstream(event, now_ms=self.clock(), terms=self.terms)
                         if obs:
                             out.append(obs)
                         if len(out) >= self.max_observations:
@@ -297,6 +300,7 @@ class SubmissionAdapter:
     platform: str = "user_submissions"
     rights: str = "EXPLICIT_USER_SUBMISSION"
     offset: int = 0
+    clock: Callable[[], int] = millis
 
     async def poll(self, now_ms: int) -> list[Observation]:
         out = []
@@ -316,7 +320,7 @@ class SubmissionAdapter:
             eid = hashlib.sha256((url + "\0" + description + "\0" + pseudonym).encode()).hexdigest()
             out.append(Observation(origin="submission", source=self.name, event_id=eid,
                                    text=description, url=url, actor_key=pseudonym,
-                                   observed_at_ms=now_ms, published_at_ms=None,
+                                   observed_at_ms=self.clock(), published_at_ms=None,
                                    rights="EXPLICIT_USER_SUBMISSION"))
         self.offset += min(250, len(self.submissions) - self.offset)
         return out
