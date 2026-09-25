@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from collections import deque
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -108,9 +109,12 @@ async def main() -> int:
     radar = Radar()
     recovered = recover_seen(args.out, radar)
     adapters = []
-    for index, url in enumerate(args.rss):
+    for url in args.rss:
         parsed = urlsplit(url)
-        adapters.append(RSSAdapter(name=f"rss/{index}", url=url, allowed_host=parsed.hostname or ""))
+        # Stable source identity across restarts and argument-order changes; never
+        # confuse receipts when an operator reorders approved feed URLs.
+        source_id = "rss/" + hashlib.sha256(url.encode("utf-8")).hexdigest()[:20]
+        adapters.append(RSSAdapter(name=source_id, url=url, allowed_host=parsed.hostname or ""))
     for board in args.boards:
         adapters.append(FourChanAdapter(board=board))
     jet = JetstreamAdapter() if args.jetstream else None
