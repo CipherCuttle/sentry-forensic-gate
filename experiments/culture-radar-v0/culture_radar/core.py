@@ -1,6 +1,7 @@
 """Bounded, source-aware cultural observation core. No trades or network I/O."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -233,25 +234,46 @@ class Controller:
 
     async def tick(self, now_ms: int) -> dict:
         report: dict = {}
+        expected_origins = {"rss": "rss", "fourchan": "fourchan",
+                            "bluesky": "jetstream", "user_submissions": "submission"}
         for a in self.adapters:
             b = self.breakers[a.name]
             if not b.available(now_ms):
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "SKIPPED", "failure": b.last_failure}
+                report[a.name] = {"coverage": b.coverage(now_ms), "status": "SKIPPED",
+                                  "failure": b.last_failure}
                 continue
             try:
-                batch = await a.poll(now_ms)
+                # Independent timeout per adapter. One bad source cannot block the others.
+                batch = await asyncio.wait_for(a.poll(now_ms), timeout=10)
                 if not isinstance(batch, list) or len(batch) > 500:
                     raise SourceError(Failure.MALFORMED, "unbounded adapter response")
+                if a.platform not in expected_origins:
+                    raise SourceError(Failure.MALFORMED, "undeclared platform")
+                # Validate every observation before mutating the radar. Bad source batches
+                # must not poison canonical evidence or impersonate another platform.
+                for obs in batch:
+                    if not isinstance(obs, Observation) or obs.source != a.name or \
+                            obs.origin != expected_origins[a.platform] or \
+                            obs.rights != a.rights or obs.observed_at_ms != now_ms:
+                        raise SourceError(Failure.MALFORMED, "inconsistent source receipt")
                 admitted = sum(self.radar.intake(obs) == "ADMITTED" for obs in batch)
                 b.success(now_ms)
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "OK", "received": len(batch),
-                                  "admitted": admitted}
+                report[a.name] = {"coverage": b.coverage(now_ms), "status": "OK",
+                                  "received": len(batch), "admitted": admitted}
             except SourceError as e:
                 b.fail(e, now_ms)
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR", "failure": e.failure.value}
-            except (TimeoutError, OSError) as e:
+                report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR",
+                                  "failure": e.failure.value}
+            except (TimeoutError, OSError):
                 b.fail(SourceError(Failure.TRANSIENT), now_ms)
-                report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR", "failure": "TRANSIENT"}
+                report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR",
+                                  "failure": "TRANSIENT"}
+            except Exception:
+                # Untrusted parser/adapter exceptions are contained. Never serialize the
+                # exception because it might contain tokens, private endpoints or PII.
+                b.fail(SourceError(Failure.MALFORMED), now_ms)
+                report[a.name] = {"coverage": b.coverage(now_ms), "status": "ERROR",
+                                  "failure": "MALFORMED"}
         return report
 
 @dataclass(frozen=True)
