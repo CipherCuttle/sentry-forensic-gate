@@ -1,0 +1,2 @@
+# Optional only. RSS, 4chan, submissions and offline tests use the standard library.
+websockets>=14,<17
