@@ -41,25 +41,38 @@ def recover_seen(path: Path, radar: Radar) -> int:
     if path.stat().st_size > MAX_SPOOL_BYTES:
         raise ValueError("output spool is full; rotate and archive deliberately")
     recent = deque(maxlen=radar.max_seen)
+    # Verify *all* stored receipts for corruption, not only the most recent
+    # N that fit in the bounded memory reconstruction window.
     with path.open(encoding="utf-8") as fp:
         for line in fp:
-            if line.strip():
-                recent.append(json.loads(line))
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            try:
+                obs = Observation(**{k: row[k] for k in (
+                    "origin", "source", "event_id", "text", "url", "actor_key",
+                    "observed_at_ms", "published_at_ms", "rights")})
+            except (ValueError, TypeError, KeyError):
+                raise ValueError("persisted receipt corrupt: refuse silent recovery") from None
+            if row.get("event_hash") != obs.identity or row.get("content_hash") != obs.content_hash:
+                raise ValueError("persisted receipt hash mismatch")
+            recent.append(obs)
     count = 0
-    for row in recent:
-        try:
-            obs = Observation(**{k: row[k] for k in (
-                "origin", "source", "event_id", "text", "url", "actor_key",
-                "observed_at_ms", "published_at_ms", "rights")})
-        except (ValueError, TypeError, KeyError):
-            raise ValueError("persisted receipt corrupt: refuse silent recovery") from None
-        if row.get("event_hash") != obs.identity or row.get("content_hash") != obs.content_hash:
-            raise ValueError("persisted receipt hash mismatch")
+    for obs in recent:
         if radar.intake(obs) == "ADMITTED":
             count += 1
     # Recovered items reconstruct a bounded recent state but must never be emitted twice.
     radar.drain_receipts()
     return count
+
+def sync_parent_directory(path: Path) -> None:
+    """Best-effort POSIX directory durability for file creation / atomic rename."""
+    if os.name == "posix":
+        fd = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 def append_receipts(path: Path, receipts: list[dict]) -> None:
     if not receipts:
@@ -74,6 +87,7 @@ def append_receipts(path: Path, receipts: list[dict]) -> None:
         fp.write(contents)
         fp.flush()
         os.fsync(fp.fileno())
+    sync_parent_directory(path)
 
 async def main() -> int:
     ap = argparse.ArgumentParser(description="Read-only culture ingestion: NO live money or automated service")
@@ -122,8 +136,12 @@ async def main() -> int:
         # Checkpoint must happen after append_receipts succeeds.
         args.state.parent.mkdir(parents=True, exist_ok=True)
         temp = args.state.with_name(args.state.name + ".tmp")
-        temp.write_text(json.dumps({"jetstream_cursor_us": jet.cursor_us}), encoding="utf-8")
+        with temp.open("w", encoding="utf-8") as fp:
+            fp.write(json.dumps({"jetstream_cursor_us": jet.cursor_us}))
+            fp.flush()
+            os.fsync(fp.fileno())
         temp.replace(args.state)
+        sync_parent_directory(args.state)
     # Bounded summarized output; no raw submitted content on stdout.
     print(json.dumps({"mode": "RESEARCH_ONLY", "network": args.network, "recovered": recovered,
                       "new_receipts": len(receipts), "health": health,
