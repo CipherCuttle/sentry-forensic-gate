@@ -1,0 +1,42 @@
+name: PONS Culture Radar V0 (offline)
+
+on:
+  pull_request:
+    paths:
+      - "experiments/culture-radar-v0/**"
+      - ".github/workflows/pons-culture-radar-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: No-network standalone unit and hostile-source fixtures
+        env:
+          PYTHONPATH: experiments/culture-radar-v0
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m compileall -q experiments/culture-radar-v0
+          python -m unittest discover -s experiments/culture-radar-v0/tests -v
+      - name: Confirm research package does not contain signer or trading imports
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          root = Path("experiments/culture-radar-v0/culture_radar")
+          disallowed = ("private_key", "eth_sendRawTransaction", "send_transaction(",
+                        "approve(", "wallet_client", "place_order(")
+          for path in root.glob("*.py"):
+              content = path.read_text().lower()
+              for term in disallowed:
+                  if term.lower() in content:
+                      raise SystemExit(f"Prohibited execution capability in {path}: {term}")
+          print("READ_ONLY_EXPERIMENT_BOUNDARY_PASS")
+          PY
