@@ -16,7 +16,9 @@ deployment, model promotion, S1 activation or live-money authority.
   timestamp when published, **actual collector observation time**, permitted-use
   class, a content fingerprint and the original reference.
 - Per-adapter circuit breakers, bounded retries and independent source states;
-  an access denial permanently opens the offending adapter until manually reset.
+  an access denial opens the offending adapter **for that process**. Breaker
+  state is not yet persisted across separate manual invocations; do not schedule
+  unattended collection or retry a source after an explicit denial.
   Sources are not interchangeable: RSS evidence cannot be presented as native
   X audience measurements, and multiple mirrors must not be counted as
   independent cultural communities.
@@ -28,7 +30,8 @@ deployment, model promotion, S1 activation or live-money authority.
   independently factory-authenticated launch. No recommendation or order is emitted.
 - An opt-in, fsync'd local JSONL evidence spool (16 MiB hard cap), tamper-detecting
   bounded replay and optional volatile Jetstream cursor checkpoint after receipt
-  persistence. This is a proof of restart semantics, not an archival database.
+  persistence. Checksums detect accidental receipt corruption, **not** malicious
+  local rewriting or upstream authenticity. This is a proof of restart semantics, not an archival database.
 
 ## Offline checks
 
@@ -43,7 +46,10 @@ No test performs HTTP requests, joins Telegram channels or connects to X.
 
 ## Explicit one-shot collection
 
-Only run against feeds you have permission to collect. The command performs a
+Only run against trusted, manually reviewed feeds you have permission to collect.
+Never expose the RSS URL option to untrusted users: the prototype restricts
+literal hosts and redirects but is not a public arbitrary-URL SSRF firewall.
+The command performs a
 **single bounded sample**; it does not install a daemon, cron or long-running
 service. Configuration is local and provided by the operator.
 
@@ -91,7 +97,8 @@ content. Errors expose typed classes, not raw API responses.
    stale/unknown, and the reader must not backdate its actual observation time.
 5. The local JSONL spool is bounded and not suitable as the permanent 10K-user
    ingestion backend. A production service requires atomic durable admission +
-   source cursor, retention/privacy controls, queue budgets, source health
+   source cursor, **persistent access-denial and cooldown state**, retention/privacy
+   controls, queue budgets, source health
    visibility and a separately reviewed deployment architecture.
 6. Nothing here changes SENTRY's canonical S0/S1 preregistration, BINRAT's
    frontend or bot, or the currently inactive real-money research authority.
