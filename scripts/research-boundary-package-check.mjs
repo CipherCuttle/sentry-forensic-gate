@@ -8,6 +8,16 @@ const allowedFileExtensions = new Set([
 const allowedExactFiles = new Set([
   '.gitignore',
   'mise.toml',
+  // Explicit, closed V0 Python research surface; this is NOT an extension-wide
+  // allowance for Python or an executable production surface.
+  'experiments/culture-radar-v0/culture_radar/__init__.py',
+  'experiments/culture-radar-v0/culture_radar/core.py',
+  'experiments/culture-radar-v0/culture_radar/sources.py',
+  'experiments/culture-radar-v0/culture_radar/cli.py',
+  'experiments/culture-radar-v0/tests/test_core.py',
+  'experiments/culture-radar-v0/tests/test_sources.py',
+  'experiments/culture-radar-v0/tests/test_hardening.py',
+  'experiments/culture-radar-v0/requirements-live.txt',
   'fixtures/historical-full-replay-scope-r1.part-001.b64',
   'fixtures/historical-full-replay-scope-r1.part-002.b64',
   'fixtures/historical-full-replay-scope-r1.part-003.b64',
