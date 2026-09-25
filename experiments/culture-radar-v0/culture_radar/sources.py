@@ -18,7 +18,7 @@ from email.utils import parsedate_to_datetime
 from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from xml.etree import ElementTree as ET
 
 from .core import Failure, Observation, SourceError, https_url
@@ -27,7 +27,8 @@ MAX_RESPONSE_BYTES = 512_000
 Fetch = Callable[[str, dict[str, str]], tuple[int, bytes, dict[str, str]]]
 
 def public_configured_url(url: str, *, allowed_host: str) -> None:
-    if not https_url(url) or urlsplit(url).hostname != allowed_host.lower():
+    parsed = urlsplit(url)
+    if not https_url(url) or parsed.hostname != allowed_host.lower() or parsed.port not in (None, 443):
         raise ValueError("URL is not an exact HTTPS allowlisted host")
     host = urlsplit(url).hostname or ""
     if host == "localhost" or host.endswith(".local"):
@@ -44,8 +45,12 @@ def fetch_limited(url: str, headers: dict[str, str], *, allowed_host: str) -> tu
     request = Request(url, headers={"User-Agent": "BINRAT-PONS-CultureRadar-Research/0.1",
                                     "Accept": "application/rss+xml, application/atom+xml, application/json",
                                     **headers})
+    class _NoRedirect(HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            raise SourceError(Failure.ACCESS_DENIED, "cross-target redirect denied")
+
     try:
-        with urlopen(request, timeout=6) as resp:
+        with build_opener(_NoRedirect).open(request, timeout=6) as resp:
             if urlsplit(resp.geturl()).hostname != allowed_host:
                 raise SourceError(Failure.ACCESS_DENIED, "redirect left the allowlist")
             data = resp.read(MAX_RESPONSE_BYTES + 1)
@@ -90,12 +95,16 @@ def timestamp(raw: str | None) -> int | None:
     return int(dt.timestamp() * 1000)
 
 def parse_feed(body: bytes, *, source: str, observed_at_ms: int) -> list[Observation]:
+    if len(body) > MAX_RESPONSE_BYTES or b"<!doctype" in body.lower() or b"<!entity" in body.lower():
+        raise SourceError(Failure.MALFORMED, "unbounded or entity-bearing XML")
     try:
         root = ET.fromstring(body)
     except ET.ParseError as e:
         raise SourceError(Failure.MALFORMED, "bad RSS/Atom XML") from e
     def tag_text(node: ET.Element, tag: str) -> str:
-        el = node.find(tag) or node.find("{*}" + tag)
+        el = node.find(tag)
+        if el is None:
+            el = node.find("{*}" + tag)
         return el.text.strip() if el is not None and el.text else ""
     entries = root.findall(".//item")
     if not entries:
