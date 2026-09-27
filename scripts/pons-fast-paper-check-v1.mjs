@@ -11,7 +11,7 @@ let negatives=0;
 function bad(fn,pattern){assert.throws(fn,pattern);negatives++;}
 const tx='0x'+'a'.repeat(64),blockHash='0x'+'b'.repeat(64);
 assert.equal(eventKey({transactionHash:tx.toUpperCase().replace('0X','0x'),
-  logIndex:4}),tx+':4);
+  logIndex:4}),tx+':4');
 bad(()=>eventKey({transactionHash:'MY_FAKE_TX',logIndex:1}),
   /EVENT_TX_HASH_INVALID/);
 const from=26841846n,head=26850000n;
