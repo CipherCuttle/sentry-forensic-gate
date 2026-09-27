@@ -35,7 +35,7 @@ Use Node >=20 and the repository pnpm toolchain.
 
 ## What it does
 
-- On cold start samples the newest 16 safe blocks, then polls an
+- On cold start samples the newest eight safe blocks, then polls an
   eight-block range at a time to head minus four blocks. A stale process
   explicitly journals SCAN_GAP; it does NOT claim an exhaustive census.
   One native launch block can hold at most eight processed factory events
