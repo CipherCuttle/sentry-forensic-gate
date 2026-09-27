@@ -1,0 +1,40 @@
+name: PONS Fast Paper - one real read-only public RPC smoke
+on:
+  pull_request:
+    paths:
+      - 'scripts/pons-fast-paper*'
+      - 'package.json'
+      - '.github/workflows/pons-fast-paper-once-v1.yml'
+permissions: {contents: read}
+jobs:
+  one-public-cycle:
+    if: github.event_name == 'pull_request' && github.repository == 'CipherCuttle/sentry-forensic-gate' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/pons-fast-paper-loop-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Build existing Pons read-only adapters
+        run: |
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false
+          pnpm build
+      - name: ONE official-RPC paper cycle; provider failure stays visible
+        id: smoke
+        continue-on-error: true
+        env:
+          PONS_PAPER_DATA_DIR: ${{ runner.temp }}/pons-paper
+        run: timeout --signal=TERM --kill-after=15s 180s node scripts/pons-fast-paper-v1.mjs --once
+      - name: Report real smoke outcome without positive inference
+        if: always()
+        run: echo "PAPER_ONCE_STEP=${{ steps.smoke.outcome }}; real entries and exits must be inspected in artifact; no live trading"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-fast-paper-real-public-smoke
+          path: ${{ runner.temp }}/pons-paper/
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: false
