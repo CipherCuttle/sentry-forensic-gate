@@ -143,7 +143,7 @@ export function exitGrossQuote(row,horizon,market,quote,calibration,
 export function unknownExit(horizon,reason,blockNumber,observedAtMs){
   assert.ok(Object.hasOwn(HORIZONS,horizon));
   assert.ok(['RPC_UNAVAILABLE','MARKET_NOT_ACTIVE','QUOTE_UNVERIFIED',
-    'USD_CALIBRATION_UNVERIFIED','REORG','UNKNOWN'].includes(reason));
+    'USD_CALIBRATION_UNVERIFIED','MISSED_WINDOW','REORG','UNKNOWN'].includes(reason));
   return {state:'UNVERIFIED',horizon,reason,blockNumber:String(blockNumber),
     observedAtMs,actualFill:false,netProfitEstablished:false};
 }
@@ -154,6 +154,8 @@ export function finiteFailure(error){
   if(/QUOTE_MARKET_NOT_ACTIVE|CURVE_NOT_ACTIVE|MARKET.*NOT_ACTIVE/i.test(m))
     return 'MARKET_NOT_ACTIVE';
   if(/CALIBRATION/i.test(m))return 'USD_CALIBRATION_UNVERIFIED';
+  if(/QUOTE_UNVERIFIED|QUOTE.*NOT_EXECUTABLE/i.test(m))
+    return 'QUOTE_UNVERIFIED';
   if(/TIMEOUT|RPC|HTTP|TRANSPORT|NETWORK|RATE.?LIMIT/i.test(n+' '+m))
     return 'RPC_UNAVAILABLE';
   return 'UNKNOWN';
