@@ -1,0 +1,45 @@
+name: PONS S1 sampled archive capability - manual only
+on:
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: pons-s1-one-archive-probe
+  cancel-in-progress: false
+jobs:
+  archive-capability:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'CipherCuttle/sentry-forensic-gate' && github.ref == 'refs/heads/main'
+    environment: pons-s1-archive-readonly
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PONS_S1_ARCHIVE_RPC_URL: ${{ secrets.PONS_S1_ARCHIVE_RPC_URL }}
+      PONS_S1_ARCHIVE_READONLY_PROBE: ONE_BOUNDED_CAPABILITY_SAMPLE
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Offline guard before secret-backed network access
+        run: |
+          node --check scripts/pons-s1-archive-provider-core-v1.mjs
+          node --check scripts/pons-s1-archive-provider-runner-v1.mjs
+          node --check scripts/pons-s1-archive-provider-check-v1.mjs
+          node scripts/pons-s1-archive-provider-check-v1.mjs
+      - name: Build existing read-only protocol adapters
+        run: |
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false --ignore-scripts
+          pnpm build
+      - name: One bounded archive sample (no wallet or study)
+        run: |
+          mkdir -p proof
+          node scripts/pons-s1-archive-provider-runner-v1.mjs proof/archive-capability.json
+          test -s proof/archive-capability.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pons-s1-archive-candidate-diagnostic
+          path: proof/archive-capability.json
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: false
