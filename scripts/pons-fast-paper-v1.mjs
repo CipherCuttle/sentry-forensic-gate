@@ -34,7 +34,8 @@ assert.ok(Number.isSafeInteger(interval)&&interval>=10000&&interval<=120000,
 assert.ok(Number.isSafeInteger(pacing)&&pacing>=75&&pacing<=2000,
   'RPC_PACING_OUT_OF_RANGE');
 const url=process.env.PONS_PAPER_RPC_URL??OFFICIAL;
-const parsed=new URL(url);
+let parsed;
+try{parsed=new URL(url);}catch{throw new Error('INVALID_RPC_URL');}
 assert.equal(parsed.protocol,'https:','HTTPS_RPC_REQUIRED');
 assert.equal(parsed.username,'','RPC_USERINFO_FORBIDDEN');
 assert.equal(parsed.password,'','RPC_PASSWORD_FORBIDDEN');
