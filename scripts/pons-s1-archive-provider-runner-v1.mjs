@@ -83,6 +83,9 @@ try{
         abi:ponsV2FactoryReadAbi,functionName:'memeHook',blockNumber:h}));
     assert.match(String(hook),/^0x[0-9a-fA-F]{40}$/,
       'HISTORIC_MEME_HOOK_MALFORMED');
+    assert.notEqual(String(hook).toLowerCase(),
+      '0x0000000000000000000000000000000000000000',
+      'HISTORIC_MEME_HOOK_ZERO');
     receipt.testedHistoricalSamples++;
     // Official historical HEADER is an optional corroboration, not evidence
     // that the public endpoint serves archived bytecode or contract storage.
