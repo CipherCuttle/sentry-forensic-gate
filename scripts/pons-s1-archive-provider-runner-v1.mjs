@@ -122,8 +122,6 @@ try{
   // Raw errors and the key-bearing archive URL are deliberately discarded.
 }
 receipt.finishedAtUtc=new Date().toISOString();
-receipt.report=null; // Removed below; never widen the frozen receipt schema.
-delete receipt.report;
 validateArchiveReceipt(receipt);
 const fd=await open(resolve(process.argv[2]),'wx',0o600);
 try{await fd.writeFile(JSON.stringify(receipt)+'\n');await fd.sync();}
