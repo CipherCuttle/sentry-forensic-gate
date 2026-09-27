@@ -48,6 +48,7 @@ const timeout=new Error('SECRET_API_KEY=never-write-this');
 timeout.name='TimeoutError';
 assert.equal(classifyArchiveFailure(timeout),'RPC_TIMEOUT');
 const base=createArchiveReceipt({fromBlock:26841846n,runId:'12345'});
+bad(()=>historicBlockHeights(26841847n),/FACTORY_EPOCH_NOT_PINNED/);
 assert.equal(base.moneyAuthorized,false);
 assert.equal(base.backendIndependenceQualified,false);
 assert.equal(base.state,'NOT_RUN');
@@ -90,7 +91,7 @@ bad(()=>validateArchiveReceipt({...complete,
   state:'ARCHIVE_UNVERIFIED'}),/UNVERIFIED_CANNOT_PROMOTE_CAPABILITY/);
 bad(()=>validateArchiveReceipt({...complete,
   historicalSampleBlocks:['26842847','26851846']}),
-  /SAMPLE_HEIGHT_DRIFT/);
+  /SAMPLE_HEIGHTS_NOT_PINNED/);
 bad(()=>validateArchiveReceipt({...complete,
   failureStage:'https://secret.example/v2/KEY'}),/UNSAFE_FAILURE_STAGE/);
 bad(()=>validateArchiveReceipt({...complete,
