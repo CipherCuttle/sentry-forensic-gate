@@ -56,7 +56,7 @@ export function validateDiagnostic(x){
   for(const key of ['backendQualified','studyActivated','cohortEnrolled',
     'sourcePublished','walletUsed','outcomesRead','scientificallyAdmissible'])
     assert.equal(x[key],false,'FORBIDDEN_PROMOTION_'+key);
-  assert.ok(['PROVIDER_FAIL','NO_NATIVE_IN_BOUNDED_WINDOW','QUOTE_UNVERIFIED',
+  assert.ok(['PROVIDER_FAIL','C0_STAGE_FAIL','NO_NATIVE_IN_BOUNDED_WINDOW','QUOTE_UNVERIFIED',
     'REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY','RECENT_C0_ARCHIVE_UNVERIFIED',
     'INCLUSION_UNVERIFIED'].includes(x.state),
     'UNKNOWN_DIAGNOSTIC_STATE');
@@ -65,9 +65,121 @@ export function validateDiagnostic(x){
     assert.equal(x.quoteParity,true,'QUOTE_PARITY_REQUIRED');
     assert.equal(x.inclusion12,true,'INCLUSION_FINALITY_REQUIRED');
   }
+  // Untrusted diagnostic bytes cannot impersonate real quote parity or include
+  // raw provider error strings. The report is explicitly not S1 evidence.
+  const allowedStages=new Set(['LAUNCH_NORMALIZATION','LAUNCH_EVENT_BINDING',
+    'BASELINE_COMPOSITION','BASELINE_HEAD','FACTORY_AUTHORITY',
+    'DECISION_BLOCK_HASH','MARKET_STATE','USD_CALIBRATION','ENTRY_QUOTE',
+    'REVERSE_QUOTE','C0_CONTROL_EVALUATION']);
+  const allowedErrors=new Set(['RPC_RATE_LIMIT','RPC_TIMEOUT',
+    'RPC_UNAVAILABLE','SOURCE_OR_ADAPTER_INVARIANT','UNCLASSIFIED_ERROR']);
+  for(const key of ['c0Official','c0Candidate']){
+    const c=x[key];if(c===undefined)continue;
+    assert.ok(c&&['COMPLETE','UNVERIFIED','ERROR'].includes(c.state),
+      'BAD_C0_DIAGNOSTIC_STATE');
+    assert.deepEqual(Object.keys(c).sort(),
+      ['state','failedStage','lastCompletedStage','failureClass',
+        'notionalUsdMicros'].sort(),'C0_REPORT_FIELD_INJECTION');
+    assert.ok(c.failedStage===null||allowedStages.has(c.failedStage),
+      'BAD_C0_DIAGNOSTIC_STAGE');
+    assert.ok(c.lastCompletedStage===null||
+      allowedStages.has(c.lastCompletedStage),'BAD_C0_COMPLETION_STAGE');
+    assert.ok(c.failureClass===null||
+      allowedErrors.has(c.failureClass),'BAD_C0_FAILURE_CLASS');
+    assert.ok(c.notionalUsdMicros===null||
+      C0_LADDER.has(c.notionalUsdMicros),'BAD_C0_NOTIONAL');
+  }
+  const hasBothC0=!!(x.c0Official&&x.c0Candidate);
+  if(['REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY',
+       'RECENT_C0_ARCHIVE_UNVERIFIED','INCLUSION_UNVERIFIED'].includes(x.state)){
+    assert.ok(hasBothC0,'QUALIFIED_STATE_REQUIRES_BOTH_C0_REPORTS');
+    assert.equal(x.c0Official.state,'COMPLETE','OFFICIAL_C0_NOT_COMPLETE');
+    assert.equal(x.c0Candidate.state,'COMPLETE','CANDIDATE_C0_NOT_COMPLETE');
+    assert.equal(x.quoteParity,true,'C0_QUOTE_PARITY_REQUIRED');
+  }
+  if(x.state==='QUOTE_UNVERIFIED'){
+    assert.ok(hasBothC0,'UNVERIFIED_REQUIRES_BOTH_C0_REPORTS');
+    assert.ok([x.c0Official.state,x.c0Candidate.state].includes('UNVERIFIED'),
+      'UNVERIFIED_REQUIRES_AN_UNVERIFIED_C0');
+    assert.ok(x.c0Official.state!=='ERROR'&&x.c0Candidate.state!=='ERROR',
+      'C0_ERROR_CANNOT_BE_QUOTE_UNVERIFIED');
+    assert.equal(x.quoteParity,false,'UNVERIFIED_CANNOT_PROVE_QUOTE_PARITY');
+  }
+  if(x.state==='NO_NATIVE_IN_BOUNDED_WINDOW')
+    assert.ok(!x.c0Official&&!x.c0Candidate,'NO_NATIVE_CANNOT_HAVE_C0');
+  if(x.state==='C0_STAGE_FAIL'){
+    assert.ok(x.c0Official&&x.c0Candidate,'BOTH_C0_DIAGNOSTICS_REQUIRED');
+    assert.ok(x.c0Official.state==='ERROR'||x.c0Candidate.state==='ERROR',
+      'C0_FAILURE_MUST_BE_OBSERVED');
+    assert.equal(x.quoteParity,false,'C0_ERROR_CANNOT_PROVE_QUOTE_PARITY');
+    assert.equal(x.inclusion12,false,'C0_ERROR_CANNOT_PROVE_INCLUSION');
+  }
   if(x.state==='REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY')
     assert.equal(x.historicArchiveStateSample,true,'HISTORIC_SAMPLE_REQUIRED');
   if(x.state==='RECENT_C0_ARCHIVE_UNVERIFIED')
     assert.equal(x.historicArchiveStateSample,false,'UNQUALIFIED_ARCHIVE_MUST_REMAIN_FALSE');
   return {verdict:x.state,edge:'UNPROVEN',activationAuthority:false};
+}
+
+
+// Diagnostic-only wrappers: preserve underlying adapter behavior and freeze
+// a finite, sanitized stage on each provider independently. No raw RPC errors,
+// endpoint URLs, addresses or credentials enter the uploaded diagnostic.
+const C0_METHOD_STAGES=Object.freeze({
+  getHeadBlockNumber:'BASELINE_HEAD',
+  assertAuthority:'FACTORY_AUTHORITY',
+  getBlockHash:'DECISION_BLOCK_HASH',
+  resolveMarket:'MARKET_STATE',
+  calibrateUsd:'USD_CALIBRATION',
+  quoteEntry:'ENTRY_QUOTE',
+  quoteIndependentReverse:'REVERSE_QUOTE'
+});
+const C0_LADDER=new Set(['250000','500000','1000000','2000000','5000000']);
+export function newC0StageTrace(){
+  return {stage:'LAUNCH_NORMALIZATION',lastCompletedStage:null,
+    failedStage:null,failureClass:null,notionalUsdMicros:null};
+}
+export function classifyC0Failure(error){
+  const names=[error?.name,error?.cause?.name].map(x=>String(x??'')).join(':');
+  const code=error?.status??error?.cause?.status;
+  if(code===429||/RateLimit|TooManyRequests/i.test(names))return 'RPC_RATE_LIMIT';
+  if(/Timeout/i.test(names))return 'RPC_TIMEOUT';
+  if(/Rpc|Http|Transport|Network|Socket|Connect/i.test(names))
+    return 'RPC_UNAVAILABLE';
+  const message=String(error?.message??'');
+  if(/^(?:PONS_V2_|PORTABLE_BASELINE_|ROBINHOOD_USD_CALIBRATION_)/.test(message))
+    return 'SOURCE_OR_ADAPTER_INVARIANT';
+  return 'UNCLASSIFIED_ERROR';
+}
+export function observeC0Adapter(adapter,trace){
+  return new Proxy(adapter,{get(target,prop){
+    const value=Reflect.get(target,prop,target);
+    if(typeof value!=='function')return value;
+    const stage=C0_METHOD_STAGES[prop];
+    if(!stage)return value.bind(target);
+    return async(...args)=>{
+      trace.stage=stage;
+      const notional=args[0]?.notionalUsdMicros;
+      if(typeof notional==='bigint'&&C0_LADDER.has(String(notional)))
+        trace.notionalUsdMicros=String(notional);
+      try{
+        const result=await value.apply(target,args);
+        trace.lastCompletedStage=stage;
+        return result;
+      }catch(error){
+        trace.failedStage=stage;
+        trace.failureClass=classifyC0Failure(error);
+        throw error;
+      }
+    };
+  }});
+}
+export function safeC0Report(trace,state,error=null){
+  assert.ok(['COMPLETE','UNVERIFIED','ERROR'].includes(state));
+  return {state,failedStage:trace.failedStage??(
+    state==='COMPLETE'?null:trace.stage),
+    lastCompletedStage:trace.lastCompletedStage,
+    failureClass:trace.failureClass??(
+      error===null?null:classifyC0Failure(error)),
+    notionalUsdMicros:trace.notionalUsdMicros};
 }
