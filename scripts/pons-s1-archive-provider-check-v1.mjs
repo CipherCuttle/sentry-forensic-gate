@@ -33,8 +33,8 @@ assert.deepEqual([...HISTORIC_OFFSETS],[1000n,10000n]);
 assert.deepEqual(historicBlockHeights(26841846n),
   [26842846n,26851846n]);
 const range=recentRange(26900000n,26900001n,26841846n);
-assert.equal(range.from,26899981n);
-assert.equal(range.through,26899996n);
+assert.equal(range.from,26899969n);
+assert.equal(range.through,26899984n);
 assert.equal(range.through-range.from+1n,16n);
 bad(()=>recentRange(26900000n,26899800n,26841846n),
   /RECENT_HEAD_LAG/);
