@@ -16,13 +16,13 @@ bad(()=>eventKey({transactionHash:'MY_FAKE_TX',logIndex:1}),
   /EVENT_TX_HASH_INVALID/);
 const from=26841846n,head=26850000n;
 const first=scanWindow(head,null,from);
-assert.equal(first.from,head-4n-15n);
+assert.equal(first.from,head-4n-7n);
 assert.equal(first.through,first.from+7n);
 assert.equal(first.missed,null);
 assert.equal(scanWindow(head,String(head-4n),from).from,null);
 const gap=scanWindow(head,String(from),from);
 assert.deepEqual(gap.missed,{from:String(from+1n),
-  through:String(head-4n-16n)});
+  through:String(head-4n-8n)});
 assert.equal(gap.from,first.from);
 assert.equal(scanWindow(from+3n,null,from),null);
 assert.equal(isFresh(1000,MAX_ENTRY_AGE_MS+999),true);
