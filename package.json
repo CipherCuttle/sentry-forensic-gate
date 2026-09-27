@@ -66,8 +66,7 @@
     "ponss1preactivationcheck": "node scripts/pons-s1-feasibility-check-v1.mjs",
     "ponss1dualrpccheck": "node scripts/pons-s1-dual-rpc-rehearsal-check-v1.mjs",
     "ponsfastpapercheck": "node scripts/pons-fast-paper-check-v1.mjs",
-    "start:pons-paper": "node scripts/pons-fast-paper-v1.mjs --loop",
-    "start:pons-paper-once": "node scripts/pons-fast-paper-v1.mjs --once"
+    "ponsfastpaperonce": "node scripts/pons-fast-paper-v1.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.10.1",
