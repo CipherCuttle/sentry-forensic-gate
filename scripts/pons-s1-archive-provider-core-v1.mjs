@@ -23,7 +23,7 @@ export const STAGES=new Set([
   'HISTORIC_ARCHIVE_CALL_A','HISTORIC_REFERENCE_BLOCK_A',
   'HISTORIC_ARCHIVE_BLOCK_B','HISTORIC_ARCHIVE_CODE_B',
   'HISTORIC_ARCHIVE_CALL_B','HISTORIC_REFERENCE_BLOCK_B',
-  'RECENT_FACTORY_LOGS','RECEIPT'
+  'RECENT_FACTORY_LOGS','RECENT_FACTORY_RECHECK','RECEIPT'
 ]);
 export const CLASSES=new Set([
   'RPC_TIMEOUT','RPC_RATE_LIMIT','RPC_UNAVAILABLE',
@@ -54,7 +54,7 @@ export function recentRange(a,b,fromBlock){
   assert.ok(a>=fromBlock+10020n&&b>=fromBlock+10020n,'HEIGHT_UNAVAILABLE');
   const lag=a>b?a-b:b-a;
   assert.ok(lag<=MAX_HEAD_LAG,'RECENT_HEAD_LAG_MISMATCH');
-  const lower=a<b?a:b, through=lower-4n;
+  const lower=a<b?a:b, through=lower-16n; // 16-block buffer
   return {lag,from:through-15n,through};
 }
 export function classifyArchiveFailure(error){
