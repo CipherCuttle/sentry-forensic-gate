@@ -76,7 +76,7 @@ assert.deepEqual(safe,{state:'ERROR',failedStage:'USD_CALIBRATION',
   lastCompletedStage:null,failureClass:'RPC_RATE_LIMIT',
   notionalUsdMicros:'1000000'});
 assert.ok(!JSON.stringify(safe).includes('SECRET_API_KEY'));
-const failed={...receipt,state:'C0_STAGE_FAIL',quoteParity:false,
+const failed={...receipt,state:'C0_STAGE_FAIL',quoteParity:false,inclusion12:false,
   c0Official:safe,c0Candidate:{state:'COMPLETE',failedStage:null,
     lastCompletedStage:'ENTRY_QUOTE',failureClass:null,
     notionalUsdMicros:'1000000'}};
