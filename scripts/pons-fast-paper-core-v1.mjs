@@ -60,9 +60,10 @@ export function scanWindow(head,lastScanned,origin){
   assert.ok(typeof head==='bigint'&&typeof origin==='bigint');
   const safe=head-4n;
   if(safe<origin)return null;
+  // Cold start targets the newest eight safe blocks, not stale history.
   // A newly started process ONLY samples recent launches. It never rewinds
   // until the entire older chain is scanned or pretends to be exhaustive.
-  const recentStart=safe-15n>origin?safe-15n:origin;
+  const recentStart=safe-7n>origin?safe-7n:origin;
   let from=lastScanned===null?recentStart:BigInt(lastScanned)+1n;
   let missed=null;
   if(from<recentStart){missed={from:String(from),through:String(recentStart-1n)};
