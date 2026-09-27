@@ -60,3 +60,52 @@ technical probe even if historical archive is unavailable, but labels any
 subsequent recent-only success `RECENT_C0_ARCHIVE_UNVERIFIED`. Only both
 historical responses matching can produce the stronger sampled technical
 rehearsal verdict. Neither permits scientific S1 activation.
+
+
+## 2026-09-27 staged diagnosis — stacked diagnostic-only follow-up
+
+The preceding real PR run 36070443854 scanned exactly 256 contiguous
+blocks with matching factory transcripts: two factory events, one native.
+The OFFICIAL endpoint could not return the sampled historic factory CODE;
+the BlockReq PUBLIC CANDIDATE could not return the sampled historic BLOCK.
+The native C0 pair failed under an undifferentiated adapter-invariant code.
+None of this establishes either public provider's permanent inability to
+serve archive requests.
+
+This child draft adds **per-provider stage-only C0 diagnostics** while
+keeping the same frozen observer, factory scan, adapter semantics, five
+notionals, safety caps and absence of wallet/collection authority. Each
+provider independently reports whether its failure occurred during:
+launch normalization/binding, baseline head/authority/hash, market state,
+USD calibration, entry quote, reverse quote or C0 control. Only a finite
+failure class, static stage, fixed notional and completion stage are
+persisted; raw RPC exceptions, endpoint URLs, addresses and credentials
+are never serialized. One failing provider never masquerades as a
+successful dual-source C0. Failures remain CI-red with an uploaded
+sanitized artifact; an explicit UNVERIFIED baseline remains UNVERIFIED.
+
+**No real network job is permitted from the new child PR branch.** The
+existing keyless public-network job is exact-head-branch-gated to its
+reviewed parent and is not broadened. This change is only offline
+instrumentation, tests and documentation.
+
+NEXT independently authorized *non-enrolling* gate:
+1. Acquire a genuinely independent Robinhood 4663 archive-capable RPC.
+   Robinhood currently documents Alchemy as a supported archive option;
+   the provider's archive capability and independence still require
+   concrete challenge responses, not assumptions or hostname diversity.
+2. Place any provider URL/key only in a protected repository environment.
+   Use an independently reviewed, pinned, main-only or isolated authorized
+   read-only workflow. Never expose keys to pull_request code, commit them,
+   or reuse the Pons live-wallet secrets.
+3. First probe historical block, factory code, fixed eth_call and complete
+   launch-block transcripts at both endpoints. Stop on historical
+   disagreement. Only then run one bounded native C0 quote probe with
+   both providers and inspect the finite stage reports.
+4. If the real C0 and inclusion+12 gate succeed, run a **separate** original
+   artifact -> immutable source release -> batch/witness timing rehearsal.
+   Keep existing prospective enrollment, scientific promotion and money
+   authority all disabled.
+
+Do not broaden retries, chase arbitrary historic windows, silently swap
+providers or mark S1 ready because synthetic tests pass.
