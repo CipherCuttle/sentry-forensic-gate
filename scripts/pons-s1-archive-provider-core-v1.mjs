@@ -120,7 +120,7 @@ export function validateArchiveReceipt(r){
   if(r.recentFactoryEvents!==null&&r.recentNativeEvents!==null)
     assert.ok(r.recentNativeEvents<=r.recentFactoryEvents);
   assert.ok(r.factoryTranscriptDigest===null||
-    /^0x[0-9a-f]{64}$/.test(r.factoryTranscriptDigest));
+    /^[0-9a-f]{64}$/.test(r.factoryTranscriptDigest));
   if(r.state.startsWith('ARCHIVE_SAMPLE_')){
     assert.equal(r.testedHistoricalSamples,2,'BOTH_ARCHIVE_SAMPLES_REQUIRED');
     assert.equal(r.historicStateSamplesPassed,true,'HISTORIC_STATE_REQUIRED');
