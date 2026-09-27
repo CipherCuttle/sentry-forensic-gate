@@ -110,6 +110,11 @@ try{
   const [logsA,logsB]=await stage('RECENT_FACTORY_LOGS',
     ()=>Promise.all([official.getLogs(filter),archive.getLogs(filter)]));
   const full=selectLatestNative(logsA,logsB,FACTORY.factory);
+  const [endA,endB]=await stage('RECENT_FACTORY_RECHECK',
+    ()=>Promise.all([point(official,range.through),
+      point(archive,range.through)]));
+  assert.deepEqual(endA,b1,'OFFICIAL_REORG_DURING_SOURCE_READ');
+  assert.deepEqual(endB,b2,'ARCHIVE_REORG_DURING_SOURCE_READ');
   receipt.recentFactoryEvents=full.allCount;
   receipt.recentNativeEvents=full.nativeCount;
   receipt.factoryTranscriptDigest=full.digest;
