@@ -6,6 +6,7 @@ export const ARCHIVE_SCHEMA='PONS_S1_ARCHIVE_PROVIDER_SAMPLE_V1';
 export const PROVIDER='ALCHEMY_ROBINHOOD_MAINNET_CANDIDATE';
 export const OFFICIAL='https://rpc.mainnet.chain.robinhood.com';
 export const HISTORIC_OFFSETS=Object.freeze([1000n,10000n]);
+export const PINNED_FACTORY_FROM_BLOCK=26841846n;
 export const MAX_HEAD_LAG=128n;
 export const FIELDS=Object.freeze([
   'schemaVersion','chainId','provider','historicalSampleBlocks',
@@ -45,7 +46,7 @@ export function assertArchiveEndpoint(raw){
   return true;
 }
 export function historicBlockHeights(fromBlock){
-  assert.ok(typeof fromBlock==='bigint'&&fromBlock>0n);
+  assert.equal(fromBlock,PINNED_FACTORY_FROM_BLOCK,'FACTORY_EPOCH_NOT_PINNED');
   return HISTORIC_OFFSETS.map(x=>fromBlock+x);
 }
 export function recentRange(a,b,fromBlock){
@@ -70,6 +71,8 @@ export function classifyArchiveFailure(error){
   return 'UNKNOWN_FAILURE';
 }
 export function createArchiveReceipt({fromBlock,runId=null}){
+  assert.equal(fromBlock,PINNED_FACTORY_FROM_BLOCK,'FACTORY_EPOCH_NOT_PINNED');
+  if(runId!==null)assert.match(String(runId),/^\d{1,18}$/,'RUN_ID_INVALID');
   const r={
     schemaVersion:ARCHIVE_SCHEMA,chainId:4663,provider:PROVIDER,
     historicalSampleBlocks:historicBlockHeights(fromBlock).map(String),
@@ -95,12 +98,9 @@ export function validateArchiveReceipt(r){
     'moneyAuthorized','scientificallyAdmissible'])
     assert.equal(r[k],false,'FORBIDDEN_PROMOTION_'+k);
   assert.deepEqual(r.historicalSampleBlocks,
-    HISTORIC_OFFSETS.map((offset,i)=>r.historicalSampleBlocks[i])
-      .filter(x=>typeof x==='string'&&/^\d+$/.test(x)),
-    'MALFORMED_SAMPLE_HEIGHTS');
-  assert.equal(r.historicalSampleBlocks.length,2);
-  assert.ok(BigInt(r.historicalSampleBlocks[1])-
-    BigInt(r.historicalSampleBlocks[0])===9000n,'SAMPLE_HEIGHT_DRIFT');
+    HISTORIC_OFFSETS.map(offset=>String(PINNED_FACTORY_FROM_BLOCK+offset)),
+    'SAMPLE_HEIGHTS_NOT_PINNED');
+  assert.ok(r.runId===null||/^\d{1,18}$/.test(r.runId),'RUN_ID_INVALID');
   assert.ok(Number.isInteger(r.testedHistoricalSamples)&&
     r.testedHistoricalSamples>=0&&r.testedHistoricalSamples<=2);
   assert.ok(Number.isInteger(r.officialHistoricHeadersCompared)&&
