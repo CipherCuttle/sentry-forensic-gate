@@ -77,6 +77,9 @@ export function validateDiagnostic(x){
     const c=x[key];if(c===undefined)continue;
     assert.ok(c&&['COMPLETE','UNVERIFIED','ERROR'].includes(c.state),
       'BAD_C0_DIAGNOSTIC_STATE');
+    assert.deepEqual(Object.keys(c).sort(),
+      ['state','failedStage','lastCompletedStage','failureClass',
+        'notionalUsdMicros'].sort(),'C0_REPORT_FIELD_INJECTION');
     assert.ok(c.failedStage===null||allowedStages.has(c.failedStage),
       'BAD_C0_DIAGNOSTIC_STAGE');
     assert.ok(c.lastCompletedStage===null||
@@ -86,6 +89,24 @@ export function validateDiagnostic(x){
     assert.ok(c.notionalUsdMicros===null||
       C0_LADDER.has(c.notionalUsdMicros),'BAD_C0_NOTIONAL');
   }
+  const hasBothC0=!!(x.c0Official&&x.c0Candidate);
+  if(['REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY',
+       'RECENT_C0_ARCHIVE_UNVERIFIED','INCLUSION_UNVERIFIED'].includes(x.state)){
+    assert.ok(hasBothC0,'QUALIFIED_STATE_REQUIRES_BOTH_C0_REPORTS');
+    assert.equal(x.c0Official.state,'COMPLETE','OFFICIAL_C0_NOT_COMPLETE');
+    assert.equal(x.c0Candidate.state,'COMPLETE','CANDIDATE_C0_NOT_COMPLETE');
+    assert.equal(x.quoteParity,true,'C0_QUOTE_PARITY_REQUIRED');
+  }
+  if(x.state==='QUOTE_UNVERIFIED'){
+    assert.ok(hasBothC0,'UNVERIFIED_REQUIRES_BOTH_C0_REPORTS');
+    assert.ok([x.c0Official.state,x.c0Candidate.state].includes('UNVERIFIED'),
+      'UNVERIFIED_REQUIRES_AN_UNVERIFIED_C0');
+    assert.ok(x.c0Official.state!=='ERROR'&&x.c0Candidate.state!=='ERROR',
+      'C0_ERROR_CANNOT_BE_QUOTE_UNVERIFIED');
+    assert.equal(x.quoteParity,false,'UNVERIFIED_CANNOT_PROVE_QUOTE_PARITY');
+  }
+  if(x.state==='NO_NATIVE_IN_BOUNDED_WINDOW')
+    assert.ok(!x.c0Official&&!x.c0Candidate,'NO_NATIVE_CANNOT_HAVE_C0');
   if(x.state==='C0_STAGE_FAIL'){
     assert.ok(x.c0Official&&x.c0Candidate,'BOTH_C0_DIAGNOSTICS_REQUIRED');
     assert.ok(x.c0Official.state==='ERROR'||x.c0Candidate.state==='ERROR',
