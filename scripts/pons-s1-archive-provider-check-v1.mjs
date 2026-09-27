@@ -83,7 +83,7 @@ bad(()=>validateArchiveReceipt({...complete,
 bad(()=>validateArchiveReceipt({...complete,
   secretRpcUrl:sample}),/RECEIPT_FIELD_INJECTION/);
 bad(()=>validateArchiveReceipt({...complete,
-  factoryTranscriptDigest:'0x'+empty.digest}),/AssertionError/);
+  factoryTranscriptDigest:'0x'+empty.digest}),/factoryTranscriptDigest/);
 bad(()=>validateArchiveReceipt({...complete,
   recentSourcesAgree:false}),/RECENT_PARITY_REQUIRED/);
 bad(()=>validateArchiveReceipt({...complete,
