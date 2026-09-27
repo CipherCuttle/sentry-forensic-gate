@@ -23,7 +23,11 @@ const ladder=[250000n,500000n,1000000n,2000000n,5000000n];
 const good={status:'COMPLETE',decisionBlock:102n,
   decisionBlockHash:H('a'),legs:ladder.map(leg)};
 assert.equal(checkQuoteParity(good,structuredClone(good)).matchingNotionals,5);
+const completeReport={state:'COMPLETE',failedStage:null,
+  lastCompletedStage:'C0_CONTROL_EVALUATION',failureClass:null,
+  notionalUsdMicros:'5000000'};
 const receipt={schemaVersion:SCHEMA,chainId:4663,
+  c0Official:completeReport,c0Candidate:structuredClone(completeReport),
   secondProvider:'BLOCKREQ_PUBLIC_CANDIDATE',
   backendQualified:false,studyActivated:false,cohortEnrolled:false,
   sourcePublished:false,walletUsed:false,outcomesRead:false,
@@ -76,6 +80,26 @@ assert.deepEqual(safe,{state:'ERROR',failedStage:'USD_CALIBRATION',
   lastCompletedStage:null,failureClass:'RPC_RATE_LIMIT',
   notionalUsdMicros:'1000000'});
 assert.ok(!JSON.stringify(safe).includes('SECRET_API_KEY'));
+bad(()=>validateDiagnostic({...receipt,c0Official:{
+  ...completeReport,rawException:'SECRET_API_KEY=must-not-escape'}}),
+  /C0_REPORT_FIELD_INJECTION/);
+bad(()=>validateDiagnostic({...receipt,c0Official:{
+  ...completeReport,state:'ERROR',failedStage:'MARKET_STATE',
+  failureClass:'RPC_TIMEOUT'}}),/OFFICIAL_C0_NOT_COMPLETE/);
+bad(()=>validateDiagnostic({...receipt,c0Candidate:{
+  ...completeReport,state:'UNVERIFIED',failedStage:'USD_CALIBRATION',
+  failureClass:'SOURCE_OR_ADAPTER_INVARIANT'}}),
+  /CANDIDATE_C0_NOT_COMPLETE/);
+const unverified={...receipt,state:'QUOTE_UNVERIFIED',quoteParity:false,
+  inclusion12:false,c0Official:{...completeReport,state:'UNVERIFIED',
+    failedStage:'MARKET_STATE',failureClass:'SOURCE_OR_ADAPTER_INVARIANT'}};
+assert.equal(validateDiagnostic(unverified).edge,'UNPROVEN');
+bad(()=>validateDiagnostic({...unverified,c0Official:completeReport}),
+  /UNVERIFIED_REQUIRES_AN_UNVERIFIED_C0/);
+bad(()=>validateDiagnostic({...unverified,c0Official:{
+  ...completeReport,state:'ERROR',failedStage:'MARKET_STATE',
+  failureClass:'RPC_UNAVAILABLE'}}),
+  /UNVERIFIED_REQUIRES_AN_UNVERIFIED_C0/);
 const failed={...receipt,state:'C0_STAGE_FAIL',quoteParity:false,inclusion12:false,
   c0Official:safe,c0Candidate:{state:'COMPLETE',failedStage:null,
     lastCompletedStage:'ENTRY_QUOTE',failureClass:null,
