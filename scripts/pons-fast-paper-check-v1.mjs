@@ -46,7 +46,7 @@ assert.equal(decision.action,'PAPER_OPEN');
 assert.equal(decision.entry.usdNotionalMicros,String(ONE_USD));
 assert.equal(decision.entry.ethInWei,'20000000000000');
 assert.equal(decision.entry.fiveDollarReverseExecutable,true);
-assert.equal(paperEntryDecision(baseline,1000,240_001).reason,
+assert.equal(paperEntryDecision(baseline,1000,MAX_ENTRY_AGE_MS+1000).reason,
   'STALE_LAUNCH');
 assert.equal(paperEntryDecision({...baseline,status:'UNVERIFIED'},1000,2000)
   .reason,'BASELINE_UNVERIFIED');
