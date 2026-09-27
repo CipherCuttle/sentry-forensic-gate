@@ -71,3 +71,66 @@ export function validateDiagnostic(x){
     assert.equal(x.historicArchiveStateSample,false,'UNQUALIFIED_ARCHIVE_MUST_REMAIN_FALSE');
   return {verdict:x.state,edge:'UNPROVEN',activationAuthority:false};
 }
+
+
+// Diagnostic-only wrappers: preserve underlying adapter behavior and freeze
+// a finite, sanitized stage on each provider independently. No raw RPC errors,
+// endpoint URLs, addresses or credentials enter the uploaded diagnostic.
+const C0_METHOD_STAGES=Object.freeze({
+  getHeadBlockNumber:'BASELINE_HEAD',
+  assertAuthority:'FACTORY_AUTHORITY',
+  getBlockHash:'DECISION_BLOCK_HASH',
+  resolveMarket:'MARKET_STATE',
+  calibrateUsd:'USD_CALIBRATION',
+  quoteEntry:'ENTRY_QUOTE',
+  quoteIndependentReverse:'REVERSE_QUOTE'
+});
+const C0_LADDER=new Set(['250000','500000','1000000','2000000','5000000']);
+export function newC0StageTrace(){
+  return {stage:'LAUNCH_NORMALIZATION',lastCompletedStage:null,
+    failedStage:null,failureClass:null,notionalUsdMicros:null};
+}
+export function classifyC0Failure(error){
+  const names=[error?.name,error?.cause?.name].map(x=>String(x??'')).join(':');
+  const code=error?.status??error?.cause?.status;
+  if(code===429||/RateLimit|TooManyRequests/i.test(names))return 'RPC_RATE_LIMIT';
+  if(/Timeout/i.test(names))return 'RPC_TIMEOUT';
+  if(/Rpc|Http|Transport|Network|Socket|Connect/i.test(names))
+    return 'RPC_UNAVAILABLE';
+  const message=String(error?.message??'');
+  if(/^(?:PONS_V2_|PORTABLE_BASELINE_|ROBINHOOD_USD_CALIBRATION_)/.test(message))
+    return 'SOURCE_OR_ADAPTER_INVARIANT';
+  return 'UNCLASSIFIED_ERROR';
+}
+export function observeC0Adapter(adapter,trace){
+  return new Proxy(adapter,{get(target,prop){
+    const value=Reflect.get(target,prop,target);
+    if(typeof value!=='function')return value;
+    const stage=C0_METHOD_STAGES[prop];
+    if(!stage)return value.bind(target);
+    return async(...args)=>{
+      trace.stage=stage;
+      const notional=args[0]?.notionalUsdMicros;
+      if(typeof notional==='bigint'&&C0_LADDER.has(String(notional)))
+        trace.notionalUsdMicros=String(notional);
+      try{
+        const result=await value.apply(target,args);
+        trace.lastCompletedStage=stage;
+        return result;
+      }catch(error){
+        trace.failedStage=stage;
+        trace.failureClass=classifyC0Failure(error);
+        throw error;
+      }
+    };
+  }});
+}
+export function safeC0Report(trace,state,error=null){
+  assert.ok(['COMPLETE','UNVERIFIED','ERROR'].includes(state));
+  return {state,failedStage:trace.failedStage??(
+    state==='COMPLETE'?null:trace.stage),
+    lastCompletedStage:trace.lastCompletedStage,
+    failureClass:trace.failureClass??(
+      error===null?null:classifyC0Failure(error)),
+    notionalUsdMicros:trace.notionalUsdMicros};
+}
