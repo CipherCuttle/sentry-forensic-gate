@@ -16,8 +16,8 @@ wallet permission or live-money grant is required to build/test this.
 Use Node >=20 and the repository pnpm toolchain.
 
 1. Run `pnpm install`, `pnpm build`, `pnpm ponsfastpapercheck`.
-2. For a bounded one-cycle smoke: `pnpm start:pons-paper-once`.
-3. To keep observing: `pnpm start:pons-paper` on a machine/container
+2. For a bounded one-cycle smoke: `pnpm ponsfastpaperonce`.
+3. To keep observing: `node scripts/pons-fast-paper-v1.mjs --loop` on a machine/container
    with a **durable mounted directory**. Default data directory:
    `.runtime/pons-paper/` (ignored by Git). Set
    `PONS_PAPER_DATA_DIR=/persistent/pons-paper` if deployed.
