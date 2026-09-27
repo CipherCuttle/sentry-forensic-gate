@@ -56,7 +56,7 @@ export function validateDiagnostic(x){
   for(const key of ['backendQualified','studyActivated','cohortEnrolled',
     'sourcePublished','walletUsed','outcomesRead','scientificallyAdmissible'])
     assert.equal(x[key],false,'FORBIDDEN_PROMOTION_'+key);
-  assert.ok(['PROVIDER_FAIL','NO_NATIVE_IN_BOUNDED_WINDOW','QUOTE_UNVERIFIED',
+  assert.ok(['PROVIDER_FAIL','C0_STAGE_FAIL','NO_NATIVE_IN_BOUNDED_WINDOW','QUOTE_UNVERIFIED',
     'REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY','RECENT_C0_ARCHIVE_UNVERIFIED',
     'INCLUSION_UNVERIFIED'].includes(x.state),
     'UNKNOWN_DIAGNOSTIC_STATE');
@@ -64,6 +64,33 @@ export function validateDiagnostic(x){
      x.state==='RECENT_C0_ARCHIVE_UNVERIFIED'){
     assert.equal(x.quoteParity,true,'QUOTE_PARITY_REQUIRED');
     assert.equal(x.inclusion12,true,'INCLUSION_FINALITY_REQUIRED');
+  }
+  // Untrusted diagnostic bytes cannot impersonate real quote parity or include
+  // raw provider error strings. The report is explicitly not S1 evidence.
+  const allowedStages=new Set(['LAUNCH_NORMALIZATION','LAUNCH_EVENT_BINDING',
+    'BASELINE_COMPOSITION','BASELINE_HEAD','FACTORY_AUTHORITY',
+    'DECISION_BLOCK_HASH','MARKET_STATE','USD_CALIBRATION','ENTRY_QUOTE',
+    'REVERSE_QUOTE','C0_CONTROL_EVALUATION']);
+  const allowedErrors=new Set(['RPC_RATE_LIMIT','RPC_TIMEOUT',
+    'RPC_UNAVAILABLE','SOURCE_OR_ADAPTER_INVARIANT','UNCLASSIFIED_ERROR']);
+  for(const key of ['c0Official','c0Candidate']){
+    const c=x[key];if(c===undefined)continue;
+    assert.ok(c&&['COMPLETE','UNVERIFIED','ERROR'].includes(c.state),
+      'BAD_C0_DIAGNOSTIC_STATE');
+    assert.ok(c.failedStage===null||allowedStages.has(c.failedStage),
+      'BAD_C0_DIAGNOSTIC_STAGE');
+    assert.ok(c.lastCompletedStage===null||
+      allowedStages.has(c.lastCompletedStage),'BAD_C0_COMPLETION_STAGE');
+    assert.ok(c.failureClass===null||
+      allowedErrors.has(c.failureClass),'BAD_C0_FAILURE_CLASS');
+    assert.ok(c.notionalUsdMicros===null||
+      C0_LADDER.has(c.notionalUsdMicros),'BAD_C0_NOTIONAL');
+  }
+  if(x.state==='C0_STAGE_FAIL'){
+    assert.ok(x.c0Official&&x.c0Candidate,'BOTH_C0_DIAGNOSTICS_REQUIRED');
+    assert.ok(x.c0Official.state==='ERROR'||x.c0Candidate.state==='ERROR',
+      'C0_FAILURE_MUST_BE_OBSERVED');
+    assert.equal(x.quoteParity,false,'C0_ERROR_CANNOT_PROVE_QUOTE_PARITY');
   }
   if(x.state==='REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY')
     assert.equal(x.historicArchiveStateSample,true,'HISTORIC_SAMPLE_REQUIRED');
