@@ -15,7 +15,8 @@ import {
   ponsV2FactoryReadAbi
 } from '../dist/index.js';
 import {SCHEMA,OFFICIAL,CANDIDATE,checkProviders,
-  scanRange,selectLatestNative,checkQuoteParity,validateDiagnostic}
+  scanRange,selectLatestNative,checkQuoteParity,validateDiagnostic,
+  newC0StageTrace,observeC0Adapter,safeC0Report}
   from './pons-s1-dual-rpc-rehearsal-core-v1.mjs';
 
 assert.equal(process.env.GITHUB_EVENT_NAME,'pull_request','PR_ONLY');
@@ -58,26 +59,42 @@ async function point(c,n){
 const same=(x,y,label)=>assert.deepEqual(x,y,label+'_DUAL_PROVIDER_DISAGREEMENT');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function oneC0(c,row,decisionHeight){
-  const adapter=new ViemPonsV2LaunchAdapter({authority:FACTORY,client:c});
-  const launches=await adapter.catchUp(BigInt(row.blockNumber),
-    BigInt(row.blockNumber));
-  const launch=launches.find(x=>
-    String(x.blockNumber)===row.blockNumber &&
-    x.txHash.toLowerCase()===row.transactionHash &&
-    x.logIndex===row.logIndex);
-  assert.ok(launch,'ACTUAL_LAUNCH_NOT_FOUND_IN_ADAPTER');
-  assert.equal(launch.token.toLowerCase(),row.token,
-    'NORMALIZED_TOKEN_DISAGREEMENT');
-  const quote=new ViemPonsV2CurveQuoteAdapter({authority:FACTORY,
-    templateAuthority:TEMPLATE,client:c,now:Date.now});
-  const usd=new ViemRobinhoodUsdCalibrationAdapter({authority:USD,client:c});
+  const trace=newC0StageTrace();
   const begin=Date.now();
-  const baseline=await buildPortableBaselineBatch({
-    launch:adapter,marketQuotes:quote,usdCalibration:usd
-  },launch,Date.now);
-  assert.equal(String(baseline.decisionBlock),String(decisionHeight));
-  const control=evaluateBuyEveryExecutableControl(baseline);
-  return {baseline,control,elapsedMs:Date.now()-begin};
+  try{
+    const adapter=new ViemPonsV2LaunchAdapter({authority:FACTORY,client:c});
+    const launches=await adapter.catchUp(BigInt(row.blockNumber),
+      BigInt(row.blockNumber));
+    trace.stage='LAUNCH_EVENT_BINDING';
+    const launch=launches.find(x=>
+      String(x.blockNumber)===row.blockNumber &&
+      x.txHash.toLowerCase()===row.transactionHash &&
+      x.logIndex===row.logIndex);
+    assert.ok(launch,'ACTUAL_LAUNCH_NOT_FOUND_IN_ADAPTER');
+    assert.equal(launch.token.toLowerCase(),row.token,
+      'NORMALIZED_TOKEN_DISAGREEMENT');
+    const quote=new ViemPonsV2CurveQuoteAdapter({authority:FACTORY,
+      templateAuthority:TEMPLATE,client:c,now:Date.now});
+    const usd=new ViemRobinhoodUsdCalibrationAdapter({authority:USD,client:c});
+    trace.stage='BASELINE_COMPOSITION';
+    const baseline=await buildPortableBaselineBatch({
+      launch:observeC0Adapter(adapter,trace),
+      marketQuotes:observeC0Adapter(quote,trace),
+      usdCalibration:observeC0Adapter(usd,trace)
+    },launch,Date.now);
+    assert.equal(String(baseline.decisionBlock),String(decisionHeight));
+    if(baseline.status!=='COMPLETE'){
+      return {kind:'UNVERIFIED',report:safeC0Report(trace,'UNVERIFIED'),
+        elapsedMs:Date.now()-begin};
+    }
+    trace.stage='C0_CONTROL_EVALUATION';
+    const control=evaluateBuyEveryExecutableControl(baseline);
+    return {kind:'COMPLETE',baseline,control,
+      report:safeC0Report(trace,'COMPLETE'),elapsedMs:Date.now()-begin};
+  }catch(error){
+    return {kind:'ERROR',report:safeC0Report(trace,'ERROR',error),
+      elapsedMs:Date.now()-begin};
+  }
 }
 try{
   const ids=await Promise.all([official.getChainId(),other.getChainId()]);
@@ -171,9 +188,12 @@ try{
     const [a,b]=await Promise.all([
       oneC0(official,row,decisionHeight),oneC0(other,row,decisionHeight)
     ]);
+    result.c0Official=a.report;result.c0Candidate=b.report;
     result.c0AcquisitionElapsedMs=Math.max(a.elapsedMs,b.elapsedMs);
     result.c0CompletedAtUtc=new Date().toISOString();
-    if(a.baseline.status!=='COMPLETE'||b.baseline.status!=='COMPLETE'){
+    if(a.kind==='ERROR'||b.kind==='ERROR'){
+      result.state='C0_STAGE_FAIL';
+    }else if(a.kind!=='COMPLETE'||b.kind!=='COMPLETE'){
       result.state='QUOTE_UNVERIFIED';
     }else{
       checkQuoteParity(a.baseline,b.baseline);
@@ -244,7 +264,8 @@ console.log(JSON.stringify({verdict:result.state,stage:phase,
   historicCandidateFailureStage:result.historicCandidateFailureStage??null,
   historicCandidateFailureClass:result.historicCandidateFailureClass??null,
   actualDualRpcQuoteParity:result.quoteParity,
+  c0Official:result.c0Official??null,c0Candidate:result.c0Candidate??null,
   inclusion12:result.inclusion12,
   providerBackendIndependenceQualified:false,
   prospectiveCohortEnrolled:false,scientificallyAdmissible:false}));
-if(result.state==='PROVIDER_FAIL')process.exitCode=1;
+if(result.state==='PROVIDER_FAIL'||result.state==='C0_STAGE_FAIL')process.exitCode=1;
