@@ -91,6 +91,7 @@ export function validateDiagnostic(x){
     assert.ok(x.c0Official.state==='ERROR'||x.c0Candidate.state==='ERROR',
       'C0_FAILURE_MUST_BE_OBSERVED');
     assert.equal(x.quoteParity,false,'C0_ERROR_CANNOT_PROVE_QUOTE_PARITY');
+    assert.equal(x.inclusion12,false,'C0_ERROR_CANNOT_PROVE_INCLUSION');
   }
   if(x.state==='REAL_DUAL_RPC_QUOTE_REHEARSAL_ONLY')
     assert.equal(x.historicArchiveStateSample,true,'HISTORIC_SAMPLE_REQUIRED');
