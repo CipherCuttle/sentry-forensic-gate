@@ -8,7 +8,7 @@ const launchId=n=>hex(n);
 function feature(n,{control=true,r1=true}={}){
   return {
     schemaVersion:'PONS_S0_FEATURE_PACKET_V1',
-    launch:{launchId:launchId(n),creator:addr(100+n)},
+    launch:{launchId:launchId(n),creator:addr(100+n),blockNumber:String(n*100)},
     boundaries:{containsTargetLaunchFutureOutcome:false,liveMoneyAuthority:false},
     policyComparison:{receipts:{
       buyEveryExecutableControl:{hypotheticalAction:control?'WOULD_TRADE':'WOULD_SKIP'},
@@ -41,9 +41,9 @@ for(let i=1;i<=30;i++){
   features.push(feature(i));
   const isBad=i<=10;
   outcomes.push(outcome(i,isBad?'CATASTROPHIC_LOSS':'NORMAL_WIN',isBad?100_000:1_300_000));
-  if(i<=5) fundingRows.push(funding(i,addr(900+i),100+i));
-  else if(i<=10) fundingRows.push(funding(i,addr(900+(i-5)),200+i));
-  else fundingRows.push(funding(i,addr(1000+i),300+i));
+  if(i<=5) fundingRows.push(funding(i,addr(900+i),i*100));
+  else if(i<=10) fundingRows.push(funding(i,addr(900+(i-5)),i*100));
+  else fundingRows.push(funding(i,addr(1000+i),i*100));
 }
 const promoted=evaluateKillFast({features,outcomes,fundingObservations:fundingRows,horizonMs:300_000});
 assert.equal(promoted.fundingRecurrenceV0.vetoed.count,5);
@@ -65,17 +65,32 @@ assert.throws(()=>evaluateKillFast({features,outcomes,fundingObservations:leaked
   /KILL_FAST_FUNDING_LOOKAHEAD/);
 
 const futureFirst=[
-  funding(1,addr(777),500),
-  funding(2,addr(777),400)
+  funding(2,addr(777),200),
+  funding(1,addr(777),100)
 ];
 const ordered=evaluateKillFast({features,outcomes,fundingObservations:futureFirst,horizonMs:300_000});
 assert.equal(ordered.fundingRecurrenceV0.vetoed.count,1,
   'only the later-in-block-order launch may inherit recurrence');
 
+assert.throws(()=>evaluateKillFast({
+  features,
+  outcomes,
+  fundingObservations:[funding(1,addr(777),100),funding(1,addr(778),100)],
+  horizonMs:300_000
+}),/KILL_FAST_DUPLICATE_FUNDING_LAUNCH/);
+
+assert.throws(()=>evaluateKillFast({
+  features,
+  outcomes,
+  fundingObservations:[{...funding(1,addr(777),100),deployer:addr(9999)}],
+  horizonMs:300_000
+}),/KILL_FAST_FUNDING_DEPLOYER_MISMATCH/);
+
 console.log(JSON.stringify({
   verdict:'BINRAT_KILL_FAST_CHECK_PASS',
   pointInTimeFundingRecurrence:true,
   futureOutcomeLeakRejected:true,
+  duplicateAndBindingConflictsRejected:true,
   promotionGateDeterministic:true,
   liveMoneyAuthority:false
 },null,2));
