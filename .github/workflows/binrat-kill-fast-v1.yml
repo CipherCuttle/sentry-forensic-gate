@@ -7,6 +7,7 @@ on:
       - 'docs/BINRAT_KILL_FAST_V1.md'
       - '.github/workflows/binrat-kill-fast-v1.yml'
       - 'docs/evidence/pons-s0-real-cohort-v1/**'
+      - 'docs/experiments/binrat-kill-fast-v1/**'
 
 permissions:
   contents: read
@@ -25,7 +26,15 @@ jobs:
         run: |
           node scripts/binrat-kill-fast-v1.mjs | tee /tmp/binrat-kill-fast-v1.json
           test -s /tmp/binrat-kill-fast-v1.json
+      - name: Retrospective funding-recurrence diagnostic
+        run: |
+          cat docs/experiments/binrat-kill-fast-v1/funding-part-*.jsonl > /tmp/binrat-funding.jsonl
+          BINRAT_KILL_FAST_FUNDING=/tmp/binrat-funding.jsonl \
+            node scripts/binrat-kill-fast-v1.mjs | tee /tmp/binrat-kill-fast-funding-v1.json
+          test -s /tmp/binrat-kill-fast-funding-v1.json
       - uses: actions/upload-artifact@v4
         with:
           name: binrat-kill-fast-v1
-          path: /tmp/binrat-kill-fast-v1.json
+          path: |
+            /tmp/binrat-kill-fast-v1.json
+            /tmp/binrat-kill-fast-funding-v1.json
