@@ -16,7 +16,10 @@ export function evaluateKillFast(input){
   const horizonMs=input.horizonMs??DEFAULT_HORIZON_MS;
   assert.ok(Number.isSafeInteger(horizonMs)&&horizonMs>0,'KILL_FAST_HORIZON_INVALID');
   const features=input.features.map(validateFeature);
-  const outcomes=input.outcomes.map(validateOutcome)
+  assertUnique(features.map(row=>row.launch.launchId),'KILL_FAST_DUPLICATE_FEATURE');
+  const allOutcomes=input.outcomes.map(validateOutcome);
+  assertUnique(allOutcomes.map(row=>row.launchId+':'+row.horizonMs),'KILL_FAST_DUPLICATE_OUTCOME');
+  const outcomes=allOutcomes
     .filter(row=>row.horizonMs===horizonMs&&row.status==='COMPLETE');
   const outcomeByLaunch=new Map(outcomes.map(row=>[row.launchId,row]));
   const control=features
@@ -30,6 +33,8 @@ export function evaluateKillFast(input){
   const creatorDiagnostic=compareVeto(control,creatorVetoed,creatorRetained);
 
   const fundingObservations=(input.fundingObservations??[]).map(validateFundingObservation);
+  assertUnique(fundingObservations.map(row=>row.launchId),'KILL_FAST_DUPLICATE_FUNDING_LAUNCH');
+  assertFundingBindings(features,fundingObservations);
   const fundingIndex=buildPointInTimeFundingIndex(fundingObservations);
   const fundingVetoed=control.filter(({feature})=>fundingIndex.recurrentLaunchIds.has(feature.launch.launchId));
   const fundingRetained=control.filter(row=>!fundingVetoed.includes(row));
@@ -184,11 +189,29 @@ function buildPointInTimeFundingIndex(rows){
   return {recurrentLaunchIds,recurrentSourceCount:recurrentSources.size};
 }
 
+function assertUnique(values,code){
+  assert.equal(new Set(values).size,values.length,code);
+}
+
+function assertFundingBindings(features,rows){
+  const featureByLaunch=new Map(features.map(feature=>[feature.launch.launchId,feature]));
+  for(const row of rows){
+    const feature=featureByLaunch.get(row.launchId);
+    if(!feature) continue;
+    assert.equal(row.deployer.toLowerCase(),feature.launch.creator.toLowerCase(),
+      'KILL_FAST_FUNDING_DEPLOYER_MISMATCH');
+    assert.equal(BigInt(row.launchBlock),BigInt(feature.launch.blockNumber),
+      'KILL_FAST_FUNDING_BLOCK_MISMATCH');
+  }
+}
+
 function validateFeature(feature){
   assert.equal(feature.schemaVersion,'PONS_S0_FEATURE_PACKET_V1','KILL_FAST_FEATURE_SCHEMA');
   assert.equal(feature.boundaries?.containsTargetLaunchFutureOutcome,false,'KILL_FAST_FEATURE_LOOKAHEAD');
   assert.equal(feature.boundaries?.liveMoneyAuthority,false,'KILL_FAST_FEATURE_LIVE_AUTHORITY');
   assert.match(feature.launch?.launchId??'',/^[0-9a-f]{64}$/,'KILL_FAST_FEATURE_LAUNCH_ID');
+  assert.match(String(feature.launch?.blockNumber??''),/^(0|[1-9]\\d*)$/,'KILL_FAST_FEATURE_BLOCK');
+  assert.match(feature.launch?.creator??'',/^0x[0-9a-f]{40}$/,'KILL_FAST_FEATURE_CREATOR');
   return feature;
 }
 
