@@ -1,0 +1,31 @@
+name: BINRAT kill-fast V1
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/binrat-kill-fast-*.mjs'
+      - 'docs/BINRAT_KILL_FAST_V1.md'
+      - '.github/workflows/binrat-kill-fast-v1.yml'
+      - 'docs/evidence/pons-s0-real-cohort-v1/**'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-kill-fast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Deterministic kill-fast contract
+        run: node scripts/binrat-kill-fast-check-v1.mjs
+      - name: Existing real cohort verdict
+        run: |
+          node scripts/binrat-kill-fast-v1.mjs | tee /tmp/binrat-kill-fast-v1.json
+          test -s /tmp/binrat-kill-fast-v1.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binrat-kill-fast-v1
+          path: /tmp/binrat-kill-fast-v1.json
