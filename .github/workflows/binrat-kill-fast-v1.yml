@@ -1,0 +1,86 @@
+name: BINRAT kill-fast V1
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/binrat-kill-fast-*.mjs'
+      - 'docs/BINRAT_KILL_FAST_V1.md'
+      - '.github/workflows/binrat-kill-fast-v1.yml'
+      - 'docs/evidence/pons-s0-real-cohort-v1/**'
+      - 'evidence/robinhood/pons/binrat-kill-fast-funding-diagnostic-v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-kill-fast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Deterministic kill-fast contract
+        run: node scripts/binrat-kill-fast-check-v1.mjs
+      - name: Existing real cohort verdict
+        run: |
+          node scripts/binrat-kill-fast-v1.mjs | tee /tmp/binrat-kill-fast-v1.json
+          test -s /tmp/binrat-kill-fast-v1.json
+      - name: Retrospective funding-recurrence diagnostic
+        run: |
+          jq -c '.rows[]' evidence/robinhood/pons/binrat-kill-fast-funding-diagnostic-v1.json > /tmp/binrat-funding.jsonl
+          BINRAT_KILL_FAST_FUNDING=/tmp/binrat-funding.jsonl \
+            node scripts/binrat-kill-fast-v1.mjs | tee /tmp/binrat-kill-fast-funding-v1.json
+          test -s /tmp/binrat-kill-fast-funding-v1.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binrat-kill-fast-v1
+          path: |
+            /tmp/binrat-kill-fast-v1.json
+            /tmp/binrat-kill-fast-funding-v1.json
+
+
+  historical-5m:
+    needs: offline-kill-fast
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    env:
+      BINRAT_KILL_FAST_5M_RPC_URL: 'https://rpc.nodeflare.app/robinhood/public'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build reviewed Pons read-only adapters
+        run: |
+          corepack enable
+          pnpm install --no-frozen-lockfile --lockfile=false
+          pnpm build
+      - name: Materialize fixed 5m outcomes for frozen control universe
+        run: |
+          node scripts/binrat-kill-fast-5m-v1.mjs \
+            > /tmp/binrat-kill-fast-5m-outcomes.jsonl \
+            2> /tmp/binrat-kill-fast-5m-diagnostic.json
+          test -s /tmp/binrat-kill-fast-5m-outcomes.jsonl
+          cat /tmp/binrat-kill-fast-5m-diagnostic.json
+      - name: Apply frozen funder-veto gate at 5m
+        run: |
+          jq -c '.rows[]' evidence/robinhood/pons/binrat-kill-fast-funding-diagnostic-v1.json > /tmp/binrat-funding.jsonl
+          BINRAT_KILL_FAST_OUTCOMES=/tmp/binrat-kill-fast-5m-outcomes.jsonl \
+          BINRAT_KILL_FAST_FUNDING=/tmp/binrat-funding.jsonl \
+          BINRAT_KILL_FAST_HORIZON_MS=300000 \
+            node scripts/binrat-kill-fast-v1.mjs | tee /tmp/binrat-kill-fast-5m-verdict.json
+          test -s /tmp/binrat-kill-fast-5m-verdict.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: binrat-kill-fast-5m-v1
+          path: |
+            /tmp/binrat-kill-fast-5m-outcomes.jsonl
+            /tmp/binrat-kill-fast-5m-diagnostic.json
+            /tmp/binrat-kill-fast-5m-verdict.json
+          if-no-files-found: warn
