@@ -210,7 +210,7 @@ function validateFeature(feature){
   assert.equal(feature.boundaries?.containsTargetLaunchFutureOutcome,false,'KILL_FAST_FEATURE_LOOKAHEAD');
   assert.equal(feature.boundaries?.liveMoneyAuthority,false,'KILL_FAST_FEATURE_LIVE_AUTHORITY');
   assert.match(feature.launch?.launchId??'',/^[0-9a-f]{64}$/,'KILL_FAST_FEATURE_LAUNCH_ID');
-  assert.match(String(feature.launch?.blockNumber??''),/^(0|[1-9]\\d*)$/,'KILL_FAST_FEATURE_BLOCK');
+  assert.match(String(feature.launch?.blockNumber??''),/^(0|[1-9]\d*)$/,'KILL_FAST_FEATURE_BLOCK');
   assert.match(feature.launch?.creator??'',/^0x[0-9a-f]{40}$/,'KILL_FAST_FEATURE_CREATOR');
   return feature;
 }
